@@ -5,9 +5,8 @@
 
 const { fetchCompsData } = require('./live-comps');
 
-const GEMINI_URL = 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions';
-const MODEL = 'gemini-3.5-flash';
-const MAX_TOKENS = 500;
+const GROQ_URL = 'https://api.groq.com/openai/v1/chat/completions';
+const MODEL = 'llama-3.3-70b-versatile';
 
 // ---------- per-channel short memory ----------
 const HISTORY_LIMIT = 8;
@@ -78,17 +77,17 @@ async function askAI({ question, channelId }) {
     { role: 'user', content: question },
   ];
 
-  const res = await fetch(GEMINI_URL, {
+  const res = await fetch(GROQ_URL, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      Authorization: `Bearer ${process.env.GEMINI_API_KEY}`,
+      Authorization: `Bearer ${process.env.GROQ_API_KEY}`,
     },
     body: JSON.stringify({ model: MODEL, max_tokens: MAX_TOKENS, messages }),
   });
 
   if (!res.ok) {
-    throw new Error(`Gemini API error ${res.status}: ${await res.text()}`);
+    throw new Error(`Groq API error ${res.status}: ${await res.text()}`);
   }
 
   const data = await res.json();
@@ -98,5 +97,7 @@ async function askAI({ question, channelId }) {
   pushHistory(channelId, 'assistant', answer);
   return answer;
 }
+
+module.exports = { askAI, isOnCooldown, markAsked };
 
 module.exports = { askAI, isOnCooldown, markAsked };
