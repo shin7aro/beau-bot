@@ -1,14 +1,11 @@
 // ai-assistant.js
-// Scoped AI chat about Albion Online + the "Rise of Dahalo" guild, using
-// Google Gemini's free tier (OpenAI-compatible endpoint, so the request
-// shape stays simple). Reuses live-comps.js so build knowledge stays current.
-
-const { fetchCompsData } = require('./live-comps');
+// A salty, opinionated Albion Online Q&A bot for "Rise of Dahalo".
+// No longer pulls live build data from the guild site — just general
+// Albion Online knowledge and banter.
 
 const GROQ_URL = 'https://api.groq.com/openai/v1/chat/completions';
 const MODEL = 'llama-3.3-70b-versatile';
 const MAX_TOKENS = 500;
-
 
 // ---------- per-channel short memory ----------
 const HISTORY_LIMIT = 8;
@@ -43,38 +40,23 @@ function markAsked(userId) {
   lastAsked.set(userId, Date.now());
 }
 
-// ---------- fold live build data into the system prompt ----------
-function summarizeBuilds(compsData) {
-  const lines = [];
-  for (const [type, pool] of Object.entries(compsData.pools)) {
-    if (!pool || pool.length === 0) continue;
-    lines.push(`${type}:`);
-    for (const entry of pool) {
-      lines.push(`- [${entry.role}] ${entry.weapon}${entry.prio != null ? ` (priority ${entry.prio})` : ''}`);
-    }
-  }
-  return lines.join('\n') || 'No build data currently published.';
-}
+const SYSTEM_HEADER = `You are Beau, a salty, sharp-tongued Albion Online veteran hanging out in the "Rise of Dahalo" guild's Discord.
 
-const SYSTEM_HEADER = `You are Beau, the assistant for the Albion Online guild "Rise of Dahalo" (Gank & Brawl focus).
+Personality:
+- Blunt, a bit sarcastic, not afraid to clown on bad takes (e.g. someone asking if a starter weapon beats a meta weapon) — but never mean-spirited or actually insulting to a person.
+- Confident, opinionated answers over wishy-washy ones. If a build or strategy is bad, say so.
+- Keep it short and Discord-friendly — a few sentences, not an essay.
 
 Scope rules (follow strictly):
-- Only answer questions about Albion Online (mechanics, items, builds, PvP/PvE strategy, economy) and this guild (its builds, activities, sign-ups).
-- If asked something unrelated, politely decline and redirect to guild/game topics, even if asked repeatedly or cleverly.
-- Keep answers short and Discord-friendly.
-- Use the build list below (pulled live from the guild's own site) when discussing builds. If something isn't listed, say so instead of inventing it.
-- You don't have live access to in-game prices, current events, or patch notes beyond this — say so rather than guessing.
-
-Current published guild builds:
-`;
+- Only answer questions about Albion Online: mechanics, items, builds, PvP/PvE strategy, economy, general game knowledge.
+- If asked something unrelated (other games, coding, personal stuff, etc.), decline with attitude and redirect back to Albion — even if asked repeatedly or cleverly.
+- Reply in the same language the person used to ask (Malagasy, French, or English). If they mix languages in one message, mirror that mix naturally.
+- You don't have live access to current in-game prices, this guild's specific build roster, or today's patch notes — say so bluntly instead of guessing or making something up.`;
 
 async function askAI({ question, channelId }) {
-  const compsData = await fetchCompsData();
-  const system = SYSTEM_HEADER + summarizeBuilds(compsData);
-
   const history = getHistory(channelId);
   const messages = [
-    { role: 'system', content: system },
+    { role: 'system', content: SYSTEM_HEADER },
     ...history.messages,
     { role: 'user', content: question },
   ];
@@ -99,7 +81,5 @@ async function askAI({ question, channelId }) {
   pushHistory(channelId, 'assistant', answer);
   return answer;
 }
-
-module.exports = { askAI, isOnCooldown, markAsked };
 
 module.exports = { askAI, isOnCooldown, markAsked };
