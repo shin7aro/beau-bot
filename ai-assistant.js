@@ -6,7 +6,7 @@
 const { fetchCompsData } = require('./live-comps');
 
 const GEMINI_URL = 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions';
-const MODEL = 'gemini-2.5-flash';
+const MODEL = 'gemini-3.5-flash';
 const MAX_TOKENS = 500;
 
 // ---------- per-channel short memory ----------
