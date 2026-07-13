@@ -7,6 +7,8 @@ const { fetchCompsData } = require('./live-comps');
 
 const GROQ_URL = 'https://api.groq.com/openai/v1/chat/completions';
 const MODEL = 'llama-3.3-70b-versatile';
+const MAX_TOKENS = 500;
+
 
 // ---------- per-channel short memory ----------
 const HISTORY_LIMIT = 8;
