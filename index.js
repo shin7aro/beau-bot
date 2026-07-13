@@ -1,3 +1,8 @@
+const express = require('express');
+const app = express();
+app.get('/', (req, res) => res.send('Bot is alive!'));
+app.listen(process.env.PORT || 3000, () => console.log('Web server running'));
+
 // Albion Event Bot - index.js
 // Posts sign-up forms for guild activities (CTA, Group Dungeon, Tracking, Ava Dungeon, Other).
 // CTA and Tracking pull real builds live from https://shin7aro.github.io/Rise-of-Dahalo
