@@ -254,7 +254,7 @@ client.on(Events.MessageCreate, async (message) => {
   await message.channel.sendTyping();
 
   try {
-    const answer = await askAI({ question, channelId: message.channel.id });
+    const answer = await askAI({ question, userId: message.author.id });
     await message.reply(answer.slice(0, 1900));
   } catch (err) {
     console.error('AI assistant error:', err);
