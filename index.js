@@ -32,6 +32,8 @@ const {
 
 const { fetchCompsData, buildLiveCategories, weaponEmoji } = require('./live-comps');
 
+const { askAI, isOnCooldown, markAsked } = require('./ai-assistant');
+
 // ---------- storage (simple JSON file, keyed by the posted message id) ----------
 const DB_PATH = path.join(__dirname, 'events.json');
 
@@ -228,10 +230,36 @@ async function updateEventMessage(client, event) {
 }
 
 // ---------- client ----------
-const client = new Client({ intents: [GatewayIntentBits.Guilds] });
-
+const client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages] });
 client.once(Events.ClientReady, (c) => {
   console.log(`Logged in as ${c.user.tag}`);
+});
+
+client.on(Events.MessageCreate, async (message) => {
+  if (message.author.bot) return;
+  if (!message.mentions.has(client.user)) return;
+
+  const question = message.content.replace(/<@!?\d+>/g, '').trim();
+  if (!question) {
+    await message.reply("Ask me something about Albion or the guild's builds!");
+    return;
+  }
+
+  if (isOnCooldown(message.author.id)) {
+    await message.reply('One sec between questions 🙂');
+    return;
+  }
+  markAsked(message.author.id);
+
+  await message.channel.sendTyping();
+
+  try {
+    const answer = await askAI({ question, channelId: message.channel.id });
+    await message.reply(answer.slice(0, 1900));
+  } catch (err) {
+    console.error('AI assistant error:', err);
+    await message.reply("Sorry, couldn't reach the AI service just now — try again shortly.");
+  }
 });
 
 client.on(Events.InteractionCreate, async (interaction) => {
