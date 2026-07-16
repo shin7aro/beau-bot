@@ -280,6 +280,70 @@ function expandAllCategoryRows(categories, categoryOrder = CATEGORY_ORDER) {
   return allRows;
 }
 
+// Re-applies a (possibly edited) saved comp onto an already-posted event's
+// categories. Tries to keep every existing sign-up attached to the same
+// logical slot — matched by (party, weapon name, emoji) — so a routine edit
+// (fixing a typo, swapping one weapon) doesn't bump people who are already
+// signed up. Any sign-up that no longer has a matching slot (its weapon/party
+// was removed or reduced) is dropped and reported back to the caller so the
+// organizer can follow up with that person.
+function refreshEventCategories(oldCategories, newCategories) {
+  const categories = {};
+  const dropped = [];
+
+  for (const cat of CATEGORY_ORDER) {
+    const newCatData = newCategories[cat];
+    if (!newCatData) continue; // category no longer exists in the comp
+
+    if (newCatData.mode === 'quota') {
+      // legacy quota categories aren't affected by refresh; keep as-is
+      categories[cat] = JSON.parse(JSON.stringify(newCatData));
+      continue;
+    }
+
+    const freshItems = newCatData.items.map((item) => ({ ...item, signups: [] }));
+    const used = new Array(freshItems.length).fill(false);
+
+    const oldCatData = oldCategories[cat];
+    if (oldCatData && oldCatData.mode !== 'quota' && oldCatData.items) {
+      for (const oldItem of oldCatData.items) {
+        const userId = oldItem.signups && oldItem.signups[0];
+        if (!userId) continue;
+
+        const matchIdx = freshItems.findIndex(
+          (ni, idx) =>
+            !used[idx] &&
+            (ni.party || 0) === (oldItem.party || 0) &&
+            ni.name === oldItem.name &&
+            ni.emoji === oldItem.emoji
+        );
+
+        if (matchIdx !== -1) {
+          freshItems[matchIdx].signups.push(userId);
+          used[matchIdx] = true;
+        } else {
+          dropped.push({ userId, category: cat, name: oldItem.name, party: oldItem.party || 0 });
+        }
+      }
+    }
+
+    categories[cat] = { mode: 'items', items: freshItems };
+  }
+
+  // categories that existed before but were removed entirely from the comp
+  for (const cat of Object.keys(oldCategories)) {
+    if (categories[cat]) continue;
+    const oldCatData = oldCategories[cat];
+    if (!oldCatData || oldCatData.mode === 'quota' || !oldCatData.items) continue;
+    for (const item of oldCatData.items) {
+      const userId = item.signups && item.signups[0];
+      if (userId) dropped.push({ userId, category: cat, name: item.name, party: item.party || 0 });
+    }
+  }
+
+  return { categories, dropped };
+}
+
 function createComp({ label, compositionRaw, userId, guild }) {
   const categories = parseComposition(compositionRaw, guild);
   if (Object.keys(categories).length === 0) return null;
@@ -347,4 +411,5 @@ module.exports = {
   cloneCategories,
   expandCategoryRows,
   expandAllCategoryRows,
+  refreshEventCategories,
 };
