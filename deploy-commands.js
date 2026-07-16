@@ -12,7 +12,7 @@ const commands = [
         .addStringOption((opt) =>
           opt
             .setName('type')
-            .setDescription('Type of activity')
+            .setDescription('Type of activity (used for the title/emoji only)')
             .setRequired(true)
             .addChoices(
               { name: 'CTA', value: 'CTA' },
@@ -26,6 +26,13 @@ const commands = [
           opt.setName('time').setDescription('When it happens, e.g. "21h Mada"').setRequired(true)
         )
         .addStringOption((opt) =>
+          opt
+            .setName('comp')
+            .setDescription('Saved composition to use (leave blank to type one manually)')
+            .setRequired(false)
+            .setAutocomplete(true)
+        )
+        .addStringOption((opt) =>
           opt.setName('title').setDescription('Optional custom title (defaults to the activity type)')
         )
     )
@@ -37,6 +44,37 @@ const commands = [
           opt.setName('event_id').setDescription('The event ID shown in the embed footer').setRequired(true)
         )
     ),
+  new SlashCommandBuilder()
+    .setName('comp')
+    .setDescription('Manage reusable team compositions')
+    .addSubcommand((sub) =>
+      sub.setName('create').setDescription('Create and label a new saved composition')
+    )
+    .addSubcommand((sub) =>
+      sub
+        .setName('edit')
+        .setDescription('Modify an existing saved composition')
+        .addStringOption((opt) =>
+          opt
+            .setName('comp')
+            .setDescription('The composition to edit')
+            .setRequired(true)
+            .setAutocomplete(true)
+        )
+    )
+    .addSubcommand((sub) =>
+      sub
+        .setName('delete')
+        .setDescription('Delete a saved composition')
+        .addStringOption((opt) =>
+          opt
+            .setName('comp')
+            .setDescription('The composition to delete')
+            .setRequired(true)
+            .setAutocomplete(true)
+        )
+    )
+    .addSubcommand((sub) => sub.setName('list').setDescription('List all saved compositions')),
 ].map((c) => c.toJSON());
 
 const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);

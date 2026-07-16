@@ -6,11 +6,10 @@ app.get('/', (req, res) => res.send('Bot is alive!'));
 app.listen(process.env.PORT || 3000, () => console.log('Web server running'));
 
 // Albion Event Bot - index.js
-// Posts sign-up forms for guild activities (CTA, Group Dungeon, Tracking, Ava Dungeon, Other).
-// CTA and Tracking pull real builds live from https://shin7aro.github.io/Rise-of-Dahalo
-// (via the raw GitHub source). Group Dungeon borrows the Tracking pool until real
-// Group Dungeon builds are published on the site. Ava Dungeon / Other use a manual
-// composition form, same as before.
+// Posts sign-up forms for guild activities (CTA, Group Dungeon, Tracking, Ava
+// Dungeon, Other). Compositions now come from your own saved /comp entries
+// (see comps.js) instead of being pulled live from the guild website — pick a
+// saved comp when creating an event, or leave it blank to type one manually.
 
 require('dotenv').config();
 const fs = require('fs');
@@ -30,8 +29,7 @@ const {
   PermissionFlagsBits,
 } = require('discord.js');
 
-const { fetchCompsData, buildLiveCategories, weaponEmoji } = require('./live-comps');
-
+const comps = require('./comps');
 const { askAI, isOnCooldown, markAsked } = require('./ai-assistant');
 
 // ---------- storage (simple JSON file, keyed by the posted message id) ----------
@@ -52,20 +50,18 @@ function saveEvents(events) {
 
 let events = loadEvents();
 
-// Temporary holding area between the /event create command and the modal submit
-// (used only for the manual-entry path: Ava Dungeon / Other / fetch failures)
-const pendingCreations = new Map();
-
-// Types that try to auto-populate from the live site before falling back to manual entry
-const LIVE_TYPES = new Set(['CTA', 'Tracking', 'Group Dungeon']);
+// Temporary holding areas between a slash command / button and the modal submit
+const pendingCreations = new Map(); // /event create (manual composition path)
+const pendingCompActions = new Map(); // /comp create and /comp edit
 
 // ---------- category metadata ----------
-const CATEGORY_ORDER = ['Tank', 'DPS', 'Healer', 'Support'];
+const CATEGORY_ORDER = comps.CATEGORY_ORDER; // ['Tank', 'DPS', 'Healer', 'Support', 'Battlemount']
 const CATEGORY_META = {
-  Tank: { emoji: '🛡️', style: ButtonStyle.Primary },
-  DPS: { emoji: '⚔️', style: ButtonStyle.Secondary },
-  Healer: { emoji: '💚', style: ButtonStyle.Success },
-  Support: { emoji: '🔶', style: ButtonStyle.Secondary },
+  Tank: { emoji: '🔵', style: ButtonStyle.Primary },
+  DPS: { emoji: '🔴', style: ButtonStyle.Danger },
+  Healer: { emoji: '🟢', style: ButtonStyle.Success },
+  Support: { emoji: '🟡', style: ButtonStyle.Secondary },
+  Battlemount: { emoji: '⚪', style: ButtonStyle.Secondary },
 };
 
 const ACTIVITY_EMOJI = {
@@ -76,56 +72,45 @@ const ACTIVITY_EMOJI = {
   Other: '⚪',
 };
 
-// ---------- parsing manual composition text (Ava Dungeon / Other / fallback) ----------
-// One item per line, grouped under a bare category header:
-//   Tank
-//   1H Mace: 1
-//   Polehammer
-//   DPS
-//   Carving Sword: 1
-function parseComposition(raw) {
-  const lines = raw
-    .split('\n')
-    .map((l) => l.trim())
-    .filter((l) => l.length > 0);
+// ---------- custom server emoji support ----------
+// If your server has its own emojis named "tank", "dps", "healer", "support",
+// or "battlemount" (case-insensitive, animated or not), the bot will use those
+// instead of the default circle emojis below. Rename this map if you'd rather
+// use different emoji names on your server.
+const ROLE_EMOJI_NAMES = {
+  Tank: 'tank',
+  DPS: 'dps',
+  Healer: 'healer',
+  Support: 'support',
+  Battlemount: 'battlemount',
+};
 
-  const grouped = {};
-  let current = null;
-
-  for (const line of lines) {
-    const asCategory = CATEGORY_ORDER.find(
-      (c) => c.toLowerCase() === line.toLowerCase().replace(/[:：]$/, '')
-    );
-    if (asCategory) {
-      current = asCategory;
-      if (!grouped[current]) grouped[current] = [];
-      continue;
-    }
-
-    if (!current) continue; // ignore stray lines before the first category header
-    if (!grouped[current]) grouped[current] = [];
-
-    const match = line.match(/^(.*?)[\s]*[:\-][\s]*(\d+)\s*$/);
-    let name = line;
-    let slots = 1;
-    if (match) {
-      name = match[1].trim();
-      slots = Math.max(1, parseInt(match[2], 10));
-    }
-    if (!name) continue;
-
-    grouped[current].push({ name, slots, signups: [] });
+function findCustomRoleEmoji(guild, category) {
+  if (!guild) return null;
+  const name = ROLE_EMOJI_NAMES[category];
+  if (!name) return null;
+  try {
+    return guild.emojis.cache.find((e) => e.name && e.name.toLowerCase() === name) || null;
+  } catch {
+    return null;
   }
+}
 
-  const categories = {};
-  for (const cat of Object.keys(grouped)) {
-    categories[cat] = { mode: 'items', items: grouped[cat] };
-  }
-  return categories;
+// For embed field names / text — returns a unicode circle or a rendered
+// custom-emoji tag like <:tank:123456789012345678>
+function roleEmojiText(guild, category) {
+  const custom = findCustomRoleEmoji(guild, category);
+  return custom ? custom.toString() : CATEGORY_META[category].emoji;
+}
+
+// For ButtonBuilder#setEmoji — returns a unicode string or a {id, name} object
+function roleEmojiForButton(guild, category) {
+  const custom = findCustomRoleEmoji(guild, category);
+  return custom ? { id: custom.id, name: custom.name } : CATEGORY_META[category].emoji;
 }
 
 // ---------- embed + components builders ----------
-function buildEmbed(event) {
+function buildEmbed(event, guild) {
   const activityEmoji = ACTIVITY_EMOJI[event.type] || '🔷';
   const embed = new EmbedBuilder()
     .setColor(0xe74c3c)
@@ -133,44 +118,32 @@ function buildEmbed(event) {
     .addFields({ name: '🕒 Time', value: event.time });
 
   let totalSigned = 0;
-  const itemMap = event.itemMap || {};
 
   for (const cat of CATEGORY_ORDER) {
     const catData = event.categories[cat];
     if (!catData) continue;
-    const meta = CATEGORY_META[cat];
-    let lines;
+    const roleEmoji = roleEmojiText(guild, cat);
 
-    if (catData.mode === 'quota') {
-      lines = [];
-      for (let i = 0; i < catData.capacity; i++) {
-        const s = catData.signups[i];
-        if (s) {
-          totalSigned++;
-          lines.push(`${weaponEmoji(s.weapon, itemMap)} <@${s.userId}> — **${s.weapon}**`);
-        } else {
-          lines.push(`${meta.emoji} *Open*`);
-        }
-      }
-    } else {
-      lines = catData.items.map((item) => {
-        totalSigned += item.signups.length;
-        const wEmoji = weaponEmoji(item.name, itemMap);
-        if (item.slots === 1) {
-          const status = item.signups.length ? `<@${item.signups[0]}>` : '*Open*';
-          return `${wEmoji} **${item.name}** — ${status}`;
-        }
-        const names = item.signups.map((id) => `<@${id}>`).join(', ');
-        const status = names ? `— ${names}` : '— *Open*';
-        return `${wEmoji} **${item.name}** (${item.signups.length}/${item.slots}) ${status}`;
-      });
-    }
+    const rows = comps.expandCategoryRows(catData);
+    const lines = rows.map((row) => {
+      if (row.signedUserId) totalSigned++;
+      const status = row.signedUserId ? `<@${row.signedUserId}>` : '*Open*';
+      const weaponEmoji = row.emoji || '🔹';
+      const label = row.name ? `**${row.name}**` : '*Any*';
+      return `${row.rowNumber} - ${roleEmoji} - ${weaponEmoji} - ${label} : ${status}`;
+    });
 
-    embed.addFields({ name: `${meta.emoji} ${cat}`, value: lines.join('\n') });
+    embed.addFields({ name: `${roleEmoji} ${cat}`, value: lines.join('\n') });
+  }
+
+  if (event.compLabel) {
+    embed.addFields({
+      name: '🔗 Builds',
+      value: `Composition: **${event.compLabel}** — see exact builds/icons on [the war ledger](${comps.BUILDS_LINK})`,
+    });
   }
 
   const flags = [];
-  if (event.usedFallbackFrom) flags.push(`⚠️ using ${event.usedFallbackFrom} builds (no ${event.type} builds published yet)`);
   if (event.closed) flags.push('❌ Closed');
 
   embed.setFooter({
@@ -183,7 +156,7 @@ function buildEmbed(event) {
   return embed;
 }
 
-function buildButtons(event) {
+function buildButtons(event, guild) {
   const row = new ActionRowBuilder();
   const activeCats = CATEGORY_ORDER.filter((c) => event.categories[c]);
 
@@ -192,7 +165,7 @@ function buildButtons(event) {
       new ButtonBuilder()
         .setCustomId(`event_role:${cat}:${event.id}`)
         .setLabel(cat)
-        .setEmoji(CATEGORY_META[cat].emoji)
+        .setEmoji(roleEmojiForButton(guild, cat))
         .setStyle(CATEGORY_META[cat].style)
         .setDisabled(event.closed)
     );
@@ -226,7 +199,7 @@ function removeUserFromEvent(event, userId) {
 async function updateEventMessage(client, event) {
   const channel = await client.channels.fetch(event.channelId);
   const message = await channel.messages.fetch(event.id);
-  await message.edit({ embeds: [buildEmbed(event)], components: buildButtons(event) });
+  await message.edit({ embeds: [buildEmbed(event, channel.guild)], components: buildButtons(event, channel.guild) });
 }
 
 // ---------- client ----------
@@ -263,6 +236,25 @@ client.on(Events.MessageCreate, async (message) => {
 });
 
 client.on(Events.InteractionCreate, async (interaction) => {
+  // ----- autocomplete: saved comp names -----
+  if (interaction.isAutocomplete()) {
+    const focused = interaction.options.getFocused(true);
+    if (focused.name === 'comp') {
+      const saved = comps.loadComps();
+      const query = focused.value.toLowerCase();
+      const choices = Object.entries(saved)
+        .filter(([, c]) => c.label.toLowerCase().includes(query))
+        .slice(0, 25)
+        .map(([key, c]) => ({ name: c.label, value: key }));
+      try {
+        await interaction.respond(choices);
+      } catch {
+        /* ignore - interaction may have expired */
+      }
+    }
+    return;
+  }
+
   try {
     // ----- /event create | /event close -----
     if (interaction.isChatInputCommand() && interaction.commandName === 'event') {
@@ -272,6 +264,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
         const type = interaction.options.getString('type');
         const time = interaction.options.getString('time');
         const title = interaction.options.getString('title') || type;
+        const compKey = interaction.options.getString('comp');
 
         const baseMeta = {
           type,
@@ -280,49 +273,41 @@ client.on(Events.InteractionCreate, async (interaction) => {
           organizerId: interaction.user.id,
           organizerTag: interaction.user.username,
           channelId: interaction.channelId,
+          guildId: interaction.guildId,
           closed: false,
           createdAt: Date.now(),
         };
 
-        let compsData = null;
-        try {
-          compsData = await fetchCompsData();
-        } catch (e) {
-          console.error('Failed to fetch live comps data, falling back to manual entry:', e);
-        }
-
-        // Try the live-data path first for CTA / Tracking / Group Dungeon
-        if (LIVE_TYPES.has(type) && compsData) {
-          const live = buildLiveCategories(type, compsData);
-          if (live) {
-            const event = {
-              id: null,
-              ...baseMeta,
-              categories: live.categories,
-              itemMap: compsData.itemMap,
-              usedFallbackFrom: live.usedFallbackFrom || null,
-            };
-
-            await interaction.reply({ embeds: [buildEmbed(event)], components: buildButtons(event) });
-            const message = await interaction.fetchReply();
-            event.id = message.id;
-            events[event.id] = event;
-            saveEvents(events);
-            await interaction.editReply({ embeds: [buildEmbed(event)], components: buildButtons(event) });
-
-            if (live.usedFallbackFrom) {
-              await interaction.followUp({
-                content: `⚠️ No **${type}** builds are published on the site yet, so this event is using the **${live.usedFallbackFrom}** build pool as a placeholder. Add a matching builds array to the site and future events will use the real thing automatically.`,
-                ephemeral: true,
-              });
-            }
+        // ----- path 1: build from a saved comp -----
+        if (compKey) {
+          const saved = comps.loadComps()[compKey];
+          if (!saved) {
+            await interaction.reply({
+              content: "I couldn't find that saved composition — it may have been deleted. Try /comp list.",
+              ephemeral: true,
+            });
             return;
           }
+
+          const event = {
+            id: null,
+            ...baseMeta,
+            categories: comps.cloneCategories(saved.categories),
+            compLabel: saved.label,
+          };
+
+          await interaction.reply({ embeds: [buildEmbed(event, interaction.guild)], components: buildButtons(event, interaction.guild) });
+          const message = await interaction.fetchReply();
+          event.id = message.id;
+          events[event.id] = event;
+          saveEvents(events);
+          await interaction.editReply({ embeds: [buildEmbed(event, interaction.guild)], components: buildButtons(event, interaction.guild) });
+          return;
         }
 
-        // Fallback: manual composition form (Ava Dungeon, Other, or no live data available)
+        // ----- path 2: manual composition (no comp selected) -----
         const pendingId = `${interaction.user.id}_${Date.now()}`;
-        pendingCreations.set(pendingId, { ...baseMeta, itemMap: compsData ? compsData.itemMap : {} });
+        pendingCreations.set(pendingId, baseMeta);
         setTimeout(() => pendingCreations.delete(pendingId), 15 * 60 * 1000);
 
         const modal = new ModalBuilder()
@@ -334,7 +319,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
           .setLabel('Composition (one item per line, see guide)')
           .setStyle(TextInputStyle.Paragraph)
           .setPlaceholder(
-            'Tank\n1H Mace: 1\nPolehammer\nDPS\nCarving Sword: 1\nHealer\nHallowfall: 2\nSupport\nRootbound Staff: 1'
+            'Tank\n\ud83d\udee1\ufe0f 1H Mace\n\ud83d\udd28 Polehammer\nDPS\n\u2694\ufe0f Carving Sword\n\u2694\ufe0f Carving Sword\nHealer\n\u2728 Hallowfall: 2\nSupport\n\ud83c\udf3f Rootbound Staff\nBattlemount\n\u26aa Direboar'
           )
           .setRequired(true)
           .setMaxLength(4000);
@@ -375,6 +360,148 @@ client.on(Events.InteractionCreate, async (interaction) => {
       }
     }
 
+    // ----- /comp create | /comp edit | /comp delete | /comp list -----
+    if (interaction.isChatInputCommand() && interaction.commandName === 'comp') {
+      const sub = interaction.options.getSubcommand();
+
+      if (sub === 'create') {
+        const pendingId = `${interaction.user.id}_${Date.now()}`;
+        pendingCompActions.set(pendingId, { mode: 'create' });
+        setTimeout(() => pendingCompActions.delete(pendingId), 15 * 60 * 1000);
+
+        const modal = new ModalBuilder()
+          .setCustomId(`comp_create_modal:${pendingId}`)
+          .setTitle('Create a saved composition');
+
+        const labelInput = new TextInputBuilder()
+          .setCustomId('label')
+          .setLabel('Label (name for this composition)')
+          .setStyle(TextInputStyle.Short)
+          .setPlaceholder('e.g. ZvZ Brawl, Gank 5s, Static Group')
+          .setRequired(true)
+          .setMaxLength(80);
+
+        const compositionInput = new TextInputBuilder()
+          .setCustomId('composition')
+          .setLabel('Composition (one item per line, see guide)')
+          .setStyle(TextInputStyle.Paragraph)
+          .setPlaceholder(
+            'Tank\n\ud83d\udee1\ufe0f 1H Mace\n\ud83d\udd28 Polehammer\nDPS\n\u2694\ufe0f Carving Sword\n\u2694\ufe0f Carving Sword\nHealer\n\u2728 Hallowfall: 2\nSupport\n\ud83c\udf3f Rootbound Staff\nBattlemount\n\u26aa Direboar'
+          )
+          .setRequired(true)
+          .setMaxLength(4000);
+
+        modal.addComponents(
+          new ActionRowBuilder().addComponents(labelInput),
+          new ActionRowBuilder().addComponents(compositionInput)
+        );
+        await interaction.showModal(modal);
+        return;
+      }
+
+      if (sub === 'edit') {
+        const key = interaction.options.getString('comp');
+        const saved = comps.loadComps()[key];
+        if (!saved) {
+          await interaction.reply({ content: "I couldn't find that saved composition.", ephemeral: true });
+          return;
+        }
+
+        const canManage = interaction.memberPermissions?.has(PermissionFlagsBits.ManageGuild);
+        if (saved.createdBy !== interaction.user.id && !canManage) {
+          await interaction.reply({
+            content: 'Only the person who created this comp, or a server manager, can edit it.',
+            ephemeral: true,
+          });
+          return;
+        }
+
+        const pendingId = `${interaction.user.id}_${Date.now()}`;
+        pendingCompActions.set(pendingId, { mode: 'edit', key });
+        setTimeout(() => pendingCompActions.delete(pendingId), 15 * 60 * 1000);
+
+        const modal = new ModalBuilder()
+          .setCustomId(`comp_edit_modal:${pendingId}`)
+          .setTitle(`Edit "${saved.label}"`);
+
+        const labelInput = new TextInputBuilder()
+          .setCustomId('label')
+          .setLabel('Label (name for this composition)')
+          .setStyle(TextInputStyle.Short)
+          .setValue(saved.label)
+          .setRequired(true)
+          .setMaxLength(80);
+
+        const compositionInput = new TextInputBuilder()
+          .setCustomId('composition')
+          .setLabel('Composition (one item per line, see guide)')
+          .setStyle(TextInputStyle.Paragraph)
+          .setValue(comps.stringifyComposition(saved.categories))
+          .setRequired(true)
+          .setMaxLength(4000);
+
+        modal.addComponents(
+          new ActionRowBuilder().addComponents(labelInput),
+          new ActionRowBuilder().addComponents(compositionInput)
+        );
+        await interaction.showModal(modal);
+        return;
+      }
+
+      if (sub === 'delete') {
+        const key = interaction.options.getString('comp');
+        const saved = comps.loadComps()[key];
+        if (!saved) {
+          await interaction.reply({ content: "I couldn't find that saved composition.", ephemeral: true });
+          return;
+        }
+
+        const canManage = interaction.memberPermissions?.has(PermissionFlagsBits.ManageGuild);
+        if (saved.createdBy !== interaction.user.id && !canManage) {
+          await interaction.reply({
+            content: 'Only the person who created this comp, or a server manager, can delete it.',
+            ephemeral: true,
+          });
+          return;
+        }
+
+        comps.deleteComp(key);
+        await interaction.reply({ content: `Deleted saved composition **${saved.label}**.`, ephemeral: true });
+        return;
+      }
+
+      if (sub === 'list') {
+        const saved = comps.loadComps();
+        const keys = Object.keys(saved);
+        if (keys.length === 0) {
+          await interaction.reply({
+            content: 'No saved compositions yet — create one with `/comp create`.',
+            ephemeral: true,
+          });
+          return;
+        }
+
+        const embed = new EmbedBuilder().setColor(0xe74c3c).setTitle('📋 Saved compositions');
+
+        for (const key of keys.sort((a, b) => saved[a].label.localeCompare(saved[b].label))) {
+          const c = saved[key];
+          const lines = [];
+          for (const cat of CATEGORY_ORDER) {
+            const catData = c.categories[cat];
+            if (!catData || catData.items.length === 0) continue;
+            const roleEmoji = roleEmojiText(interaction.guild, cat);
+            for (const row of comps.expandCategoryRows(catData)) {
+              lines.push(`${row.rowNumber} - ${roleEmoji} - ${row.emoji || '🔹'} - **${row.name}**`);
+            }
+          }
+          embed.addFields({ name: c.label, value: lines.join('\n') || '*empty*' });
+        }
+
+        await interaction.reply({ embeds: [embed], ephemeral: true });
+        return;
+      }
+    }
+
     // ----- modal submit: create the event (manual path) -----
     if (interaction.isModalSubmit() && interaction.customId.startsWith('event_create_modal:')) {
       const pendingId = interaction.customId.split(':')[1];
@@ -389,12 +516,12 @@ client.on(Events.InteractionCreate, async (interaction) => {
       pendingCreations.delete(pendingId);
 
       const compositionRaw = interaction.fields.getTextInputValue('composition');
-      const categories = parseComposition(compositionRaw);
+      const categories = comps.parseComposition(compositionRaw);
 
       if (Object.keys(categories).length === 0) {
         await interaction.reply({
           content:
-            "I couldn't find any items under a Tank/DPS/Healer/Support header — please run /event create again and check the format.",
+            "I couldn't find any items under a Tank/DPS/Healer/Support/Battlemount header — please run /event create again and check the format.",
           ephemeral: true,
         });
         return;
@@ -402,26 +529,76 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
       const event = {
         id: null,
-        type: pending.type,
-        title: pending.title,
-        time: pending.time,
-        organizerId: pending.organizerId,
-        organizerTag: pending.organizerTag,
-        channelId: pending.channelId,
+        ...pending,
         categories,
-        itemMap: pending.itemMap || {},
         closed: false,
-        createdAt: pending.createdAt,
       };
 
-      await interaction.reply({ embeds: [buildEmbed(event)], components: buildButtons(event) });
+      await interaction.reply({ embeds: [buildEmbed(event, interaction.guild)], components: buildButtons(event, interaction.guild) });
       const message = await interaction.fetchReply();
 
       event.id = message.id;
       events[event.id] = event;
       saveEvents(events);
 
-      await interaction.editReply({ embeds: [buildEmbed(event)], components: buildButtons(event) });
+      await interaction.editReply({ embeds: [buildEmbed(event, interaction.guild)], components: buildButtons(event, interaction.guild) });
+      return;
+    }
+
+    // ----- modal submit: /comp create -----
+    if (interaction.isModalSubmit() && interaction.customId.startsWith('comp_create_modal:')) {
+      const pendingId = interaction.customId.split(':')[1];
+      const pending = pendingCompActions.get(pendingId);
+      if (!pending) {
+        await interaction.reply({ content: 'This form expired, please run /comp create again.', ephemeral: true });
+        return;
+      }
+      pendingCompActions.delete(pendingId);
+
+      const label = interaction.fields.getTextInputValue('label');
+      const compositionRaw = interaction.fields.getTextInputValue('composition');
+
+      const created = comps.createComp({ label, compositionRaw, userId: interaction.user.id });
+      if (!created) {
+        await interaction.reply({
+          content:
+            "I couldn't find any items under a Tank/DPS/Healer/Support/Battlemount header — please run /comp create again and check the format.",
+          ephemeral: true,
+        });
+        return;
+      }
+
+      await interaction.reply({
+        content: `Saved composition **${created.label}** — use it next time with \`/event create comp:${created.label}\`.`,
+        ephemeral: true,
+      });
+      return;
+    }
+
+    // ----- modal submit: /comp edit -----
+    if (interaction.isModalSubmit() && interaction.customId.startsWith('comp_edit_modal:')) {
+      const pendingId = interaction.customId.split(':')[1];
+      const pending = pendingCompActions.get(pendingId);
+      if (!pending) {
+        await interaction.reply({ content: 'This form expired, please run /comp edit again.', ephemeral: true });
+        return;
+      }
+      pendingCompActions.delete(pendingId);
+
+      const label = interaction.fields.getTextInputValue('label');
+      const compositionRaw = interaction.fields.getTextInputValue('composition');
+
+      const updated = comps.updateComp({ key: pending.key, newLabel: label, compositionRaw, userId: interaction.user.id });
+      if (!updated) {
+        await interaction.reply({
+          content:
+            "I couldn't find any items under a Tank/DPS/Healer/Support/Battlemount header — please run /comp edit again and check the format.",
+          ephemeral: true,
+        });
+        return;
+      }
+
+      await interaction.reply({ content: `Updated saved composition **${updated.label}**.`, ephemeral: true });
       return;
     }
 
@@ -446,19 +623,14 @@ client.on(Events.InteractionCreate, async (interaction) => {
           removeUserFromEvent(event, interaction.user.id);
           catData.signups.push({ userId: interaction.user.id, weapon: catData.weaponOptions[0] });
           saveEvents(events);
-          await interaction.update({ embeds: [buildEmbed(event)], components: buildButtons(event) });
+          await interaction.update({ embeds: [buildEmbed(event, interaction.guild)], components: buildButtons(event, interaction.guild) });
           return;
         }
 
         const select = new StringSelectMenuBuilder()
           .setCustomId(`event_select:${category}:${eventId}`)
           .setPlaceholder(`Choose your ${category} build`)
-          .addOptions(
-            catData.weaponOptions.slice(0, 25).map((weapon) => {
-              const e = weaponEmoji(weapon, event.itemMap);
-              return { label: weapon, value: weapon, emoji: e === '🔹' ? undefined : e };
-            })
-          );
+          .addOptions(catData.weaponOptions.slice(0, 25).map((weapon) => ({ label: weapon, value: weapon })));
 
         await interaction.reply({
           content: `Pick your ${category} build:`,
@@ -468,20 +640,24 @@ client.on(Events.InteractionCreate, async (interaction) => {
         return;
       }
 
-      // items mode
+      // items mode - each item is exactly one slot; duplicate weapon names
+      // are just separate items (separate rows), never merged
       const items = catData.items;
-      const available = items.filter((i) => i.signups.length < i.slots);
+      const rows = comps.expandCategoryRows(catData);
+      const availableIndexes = items
+        .map((item, idx) => idx)
+        .filter((idx) => items[idx].signups.length === 0);
 
-      if (available.length === 0) {
+      if (availableIndexes.length === 0) {
         await interaction.reply({ content: `All ${category} slots are full.`, ephemeral: true });
         return;
       }
 
-      if (available.length === 1) {
+      if (availableIndexes.length === 1) {
         removeUserFromEvent(event, interaction.user.id);
-        available[0].signups.push(interaction.user.id);
+        items[availableIndexes[0]].signups.push(interaction.user.id);
         saveEvents(events);
-        await interaction.update({ embeds: [buildEmbed(event)], components: buildButtons(event) });
+        await interaction.update({ embeds: [buildEmbed(event, interaction.guild)], components: buildButtons(event, interaction.guild) });
         return;
       }
 
@@ -489,13 +665,12 @@ client.on(Events.InteractionCreate, async (interaction) => {
         .setCustomId(`event_select:${category}:${eventId}`)
         .setPlaceholder(`Choose your ${category} build`)
         .addOptions(
-          available.slice(0, 25).map((item) => {
-            const e = weaponEmoji(item.name, event.itemMap);
-            return {
-              label: `${item.name} (${item.signups.length}/${item.slots} taken)`,
-              value: item.name,
-              emoji: e === '🔹' ? undefined : e,
-            };
+          availableIndexes.slice(0, 25).map((idx) => {
+            const item = items[idx];
+            const row = rows.find((r) => r.itemIndex === idx);
+            const option = { label: `${row.rowNumber}. ${item.name}`, value: String(idx) };
+            if (item.emoji) option.emoji = item.emoji;
+            return option;
           })
         );
 
@@ -516,7 +691,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
         return;
       }
 
-      const chosenName = interaction.values[0];
+      const chosenValue = interaction.values[0];
       const catData = event.categories[category];
 
       if (catData.mode === 'quota') {
@@ -525,7 +700,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
           return;
         }
         removeUserFromEvent(event, interaction.user.id);
-        catData.signups.push({ userId: interaction.user.id, weapon: chosenName });
+        catData.signups.push({ userId: interaction.user.id, weapon: chosenValue });
         saveEvents(events);
 
         try {
@@ -534,12 +709,12 @@ client.on(Events.InteractionCreate, async (interaction) => {
           console.error('Failed to update event message after select', e);
         }
 
-        await interaction.update({ content: `Signed up as **${chosenName}** (${category}).`, components: [] });
+        await interaction.update({ content: `Signed up as **${chosenValue}** (${category}).`, components: [] });
         return;
       }
 
-      const item = catData.items.find((i) => i.name === chosenName);
-      if (!item || item.signups.length >= item.slots) {
+      const item = catData.items[Number(chosenValue)];
+      if (!item || item.signups.length >= 1) {
         await interaction.update({ content: 'That slot just filled up, try another.', components: [] });
         return;
       }
@@ -554,7 +729,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
         console.error('Failed to update event message after select', e);
       }
 
-      await interaction.update({ content: `Signed up as **${chosenName}** (${category}).`, components: [] });
+      await interaction.update({ content: `Signed up as **${item.name}** (${category}).`, components: [] });
       return;
     }
 
@@ -568,7 +743,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
       }
       removeUserFromEvent(event, interaction.user.id);
       saveEvents(events);
-      await interaction.update({ embeds: [buildEmbed(event)], components: buildButtons(event) });
+      await interaction.update({ embeds: [buildEmbed(event, interaction.guild)], components: buildButtons(event, interaction.guild) });
       return;
     }
   } catch (err) {
