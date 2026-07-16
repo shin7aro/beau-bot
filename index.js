@@ -120,15 +120,25 @@ function buildEmbed(event, guild) {
 
   // One continuous, numbered roster across every role — no per-role header,
   // the role emoji on each row is what tells you Tank vs DPS vs Healer, etc.
+  // A "Party N" label is only shown when the comp actually has more than one
+  // party, so single-party comps look exactly as before.
   const allRows = comps.expandAllCategoryRows(event.categories, CATEGORY_ORDER);
-  const rosterLines = allRows.map((row) => {
+  const hasMultipleParties = allRows.some((row) => row.party > 0);
+  const rosterLines = [];
+  let lastParty = null;
+  for (const row of allRows) {
     if (row.signedUserId) totalSigned++;
+    if (hasMultipleParties && row.party !== lastParty) {
+      if (lastParty !== null) rosterLines.push('');
+      rosterLines.push(`**Party ${row.party + 1}**`);
+      lastParty = row.party;
+    }
     const roleEmoji = roleEmojiText(guild, row.category);
     const status = row.signedUserId ? `<@${row.signedUserId}>` : '*Open*';
     const weaponEmoji = row.emoji || '🔹';
     const label = row.name ? `**${row.name}**` : '*Any*';
-    return `${row.rowNumber} - ${roleEmoji} - ${weaponEmoji} - ${label} : ${status}`;
-  });
+    rosterLines.push(`${row.rowNumber} - ${roleEmoji} - ${weaponEmoji} - ${label} : ${status}`);
+  }
 
   if (rosterLines.length > 0) {
     embed.setDescription(rosterLines.join('\n'));
@@ -482,10 +492,18 @@ client.on(Events.InteractionCreate, async (interaction) => {
         for (const key of keys.sort((a, b) => saved[a].label.localeCompare(saved[b].label))) {
           const c = saved[key];
           const allRows = comps.expandAllCategoryRows(c.categories, CATEGORY_ORDER);
-          const lines = allRows.map((row) => {
+          const hasMultipleParties = allRows.some((row) => row.party > 0);
+          const lines = [];
+          let lastParty = null;
+          for (const row of allRows) {
+            if (hasMultipleParties && row.party !== lastParty) {
+              if (lastParty !== null) lines.push('');
+              lines.push(`**Party ${row.party + 1}**`);
+              lastParty = row.party;
+            }
             const roleEmoji = roleEmojiText(interaction.guild, row.category);
-            return `${row.rowNumber} - ${roleEmoji} - ${row.emoji || '🔹'} - **${row.name}**`;
-          });
+            lines.push(`${row.rowNumber} - ${roleEmoji} - ${row.emoji || '🔹'} - **${row.name}**`);
+          }
           embed.addFields({ name: c.label, value: lines.join('\n') || '*empty*' });
         }
 
@@ -635,7 +653,10 @@ client.on(Events.InteractionCreate, async (interaction) => {
       // items mode - each item is exactly one slot; duplicate weapon names
       // are just separate items (separate rows), never merged
       const items = catData.items;
-      const rows = comps.expandCategoryRows(catData);
+      // Use the same party-aware numbering as the posted embed, filtered
+      // down to this category, so the numbers a user picks from match what
+      // they see in the roster exactly.
+      const rows = comps.expandAllCategoryRows(event.categories, CATEGORY_ORDER).filter((r) => r.category === category);
       const availableIndexes = items
         .map((item, idx) => idx)
         .filter((idx) => items[idx].signups.length === 0);
