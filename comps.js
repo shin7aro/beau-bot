@@ -76,6 +76,11 @@ function resolveEmojiToken(token, guild) {
 // slot, so two identical lines just means two open slots for that weapon,
 // no "(1/2)" counter needed. "Name: N" still works as shorthand for N
 // duplicate lines.
+// A "Party N" line marks the start of a new 20-player party. Composition text
+// with no Party headers at all is treated as one single implicit party (fully
+// backward compatible with comps saved before this feature existed).
+const PARTY_HEADER_RE = /^party\b/i;
+
 function parseComposition(raw, guild) {
   const lines = raw
     .split('\n')
@@ -84,8 +89,15 @@ function parseComposition(raw, guild) {
 
   const grouped = {};
   let current = null;
+  let partyIndex = -1; // -1 = no Party header seen yet; items default to party 0
 
   for (const line of lines) {
+    if (PARTY_HEADER_RE.test(line)) {
+      partyIndex += 1;
+      current = null;
+      continue;
+    }
+
     const asCategory = CATEGORY_ORDER.find(
       (c) => c.toLowerCase() === line.toLowerCase().replace(/[:：]$/, '')
     );
@@ -115,10 +127,12 @@ function parseComposition(raw, guild) {
     }
     if (!name) continue;
 
+    const party = partyIndex === -1 ? 0 : partyIndex;
+
     // Expand "Name: N" into N separate one-slot lines, so duplicates never
     // need a merged counter — the display just repeats the row.
     for (let i = 0; i < count; i++) {
-      grouped[current].push({ name, emoji, signups: [] });
+      grouped[current].push({ name, emoji, party, signups: [] });
     }
   }
 
@@ -133,26 +147,39 @@ function parseComposition(raw, guild) {
 // text, used to prefill the /comp edit modal. Collapses consecutive
 // duplicate (name + emoji) rows back into the "Name: N" shorthand.
 function stringifyComposition(categories) {
-  const lines = [];
+  let maxParty = 0;
   for (const cat of CATEGORY_ORDER) {
     const catData = categories[cat];
-    if (!catData || !catData.items || catData.items.length === 0) continue;
-    lines.push(cat);
+    if (!catData || !catData.items) continue;
+    for (const item of catData.items) maxParty = Math.max(maxParty, item.party || 0);
+  }
 
-    let i = 0;
-    while (i < catData.items.length) {
-      const item = catData.items[i];
-      let count = 1;
-      while (
-        i + count < catData.items.length &&
-        catData.items[i + count].name === item.name &&
-        catData.items[i + count].emoji === item.emoji
-      ) {
-        count++;
+  const lines = [];
+  for (let p = 0; p <= maxParty; p++) {
+    if (maxParty > 0) lines.push(`Party ${p + 1}`);
+
+    for (const cat of CATEGORY_ORDER) {
+      const catData = categories[cat];
+      if (!catData || !catData.items) continue;
+      const itemsInParty = catData.items.filter((it) => (it.party || 0) === p);
+      if (itemsInParty.length === 0) continue;
+      lines.push(cat);
+
+      let i = 0;
+      while (i < itemsInParty.length) {
+        const item = itemsInParty[i];
+        let count = 1;
+        while (
+          i + count < itemsInParty.length &&
+          itemsInParty[i + count].name === item.name &&
+          itemsInParty[i + count].emoji === item.emoji
+        ) {
+          count++;
+        }
+        const prefix = item.emoji ? `${item.emoji} ` : '';
+        lines.push(count > 1 ? `${prefix}${item.name}: ${count}` : `${prefix}${item.name}`);
+        i += count;
       }
-      const prefix = item.emoji ? `${item.emoji} ` : '';
-      lines.push(count > 1 ? `${prefix}${item.name}: ${count}` : `${prefix}${item.name}`);
-      i += count;
     }
   }
   return lines.join('\n');
@@ -192,19 +219,63 @@ function expandCategoryRows(catData, startNumber = 1) {
   return rows;
 }
 
-// Expands every category in CATEGORY_ORDER into one flat, continuously
-// numbered list (Tank's last row number + 1 becomes DPS's first, etc.),
-// instead of each category restarting at 1. Each row carries its `category`
-// so the caller can still look up the right role emoji/color per row.
+// Fixed party size used only for numbering offsets — Party 2 always starts
+// at 21 even if Party 1 only has a handful of slots filled in, matching how
+// Albion's own party system reserves 20 slots per party regardless of size.
+const PARTY_SIZE = 20;
+
+// Expands every category in CATEGORY_ORDER into one flat list, numbered
+// per-party: Party 1 gets rows 1-20, Party 2 gets 21-40, etc. — the offset is
+// fixed to the party's position, not to how many rows the previous party
+// actually used. Comps with no party structure behave exactly as before
+// (everything is "party 0", offset 0).
 function expandAllCategoryRows(categories, categoryOrder = CATEGORY_ORDER) {
-  const allRows = [];
-  let counter = 0;
+  let maxParty = 0;
   for (const cat of categoryOrder) {
     const catData = categories[cat];
-    if (!catData) continue;
-    const rows = expandCategoryRows(catData, counter + 1);
-    for (const row of rows) allRows.push({ ...row, category: cat });
-    counter += rows.length;
+    if (!catData || catData.mode === 'quota' || !catData.items) continue;
+    for (const item of catData.items) maxParty = Math.max(maxParty, item.party || 0);
+  }
+
+  const allRows = [];
+  for (let p = 0; p <= maxParty; p++) {
+    let counter = p * PARTY_SIZE;
+
+    for (const cat of categoryOrder) {
+      const catData = categories[cat];
+      if (!catData) continue;
+
+      if (catData.mode === 'quota') {
+        if (p !== 0) continue; // legacy quota categories only ever occupy party 1
+        for (let i = 0; i < catData.capacity; i++) {
+          counter++;
+          const s = catData.signups[i];
+          allRows.push({
+            rowNumber: counter,
+            party: 0,
+            category: cat,
+            name: s ? s.weapon : null,
+            emoji: null,
+            signedUserId: s ? s.userId : null,
+          });
+        }
+        continue;
+      }
+
+      catData.items.forEach((item, itemIndex) => {
+        if ((item.party || 0) !== p) return;
+        counter++;
+        allRows.push({
+          rowNumber: counter,
+          party: p,
+          category: cat,
+          itemIndex,
+          name: item.name,
+          emoji: item.emoji || null,
+          signedUserId: item.signups[0] || null,
+        });
+      });
+    }
   }
   return allRows;
 }
