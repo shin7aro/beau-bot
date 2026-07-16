@@ -304,6 +304,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
             ...baseMeta,
             categories: comps.cloneCategories(saved.categories),
             compLabel: saved.label,
+            compKey: compKey,
           };
 
           await interaction.reply({ embeds: [buildEmbed(event, interaction.guild)], components: buildButtons(event, interaction.guild) });
@@ -364,6 +365,68 @@ client.on(Events.InteractionCreate, async (interaction) => {
         }
 
         await interaction.reply({ content: `Event \`${eventId}\` closed.`, ephemeral: true });
+        return;
+      }
+
+      if (sub === 'refresh') {
+        const eventId = interaction.options.getString('event_id');
+        const event = events[eventId];
+        if (!event) {
+          await interaction.reply({ content: 'No event found with that ID.', ephemeral: true });
+          return;
+        }
+
+        const isOrganizer = event.organizerId === interaction.user.id;
+        const canManage = interaction.memberPermissions?.has(PermissionFlagsBits.ManageGuild);
+        if (!isOrganizer && !canManage) {
+          await interaction.reply({
+            content: 'Only the organizer or a server manager can refresh this event.',
+            ephemeral: true,
+          });
+          return;
+        }
+
+        if (!event.compKey) {
+          await interaction.reply({
+            content:
+              "This event wasn't created from a saved comp (its composition was typed manually), so there's nothing to refresh it against.",
+            ephemeral: true,
+          });
+          return;
+        }
+
+        const saved = comps.loadComps()[event.compKey];
+        if (!saved) {
+          await interaction.reply({
+            content:
+              "I couldn't find the linked saved composition anymore — it may have been renamed or deleted. Check `/comp list`, or recreate the event from the current comp.",
+            ephemeral: true,
+          });
+          return;
+        }
+
+        const { categories, dropped } = comps.refreshEventCategories(event.categories, saved.categories);
+        event.categories = categories;
+        event.compLabel = saved.label;
+        saveEvents(events);
+
+        try {
+          await updateEventMessage(client, event);
+        } catch (e) {
+          console.error('Failed to update event message after refresh', e);
+        }
+
+        let content = `Event \`${eventId}\` refreshed from **${saved.label}**. Existing sign-ups were kept wherever their slot still exists.`;
+        if (dropped.length > 0) {
+          const names = dropped
+            .map((d) => `<@${d.userId}> (was **${d.name}**, ${d.category})`)
+            .join(', ');
+          content += `\n⚠️ ${dropped.length} sign-up${
+            dropped.length === 1 ? '' : 's'
+          } no longer had a matching slot and ${dropped.length === 1 ? 'was' : 'were'} removed: ${names}`;
+        }
+
+        await interaction.reply({ content, ephemeral: true });
         return;
       }
     }
