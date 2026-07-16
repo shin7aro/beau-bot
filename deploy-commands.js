@@ -43,6 +43,14 @@ const commands = [
         .addStringOption((opt) =>
           opt.setName('event_id').setDescription('The event ID shown in the embed footer').setRequired(true)
         )
+    )
+    .addSubcommand((sub) =>
+      sub
+        .setName('refresh')
+        .setDescription('Re-apply the current saved comp onto an already-posted event, keeping existing sign-ups')
+        .addStringOption((opt) =>
+          opt.setName('event_id').setDescription('The event ID shown in the embed footer').setRequired(true)
+        )
     ),
   new SlashCommandBuilder()
     .setName('comp')
