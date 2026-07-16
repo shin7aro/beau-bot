@@ -1,5 +1,3 @@
-require('./deploy-commands.js');
-
 const express = require('express');
 const app = express();
 app.get('/', (req, res) => res.send('Bot is alive!'));
@@ -760,4 +758,14 @@ client.on(Events.InteractionCreate, async (interaction) => {
   }
 });
 
-client.login(process.env.DISCORD_TOKEN);
+client.on(Events.Error, (err) => {
+  console.error('Discord client error:', err);
+});
+
+process.on('unhandledRejection', (err) => {
+  console.error('Unhandled rejection:', err);
+});
+
+client.login(process.env.DISCORD_TOKEN).catch((err) => {
+  console.error('Failed to log in to Discord:', err);
+});
