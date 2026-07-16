@@ -30,9 +30,39 @@ function keyFor(label) {
   return label.trim().toLowerCase();
 }
 
-// An optional leading emoji on an item line — either a custom Discord emoji
-// tag (<:name:id> / <a:name:id>) or a single unicode emoji character.
-const EMOJI_PREFIX_RE = /^(<a?:\w+:\d+>|\p{Extended_Pictographic}\uFE0F?)\s+(.*)$/u;
+// An optional leading emoji on an item line — a custom Discord emoji tag
+// (<:name:id> / <a:name:id>), a typed-out ":name:" shortcode, or a single
+// unicode emoji character.
+const EMOJI_PREFIX_RE = /^(<a?:\w+:\d+>|:\w+:|\p{Extended_Pictographic}\uFE0F?)\s+(.*)$/u;
+
+// Resolves a raw emoji token from the start of an item line into something
+// Discord will actually render:
+//  - a full custom emoji tag is used as-is
+//  - a plain unicode emoji character is used as-is
+//  - a typed ":name:" shortcode gets looked up by name against the server's
+//    own custom emoji list — Discord's modal text fields don't auto-convert
+//    shortcodes into real emoji the way the normal chat box does, so without
+//    this the literal text ":name:" would otherwise get treated as part of
+//    the item name. If no match is found, it's dropped (falls back to the
+//    default icon) rather than leaking ":name:" into the display.
+function resolveEmojiToken(token, guild) {
+  if (!token) return null;
+  if (/^<a?:\w+:\d+>$/.test(token)) return token;
+
+  const shortcode = token.match(/^:(\w+):$/);
+  if (shortcode) {
+    if (!guild) return null;
+    const name = shortcode[1].toLowerCase();
+    try {
+      const found = guild.emojis.cache.find((e) => e.name && e.name.toLowerCase() === name);
+      return found ? found.toString() : null;
+    } catch {
+      return null;
+    }
+  }
+
+  return token;
+}
 
 // Parses the "Tank / DPS / Healer / Support / Battlemount" text format used by
 // both the /comp create and /comp edit modals:
@@ -46,7 +76,7 @@ const EMOJI_PREFIX_RE = /^(<a?:\w+:\d+>|\p{Extended_Pictographic}\uFE0F?)\s+(.*)
 // slot, so two identical lines just means two open slots for that weapon,
 // no "(1/2)" counter needed. "Name: N" still works as shorthand for N
 // duplicate lines.
-function parseComposition(raw) {
+function parseComposition(raw, guild) {
   const lines = raw
     .split('\n')
     .map((l) => l.trim())
@@ -72,7 +102,7 @@ function parseComposition(raw) {
     let rest = line;
     const emojiMatch = line.match(EMOJI_PREFIX_RE);
     if (emojiMatch) {
-      emoji = emojiMatch[1];
+      emoji = resolveEmojiToken(emojiMatch[1], guild);
       rest = emojiMatch[2].trim();
     }
 
@@ -133,14 +163,14 @@ function stringifyComposition(categories) {
 // merged "(1/2)" row. Each row carries its parent item's array index (for
 // quota mode, itemIndex is not used) so callers can map a dropdown choice
 // back to the exact item unambiguously, even when names repeat.
-function expandCategoryRows(catData) {
+function expandCategoryRows(catData, startNumber = 1) {
   const rows = [];
 
   if (catData.mode === 'quota') {
     for (let i = 0; i < catData.capacity; i++) {
       const s = catData.signups[i];
       rows.push({
-        rowNumber: rows.length + 1,
+        rowNumber: startNumber + rows.length,
         name: s ? s.weapon : null,
         emoji: null,
         signedUserId: s ? s.userId : null,
@@ -151,7 +181,7 @@ function expandCategoryRows(catData) {
 
   catData.items.forEach((item, itemIndex) => {
     rows.push({
-      rowNumber: rows.length + 1,
+      rowNumber: startNumber + rows.length,
       itemIndex,
       name: item.name,
       emoji: item.emoji || null,
@@ -162,8 +192,25 @@ function expandCategoryRows(catData) {
   return rows;
 }
 
-function createComp({ label, compositionRaw, userId }) {
-  const categories = parseComposition(compositionRaw);
+// Expands every category in CATEGORY_ORDER into one flat, continuously
+// numbered list (Tank's last row number + 1 becomes DPS's first, etc.),
+// instead of each category restarting at 1. Each row carries its `category`
+// so the caller can still look up the right role emoji/color per row.
+function expandAllCategoryRows(categories, categoryOrder = CATEGORY_ORDER) {
+  const allRows = [];
+  let counter = 0;
+  for (const cat of categoryOrder) {
+    const catData = categories[cat];
+    if (!catData) continue;
+    const rows = expandCategoryRows(catData, counter + 1);
+    for (const row of rows) allRows.push({ ...row, category: cat });
+    counter += rows.length;
+  }
+  return allRows;
+}
+
+function createComp({ label, compositionRaw, userId, guild }) {
+  const categories = parseComposition(compositionRaw, guild);
   if (Object.keys(categories).length === 0) return null;
 
   const comps = loadComps();
@@ -180,8 +227,8 @@ function createComp({ label, compositionRaw, userId }) {
 }
 
 // newLabel may be the same as the old one (rename support is just "free" here).
-function updateComp({ key, newLabel, compositionRaw, userId }) {
-  const categories = parseComposition(compositionRaw);
+function updateComp({ key, newLabel, compositionRaw, userId, guild }) {
+  const categories = parseComposition(compositionRaw, guild);
   if (Object.keys(categories).length === 0) return null;
 
   const comps = loadComps();
@@ -228,4 +275,5 @@ module.exports = {
   deleteComp,
   cloneCategories,
   expandCategoryRows,
+  expandAllCategoryRows,
 };
