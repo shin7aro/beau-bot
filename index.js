@@ -1,5 +1,4 @@
 require('./deploy-commands.js');
-
 const express = require('express');
 const app = express();
 app.get('/', (req, res) => res.send('Bot is alive!'));
@@ -320,9 +319,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
           .setCustomId('composition')
           .setLabel('Composition (one item per line, see guide)')
           .setStyle(TextInputStyle.Paragraph)
-          .setPlaceholder(
-            'Tank\n\ud83d\udee1\ufe0f 1H Mace\n\ud83d\udd28 Polehammer\nDPS\n\u2694\ufe0f Carving Sword\n\u2694\ufe0f Carving Sword\nHealer\n\u2728 Hallowfall: 2\nSupport\n\ud83c\udf3f Rootbound Staff\nBattlemount\n\u26aa Direboar'
-          )
+          .setPlaceholder('Tank\n🛡️ 1H Mace\nDPS\n⚔️ Carving Sword\nHealer\n✨ Hallowfall: 2')
           .setRequired(true)
           .setMaxLength(4000);
 
@@ -387,9 +384,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
           .setCustomId('composition')
           .setLabel('Composition (one item per line, see guide)')
           .setStyle(TextInputStyle.Paragraph)
-          .setPlaceholder(
-            'Tank\n\ud83d\udee1\ufe0f 1H Mace\n\ud83d\udd28 Polehammer\nDPS\n\u2694\ufe0f Carving Sword\n\u2694\ufe0f Carving Sword\nHealer\n\u2728 Hallowfall: 2\nSupport\n\ud83c\udf3f Rootbound Staff\nBattlemount\n\u26aa Direboar'
-          )
+          .setPlaceholder('Tank\n🛡️ 1H Mace\nDPS\n⚔️ Carving Sword\nHealer\n✨ Hallowfall: 2')
           .setRequired(true)
           .setMaxLength(4000);
 
@@ -766,19 +761,6 @@ client.on(Events.Error, (err) => {
 
 process.on('unhandledRejection', (err) => {
   console.error('Unhandled rejection:', err);
-});
-
-console.log('DEBUG: token length is', (process.env.DISCORD_TOKEN || '').length);
-console.log('DEBUG: about to call client.login()');
-
-client.login(process.env.DISCORD_TOKEN)
-  .then(() => console.log('DEBUG: client.login() promise resolved'))
-  .catch((err) => {
-    console.error('Failed to log in to Discord:', err);
-  });
-
-process.on('uncaughtException', (err) => {
-  console.error('UNCAUGHT EXCEPTION:', err);
 });
 
 client.login(process.env.DISCORD_TOKEN).catch((err) => {
