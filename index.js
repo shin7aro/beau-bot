@@ -766,6 +766,19 @@ process.on('unhandledRejection', (err) => {
   console.error('Unhandled rejection:', err);
 });
 
+console.log('DEBUG: token length is', (process.env.DISCORD_TOKEN || '').length);
+console.log('DEBUG: about to call client.login()');
+
+client.login(process.env.DISCORD_TOKEN)
+  .then(() => console.log('DEBUG: client.login() promise resolved'))
+  .catch((err) => {
+    console.error('Failed to log in to Discord:', err);
+  });
+
+process.on('uncaughtException', (err) => {
+  console.error('UNCAUGHT EXCEPTION:', err);
+});
+
 client.login(process.env.DISCORD_TOKEN).catch((err) => {
   console.error('Failed to log in to Discord:', err);
 });
