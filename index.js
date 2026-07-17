@@ -137,7 +137,7 @@ function buildEmbed(event, guild) {
     const status = row.signedUserId ? `<@${row.signedUserId}>` : '*Open*';
     const weaponEmoji = row.emoji || '🔹';
     const label = row.name ? `**${row.name}**` : '*Any*';
-    rosterLines.push(`${row.rowNumber} - ${roleEmoji} - ${weaponEmoji} - ${label} : ${status}`);
+    rosterLines.push(`${roleEmoji} - ${weaponEmoji} - ${label} : ${status}`);
   }
 
   if (rosterLines.length > 0) {
@@ -565,7 +565,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
               lastParty = row.party;
             }
             const roleEmoji = roleEmojiText(interaction.guild, row.category);
-            lines.push(`${row.rowNumber} - ${roleEmoji} - ${row.emoji || '🔹'} - **${row.name}**`);
+            lines.push(`${roleEmoji} - ${row.emoji || '🔹'} - **${row.name}**`);
           }
           embed.addFields({ name: c.label, value: lines.join('\n') || '*empty*' });
         }
@@ -744,7 +744,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
           availableIndexes.slice(0, 25).map((idx) => {
             const item = items[idx];
             const row = rows.find((r) => r.itemIndex === idx);
-            const option = { label: `${row.rowNumber}. ${item.name}`, value: String(idx) };
+            const option = { label: item.name, value: String(idx) };
             if (item.emoji) option.emoji = item.emoji;
             return option;
           })
