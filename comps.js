@@ -1,415 +1,107 @@
-// comps.js
-// Storage + helpers for reusable team compositions, created with /comp create
-// and edited with /comp edit. This replaces the old live-website build pull —
-// the site is still useful for looking up exact builds/icons, so a link to it
-// gets attached to any event that was posted from a saved comp.
+require('dotenv').config();
+const { REST, Routes, SlashCommandBuilder } = require('discord.js');
 
-const fs = require('fs');
-const path = require('path');
+const commands = [
+  new SlashCommandBuilder()
+    .setName('event')
+    .setDescription('Manage guild activity sign-up events')
+    .addSubcommand((sub) =>
+      sub
+        .setName('create')
+        .setDescription('Post a new sign-up event')
+        .addStringOption((opt) =>
+          opt
+            .setName('type')
+            .setDescription('Type of activity (used for the title/emoji only)')
+            .setRequired(true)
+            .addChoices(
+              { name: 'CTA', value: 'CTA' },
+              { name: 'Group Dungeon', value: 'Group Dungeon' },
+              { name: 'Tracking', value: 'Tracking' },
+              { name: 'Ava Dungeon', value: 'Ava Dungeon' },
+              { name: 'Other', value: 'Other' }
+            )
+        )
+        .addStringOption((opt) =>
+          opt.setName('time').setDescription('When it happens, e.g. "21h Mada"').setRequired(true)
+        )
+        .addStringOption((opt) =>
+          opt
+            .setName('comp')
+            .setDescription('Saved composition to use (leave blank to type one manually)')
+            .setRequired(false)
+            .setAutocomplete(true)
+        )
+        .addStringOption((opt) =>
+          opt.setName('title').setDescription('Optional custom title (defaults to the activity type)')
+        )
+    )
+    .addSubcommand((sub) =>
+      sub
+        .setName('close')
+        .setDescription('Close an event so people can no longer sign up')
+        .addStringOption((opt) =>
+          opt.setName('event_id').setDescription('The event ID shown in the embed footer').setRequired(true)
+        )
+    )
+    .addSubcommand((sub) =>
+      sub
+        .setName('refresh')
+        .setDescription('Re-apply the current saved comp onto an already-posted event, keeping existing sign-ups')
+        .addStringOption((opt) =>
+          opt.setName('event_id').setDescription('The event ID shown in the embed footer').setRequired(true)
+        )
+    ),
+  new SlashCommandBuilder()
+    .setName('comp')
+    .setDescription('Manage reusable team compositions')
+    .addSubcommand((sub) =>
+      sub.setName('create').setDescription('Create and label a new saved composition')
+    )
+    .addSubcommand((sub) =>
+      sub
+        .setName('edit')
+        .setDescription('Modify an existing saved composition')
+        .addStringOption((opt) =>
+          opt
+            .setName('comp')
+            .setDescription('The composition to edit')
+            .setRequired(true)
+            .setAutocomplete(true)
+        )
+    )
+    .addSubcommand((sub) =>
+      sub
+        .setName('delete')
+        .setDescription('Delete a saved composition')
+        .addStringOption((opt) =>
+          opt
+            .setName('comp')
+            .setDescription('The composition to delete')
+            .setRequired(true)
+            .setAutocomplete(true)
+        )
+    )
+    .addSubcommand((sub) => sub.setName('list').setDescription('List all saved compositions')),
+].map((c) => c.toJSON());
 
-const DB_PATH = path.join(__dirname, 'comps.json');
-const BUILDS_LINK = 'https://shin7aro.github.io/Rise-of-Dahalo';
+const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
 
-// Keep this in sync with CATEGORY_ORDER in index.js.
-const CATEGORY_ORDER = ['Tank', 'DPS', 'Healer', 'Support', 'Battlemount'];
-
-function loadComps() {
-  if (!fs.existsSync(DB_PATH)) return {};
+(async () => {
   try {
-    return JSON.parse(fs.readFileSync(DB_PATH, 'utf8'));
-  } catch {
-    return {};
+    const clientId = process.env.CLIENT_ID;
+    const guildId = process.env.GUILD_ID;
+
+    if (guildId) {
+      // Guild commands update instantly - best while developing/testing
+      await rest.put(Routes.applicationGuildCommands(clientId, guildId), { body: commands });
+      console.log(`Registered commands for guild ${guildId}`);
+    } else {
+      // Global commands can take up to an hour to propagate
+      await rest.put(Routes.applicationCommands(clientId), { body: commands });
+      console.log('Registered global commands');
+    }
+  } catch (err) {
+    console.error(err);
   }
-}
-
-function saveComps(comps) {
-  fs.writeFileSync(DB_PATH, JSON.stringify(comps, null, 2));
-}
-
-function keyFor(label) {
-  return label.trim().toLowerCase();
-}
-
-// An optional leading emoji on an item line — a custom Discord emoji tag
-// (<:name:id> / <a:name:id>), a typed-out ":name:" shortcode, or a single
-// unicode emoji character.
-const EMOJI_PREFIX_RE = /^(<a?:\w+:\d+>|:\w+:|\p{Extended_Pictographic}\uFE0F?)\s+(.*)$/u;
-
-// Resolves a raw emoji token from the start of an item line into something
-// Discord will actually render:
-//  - a full custom emoji tag is used as-is
-//  - a plain unicode emoji character is used as-is
-//  - a typed ":name:" shortcode gets looked up by name against the server's
-//    own custom emoji list — Discord's modal text fields don't auto-convert
-//    shortcodes into real emoji the way the normal chat box does, so without
-//    this the literal text ":name:" would otherwise get treated as part of
-//    the item name. If no match is found, it's dropped (falls back to the
-//    default icon) rather than leaking ":name:" into the display.
-function resolveEmojiToken(token, guild) {
-  if (!token) return null;
-  if (/^<a?:\w+:\d+>$/.test(token)) return token;
-
-  const shortcode = token.match(/^:(\w+):$/);
-  if (shortcode) {
-    if (!guild) return null;
-    const name = shortcode[1].toLowerCase();
-    try {
-      const found = guild.emojis.cache.find((e) => e.name && e.name.toLowerCase() === name);
-      return found ? found.toString() : null;
-    } catch {
-      return null;
-    }
-  }
-
-  return token;
-}
-
-// Parses the "Tank / DPS / Healer / Support / Battlemount" text format used by
-// both the /comp create and /comp edit modals:
-//   Tank
-//   🛡️ 1H Mace
-//   🔨 Polehammer
-//   DPS
-//   ⚔️ Carving Sword
-//   ⚔️ Carving Sword
-// A weapon can appear on more than one line on purpose — each line is its own
-// slot, so two identical lines just means two open slots for that weapon,
-// no "(1/2)" counter needed. "Name: N" still works as shorthand for N
-// duplicate lines.
-// A "Party N" line marks the start of a new 20-player party. Composition text
-// with no Party headers at all is treated as one single implicit party (fully
-// backward compatible with comps saved before this feature existed).
-const PARTY_HEADER_RE = /^party\b/i;
-
-function parseComposition(raw, guild) {
-  const lines = raw
-    .split('\n')
-    .map((l) => l.trim())
-    .filter((l) => l.length > 0);
-
-  const grouped = {};
-  let current = null;
-  let partyIndex = -1; // -1 = no Party header seen yet; items default to party 0
-
-  for (const line of lines) {
-    if (PARTY_HEADER_RE.test(line)) {
-      partyIndex += 1;
-      current = null;
-      continue;
-    }
-
-    const asCategory = CATEGORY_ORDER.find(
-      (c) => c.toLowerCase() === line.toLowerCase().replace(/[:：]$/, '')
-    );
-    if (asCategory) {
-      current = asCategory;
-      if (!grouped[current]) grouped[current] = [];
-      continue;
-    }
-
-    if (!current) continue; // ignore stray lines before the first category header
-    if (!grouped[current]) grouped[current] = [];
-
-    let emoji = null;
-    let rest = line;
-    const emojiMatch = line.match(EMOJI_PREFIX_RE);
-    if (emojiMatch) {
-      emoji = resolveEmojiToken(emojiMatch[1], guild);
-      rest = emojiMatch[2].trim();
-    }
-
-    const match = rest.match(/^(.*?)[\s]*[:\-][\s]*(\d+)\s*$/);
-    let name = rest;
-    let count = 1;
-    if (match) {
-      name = match[1].trim();
-      count = Math.max(1, parseInt(match[2], 10));
-    }
-    if (!name) continue;
-
-    const party = partyIndex === -1 ? 0 : partyIndex;
-
-    // Expand "Name: N" into N separate one-slot lines, so duplicates never
-    // need a merged counter — the display just repeats the row.
-    for (let i = 0; i < count; i++) {
-      grouped[current].push({ name, emoji, party, signups: [] });
-    }
-  }
-
-  const categories = {};
-  for (const cat of Object.keys(grouped)) {
-    categories[cat] = { mode: 'items', items: grouped[cat] };
-  }
-  return categories;
-}
-
-// Inverse of parseComposition — turns stored categories back into editable
-// text, used to prefill the /comp edit modal. Collapses consecutive
-// duplicate (name + emoji) rows back into the "Name: N" shorthand.
-function stringifyComposition(categories) {
-  let maxParty = 0;
-  for (const cat of CATEGORY_ORDER) {
-    const catData = categories[cat];
-    if (!catData || !catData.items) continue;
-    for (const item of catData.items) maxParty = Math.max(maxParty, item.party || 0);
-  }
-
-  const lines = [];
-  for (let p = 0; p <= maxParty; p++) {
-    if (maxParty > 0) lines.push(`Party ${p + 1}`);
-
-    for (const cat of CATEGORY_ORDER) {
-      const catData = categories[cat];
-      if (!catData || !catData.items) continue;
-      const itemsInParty = catData.items.filter((it) => (it.party || 0) === p);
-      if (itemsInParty.length === 0) continue;
-      lines.push(cat);
-
-      let i = 0;
-      while (i < itemsInParty.length) {
-        const item = itemsInParty[i];
-        let count = 1;
-        while (
-          i + count < itemsInParty.length &&
-          itemsInParty[i + count].name === item.name &&
-          itemsInParty[i + count].emoji === item.emoji
-        ) {
-          count++;
-        }
-        const prefix = item.emoji ? `${item.emoji} ` : '';
-        lines.push(count > 1 ? `${prefix}${item.name}: ${count}` : `${prefix}${item.name}`);
-        i += count;
-      }
-    }
-  }
-  return lines.join('\n');
-}
-
-// Expands stored categories into flat, numbered slot rows for display —
-// e.g. row 1 and row 2 for two "Carving Sword" lines, instead of a single
-// merged "(1/2)" row. Each row carries its parent item's array index (for
-// quota mode, itemIndex is not used) so callers can map a dropdown choice
-// back to the exact item unambiguously, even when names repeat.
-function expandCategoryRows(catData, startNumber = 1) {
-  const rows = [];
-
-  if (catData.mode === 'quota') {
-    for (let i = 0; i < catData.capacity; i++) {
-      const s = catData.signups[i];
-      rows.push({
-        rowNumber: startNumber + rows.length,
-        name: s ? s.weapon : null,
-        emoji: null,
-        signedUserId: s ? s.userId : null,
-      });
-    }
-    return rows;
-  }
-
-  catData.items.forEach((item, itemIndex) => {
-    rows.push({
-      rowNumber: startNumber + rows.length,
-      itemIndex,
-      name: item.name,
-      emoji: item.emoji || null,
-      signedUserId: item.signups[0] || null,
-    });
-  });
-
-  return rows;
-}
-
-// Fixed party size used only for numbering offsets — Party 2 always starts
-// at 21 even if Party 1 only has a handful of slots filled in, matching how
-// Albion's own party system reserves 20 slots per party regardless of size.
-const PARTY_SIZE = 20;
-
-// Expands every category in CATEGORY_ORDER into one flat list, numbered
-// per-party: Party 1 gets rows 1-20, Party 2 gets 21-40, etc. — the offset is
-// fixed to the party's position, not to how many rows the previous party
-// actually used. Comps with no party structure behave exactly as before
-// (everything is "party 0", offset 0).
-function expandAllCategoryRows(categories, categoryOrder = CATEGORY_ORDER) {
-  let maxParty = 0;
-  for (const cat of categoryOrder) {
-    const catData = categories[cat];
-    if (!catData || catData.mode === 'quota' || !catData.items) continue;
-    for (const item of catData.items) maxParty = Math.max(maxParty, item.party || 0);
-  }
-
-  const allRows = [];
-  for (let p = 0; p <= maxParty; p++) {
-    let counter = p * PARTY_SIZE;
-
-    for (const cat of categoryOrder) {
-      const catData = categories[cat];
-      if (!catData) continue;
-
-      if (catData.mode === 'quota') {
-        if (p !== 0) continue; // legacy quota categories only ever occupy party 1
-        for (let i = 0; i < catData.capacity; i++) {
-          counter++;
-          const s = catData.signups[i];
-          allRows.push({
-            rowNumber: counter,
-            party: 0,
-            category: cat,
-            name: s ? s.weapon : null,
-            emoji: null,
-            signedUserId: s ? s.userId : null,
-          });
-        }
-        continue;
-      }
-
-      catData.items.forEach((item, itemIndex) => {
-        if ((item.party || 0) !== p) return;
-        counter++;
-        allRows.push({
-          rowNumber: counter,
-          party: p,
-          category: cat,
-          itemIndex,
-          name: item.name,
-          emoji: item.emoji || null,
-          signedUserId: item.signups[0] || null,
-        });
-      });
-    }
-  }
-  return allRows;
-}
-
-// Re-applies a (possibly edited) saved comp onto an already-posted event's
-// categories. Tries to keep every existing sign-up attached to the same
-// logical slot — matched by (party, weapon name, emoji) — so a routine edit
-// (fixing a typo, swapping one weapon) doesn't bump people who are already
-// signed up. Any sign-up that no longer has a matching slot (its weapon/party
-// was removed or reduced) is dropped and reported back to the caller so the
-// organizer can follow up with that person.
-function refreshEventCategories(oldCategories, newCategories) {
-  const categories = {};
-  const dropped = [];
-
-  for (const cat of CATEGORY_ORDER) {
-    const newCatData = newCategories[cat];
-    if (!newCatData) continue; // category no longer exists in the comp
-
-    if (newCatData.mode === 'quota') {
-      // legacy quota categories aren't affected by refresh; keep as-is
-      categories[cat] = JSON.parse(JSON.stringify(newCatData));
-      continue;
-    }
-
-    const freshItems = newCatData.items.map((item) => ({ ...item, signups: [] }));
-    const used = new Array(freshItems.length).fill(false);
-
-    const oldCatData = oldCategories[cat];
-    if (oldCatData && oldCatData.mode !== 'quota' && oldCatData.items) {
-      for (const oldItem of oldCatData.items) {
-        const userId = oldItem.signups && oldItem.signups[0];
-        if (!userId) continue;
-
-        const matchIdx = freshItems.findIndex(
-          (ni, idx) =>
-            !used[idx] &&
-            (ni.party || 0) === (oldItem.party || 0) &&
-            ni.name === oldItem.name &&
-            ni.emoji === oldItem.emoji
-        );
-
-        if (matchIdx !== -1) {
-          freshItems[matchIdx].signups.push(userId);
-          used[matchIdx] = true;
-        } else {
-          dropped.push({ userId, category: cat, name: oldItem.name, party: oldItem.party || 0 });
-        }
-      }
-    }
-
-    categories[cat] = { mode: 'items', items: freshItems };
-  }
-
-  // categories that existed before but were removed entirely from the comp
-  for (const cat of Object.keys(oldCategories)) {
-    if (categories[cat]) continue;
-    const oldCatData = oldCategories[cat];
-    if (!oldCatData || oldCatData.mode === 'quota' || !oldCatData.items) continue;
-    for (const item of oldCatData.items) {
-      const userId = item.signups && item.signups[0];
-      if (userId) dropped.push({ userId, category: cat, name: item.name, party: item.party || 0 });
-    }
-  }
-
-  return { categories, dropped };
-}
-
-function createComp({ label, compositionRaw, userId, guild }) {
-  const categories = parseComposition(compositionRaw, guild);
-  if (Object.keys(categories).length === 0) return null;
-
-  const comps = loadComps();
-  const key = keyFor(label);
-  comps[key] = {
-    label: label.trim(),
-    categories,
-    createdBy: userId,
-    updatedBy: userId,
-    updatedAt: Date.now(),
-  };
-  saveComps(comps);
-  return comps[key];
-}
-
-// newLabel may be the same as the old one (rename support is just "free" here).
-function updateComp({ key, newLabel, compositionRaw, userId, guild }) {
-  const categories = parseComposition(compositionRaw, guild);
-  if (Object.keys(categories).length === 0) return null;
-
-  const comps = loadComps();
-  const existing = comps[key];
-  if (!existing) return null;
-
-  const newKey = keyFor(newLabel);
-  delete comps[key];
-  comps[newKey] = {
-    label: newLabel.trim(),
-    categories,
-    createdBy: existing.createdBy,
-    updatedBy: userId,
-    updatedAt: Date.now(),
-  };
-  saveComps(comps);
-  return comps[newKey];
-}
-
-function deleteComp(key) {
-  const comps = loadComps();
-  if (!comps[key]) return false;
-  delete comps[key];
-  saveComps(comps);
-  return true;
-}
-
-// Deep clone so multiple events built from the same saved comp don't end up
-// sharing (and corrupting) the same signups arrays.
-function cloneCategories(categories) {
-  return JSON.parse(JSON.stringify(categories));
-}
-
-module.exports = {
-  CATEGORY_ORDER,
-  BUILDS_LINK,
-  loadComps,
-  saveComps,
-  keyFor,
-  parseComposition,
-  stringifyComposition,
-  createComp,
-  updateComp,
-  deleteComp,
-  cloneCategories,
-  expandCategoryRows,
-  expandAllCategoryRows,
-  refreshEventCategories,
-};
+})();
