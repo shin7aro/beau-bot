@@ -223,6 +223,149 @@ client.on(Events.MessageCreate, async (message) => {
   if (message.author.bot) return;
   if (!message.mentions.has(client.user)) return;
 
+  // ----- manual sign-up management from inside an event's thread -----
+  // If this message is in a thread created directly from an event's posted
+  // message (Discord gives that thread the same ID as the message it was
+  // made from), and it mentions both a player and a role name, treat it as
+  // "add/remove this player from this role" instead of a normal AI question.
+  // This lets an organizer reserve or clear a slot for someone who isn't
+  // online to click the buttons themselves.
+  if (message.channel.isThread()) {
+    const event = events[message.channel.id];
+    if (event) {
+      const targetUser = message.mentions.users.find((u) => u.id !== client.user.id);
+      const contentNoMentions = message.content.replace(/<@!?\d+>/g, '').trim();
+      const roleMatch = CATEGORY_ORDER.find((cat) =>
+        new RegExp(`\\b${cat}\\b`, 'i').test(contentNoMentions)
+      );
+
+      if (targetUser && roleMatch) {
+        const isOrganizer = event.organizerId === message.author.id;
+        const canManage = message.member?.permissions?.has(PermissionFlagsBits.ManageGuild);
+        if (!isOrganizer && !canManage) {
+          await message.reply('Only the organizer or a server manager can manage sign-ups here.');
+          return;
+        }
+
+        if (event.closed) {
+          await message.reply('This event is closed, so sign-ups can no longer be changed.');
+          return;
+        }
+
+        const isRemoval = /\b(remove|retire|delete|unassign|unsign|cancel|drop|leave|out)\b/i.test(
+          contentNoMentions
+        );
+        const catData = event.categories[roleMatch];
+
+        if (!catData) {
+          await message.reply(`This event doesn't have a **${roleMatch}** role.`);
+          return;
+        }
+
+        if (isRemoval) {
+          let removed = false;
+          let itemName = null;
+          if (catData.mode === 'quota') {
+            const idx = catData.signups.findIndex((s) => s.userId === targetUser.id);
+            if (idx !== -1) {
+              itemName = catData.signups[idx].weapon;
+              catData.signups.splice(idx, 1);
+              removed = true;
+            }
+          } else {
+            const idx = catData.items.findIndex((it) => it.signups[0] === targetUser.id);
+            if (idx !== -1) {
+              itemName = catData.items[idx].name;
+              catData.items[idx].signups = [];
+              removed = true;
+            }
+          }
+
+          if (!removed) {
+            await message.reply(`<@${targetUser.id}> isn't currently signed up for **${roleMatch}**.`);
+            return;
+          }
+
+          saveEvents(events);
+          await updateEventMessage(client, event);
+          await message.reply(
+            `✅ Removed <@${targetUser.id}> from **${roleMatch}**${itemName ? ` (**${itemName}**)` : ''}.`
+          );
+          return;
+        }
+
+        // add / assign — show the same picker a self sign-up would get,
+        // so the organizer chooses exactly which slot, instead of the bot
+        // silently grabbing the first open one.
+        if (catData.mode === 'quota') {
+          if (catData.signups.length >= catData.capacity) {
+            await message.reply(`All **${roleMatch}** slots are full.`);
+            return;
+          }
+
+          if (catData.weaponOptions.length === 1) {
+            removeUserFromEvent(event, targetUser.id);
+            catData.signups.push({ userId: targetUser.id, weapon: catData.weaponOptions[0] });
+            saveEvents(events);
+            await updateEventMessage(client, event);
+            await message.reply(`✅ Added <@${targetUser.id}> to **${roleMatch}**.`);
+            return;
+          }
+
+          const select = new StringSelectMenuBuilder()
+            .setCustomId(`event_select_for:${roleMatch}:${event.id}:${targetUser.id}`)
+            .setPlaceholder(`Choose ${targetUser.username}'s ${roleMatch} build`)
+            .addOptions(catData.weaponOptions.slice(0, 25).map((weapon) => ({ label: weapon, value: weapon })));
+
+          await message.reply({
+            content: `Pick <@${targetUser.id}>'s **${roleMatch}** build:`,
+            components: [new ActionRowBuilder().addComponents(select)],
+          });
+          return;
+        }
+
+        const items = catData.items;
+        const availableIndexes = items
+          .map((item, idx) => idx)
+          .filter((idx) => items[idx].signups.length === 0);
+
+        if (availableIndexes.length === 0) {
+          await message.reply(`All **${roleMatch}** slots are full.`);
+          return;
+        }
+
+        if (availableIndexes.length === 1) {
+          removeUserFromEvent(event, targetUser.id);
+          items[availableIndexes[0]].signups.push(targetUser.id);
+          saveEvents(events);
+          await updateEventMessage(client, event);
+          await message.reply(
+            `✅ Added <@${targetUser.id}> to **${roleMatch}** (**${items[availableIndexes[0]].name}**).`
+          );
+          return;
+        }
+
+        const select = new StringSelectMenuBuilder()
+          .setCustomId(`event_select_for:${roleMatch}:${event.id}:${targetUser.id}`)
+          .setPlaceholder(`Choose ${targetUser.username}'s ${roleMatch} build`)
+          .addOptions(
+            availableIndexes.slice(0, 25).map((idx) => {
+              const item = items[idx];
+              const option = { label: item.name, value: String(idx) };
+              if (item.emoji) option.emoji = item.emoji;
+              return option;
+            })
+          );
+
+        await message.reply({
+          content: `Pick <@${targetUser.id}>'s **${roleMatch}** build:`,
+          components: [new ActionRowBuilder().addComponents(select)],
+        });
+        return;
+      }
+    }
+  }
+
   const question = message.content.replace(/<@!?\d+>/g, '').trim();
   if (!question) {
     await message.reply("Ask me something about Albion or the guild's builds!");
@@ -807,6 +950,73 @@ client.on(Events.InteractionCreate, async (interaction) => {
       }
 
       await interaction.update({ content: `Signed up as **${item.name}** (${category}).`, components: [] });
+      return;
+    }
+
+    // ----- select menu: organizer picking a slot on behalf of someone else -----
+    if (interaction.isStringSelectMenu() && interaction.customId.startsWith('event_select_for:')) {
+      const [, category, eventId, targetUserId] = interaction.customId.split(':');
+      const event = events[eventId];
+      if (!event || event.closed) {
+        await interaction.update({ content: 'This event is no longer open.', components: [] });
+        return;
+      }
+
+      const isOrganizer = event.organizerId === interaction.user.id;
+      const canManage = interaction.memberPermissions?.has(PermissionFlagsBits.ManageGuild);
+      if (!isOrganizer && !canManage) {
+        await interaction.reply({
+          content: 'Only the organizer or a server manager can finish this assignment.',
+          ephemeral: true,
+        });
+        return;
+      }
+
+      const chosenValue = interaction.values[0];
+      const catData = event.categories[category];
+
+      if (catData.mode === 'quota') {
+        if (catData.signups.length >= catData.capacity) {
+          await interaction.update({ content: 'That role just filled up, try another.', components: [] });
+          return;
+        }
+        removeUserFromEvent(event, targetUserId);
+        catData.signups.push({ userId: targetUserId, weapon: chosenValue });
+        saveEvents(events);
+
+        try {
+          await updateEventMessage(client, event);
+        } catch (e) {
+          console.error('Failed to update event message after select', e);
+        }
+
+        await interaction.update({
+          content: `✅ Added <@${targetUserId}> as **${chosenValue}** (${category}).`,
+          components: [],
+        });
+        return;
+      }
+
+      const item = catData.items[Number(chosenValue)];
+      if (!item || item.signups.length >= 1) {
+        await interaction.update({ content: 'That slot just filled up, try another.', components: [] });
+        return;
+      }
+
+      removeUserFromEvent(event, targetUserId);
+      item.signups.push(targetUserId);
+      saveEvents(events);
+
+      try {
+        await updateEventMessage(client, event);
+      } catch (e) {
+        console.error('Failed to update event message after select', e);
+      }
+
+      await interaction.update({
+        content: `✅ Added <@${targetUserId}> as **${item.name}** (${category}).`,
+        components: [],
+      });
       return;
     }
 
