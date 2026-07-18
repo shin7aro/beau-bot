@@ -205,6 +205,61 @@ function removeUserFromEvent(event, userId) {
   }
 }
 
+// All distinct users currently signed up anywhere on the event.
+function getSignedUpUserIds(event) {
+  const ids = new Set();
+  for (const cat of Object.values(event.categories)) {
+    if (cat.mode === 'quota') {
+      for (const s of cat.signups) ids.add(s.userId);
+    } else {
+      for (const item of cat.items) {
+        if (item.signups[0]) ids.add(item.signups[0]);
+      }
+    }
+  }
+  return [...ids];
+}
+
+// Groups open (unsigned) slots by role, for the 30-minute reminder ping —
+// e.g. [{ category: 'Tank', missing: 2 }, { category: 'Healer', missing: 1 }].
+function getMissingRolesSummary(event) {
+  const rows = comps.expandAllCategoryRows(event.categories, CATEGORY_ORDER);
+  const counts = {};
+  for (const row of rows) {
+    if (row.signedUserId) continue;
+    counts[row.category] = (counts[row.category] || 0) + 1;
+  }
+  return CATEGORY_ORDER.filter((cat) => counts[cat] > 0).map((cat) => ({ category: cat, missing: counts[cat] }));
+}
+
+function findDahaloRole(guild) {
+  if (!guild) return null;
+  return guild.roles.cache.find((r) => r.name.toLowerCase() === 'dahalo') || null;
+}
+
+// Shared by both the "pick no-shows" select menu and the "no no-shows"
+// button — marks the event closed, records who didn't show, updates the
+// posted embed, and announces the outcome publicly in the event's channel.
+async function finalizeEventClose(client, event, noShowIds) {
+  event.closed = true;
+  event.noShows = noShowIds;
+  saveEvents(events);
+
+  try {
+    await updateEventMessage(client, event);
+  } catch (e) {
+    console.error('Failed to update event message on close', e);
+  }
+
+  try {
+    const channel = await client.channels.fetch(event.channelId);
+    const summary = noShowIds.length > 0 ? noShowIds.map((id) => `<@${id}>`).join(', ') : '*none*';
+    await channel.send(`🔒 Event **${event.title}** closed. No-shows: ${summary}`);
+  } catch (e) {
+    console.error('Failed to post close summary', e);
+  }
+}
+
 async function updateEventMessage(client, event) {
   const channel = await client.channels.fetch(event.channelId);
   const message = await channel.messages.fetch(event.id);
@@ -217,6 +272,42 @@ const client = new Client({
 });
 client.once(Events.ClientReady, (c) => {
   console.log(`Logged in as ${c.user.tag}`);
+
+  // Every 30 minutes, ping the Dahalo role in each open event's thread with
+  // whatever roles are still missing. Only fires if the organizer actually
+  // created a thread from the event message (its ID has to match the
+  // event's message ID — see the mention-based sign-up management below for
+  // why that's how a thread gets linked to an event), and only if there's
+  // actually something missing (no point pinging a fully-staffed event).
+  setInterval(async () => {
+    for (const event of Object.values(events)) {
+      if (event.closed) continue;
+
+      const missing = getMissingRolesSummary(event);
+      if (missing.length === 0) continue;
+
+      let thread;
+      try {
+        thread = await client.channels.fetch(event.id);
+      } catch {
+        continue; // no thread created for this event yet
+      }
+      if (!thread || !thread.isThread || !thread.isThread()) continue;
+
+      const roleMention = findDahaloRole(thread.guild);
+      const missingText = missing.map((m) => `**${m.category}** (${m.missing} open)`).join(', ');
+
+      try {
+        await thread.send(
+          `⏰ Reminder for **${event.title}** (${event.time}) — still missing: ${missingText}.${
+            roleMention ? ` <@&${roleMention.id}>` : ''
+          }`
+        );
+      } catch (e) {
+        console.error('Failed to send reminder for event', event.id, e);
+      }
+    }
+  }, 30 * 60 * 1000);
 });
 
 client.on(Events.MessageCreate, async (message) => {
@@ -499,16 +590,47 @@ client.on(Events.InteractionCreate, async (interaction) => {
           return;
         }
 
-        event.closed = true;
-        saveEvents(events);
-
-        try {
-          await updateEventMessage(client, event);
-        } catch (e) {
-          console.error('Failed to update closed event message', e);
+        if (event.closed) {
+          await interaction.reply({ content: 'This event is already closed.', ephemeral: true });
+          return;
         }
 
-        await interaction.reply({ content: `Event \`${eventId}\` closed.`, ephemeral: true });
+        const signedUpIds = getSignedUpUserIds(event);
+        const noShowButton = new ButtonBuilder()
+          .setCustomId(`event_close_none:${eventId}`)
+          .setLabel('No no-shows — close now')
+          .setStyle(ButtonStyle.Success);
+
+        if (signedUpIds.length === 0) {
+          // nobody signed up at all — nothing to pick from, just close
+          await finalizeEventClose(client, event, []);
+          await interaction.reply({ content: `Event \`${eventId}\` closed. Nobody had signed up.`, ephemeral: true });
+          return;
+        }
+
+        const users = await Promise.all(
+          signedUpIds.slice(0, 25).map(async (id) => {
+            try {
+              const u = await client.users.fetch(id);
+              return { id, name: u.username };
+            } catch {
+              return { id, name: id };
+            }
+          })
+        );
+
+        const select = new StringSelectMenuBuilder()
+          .setCustomId(`event_close_select:${eventId}`)
+          .setPlaceholder('Select anyone who did not show up')
+          .setMinValues(0)
+          .setMaxValues(users.length)
+          .addOptions(users.map((u) => ({ label: u.name, value: u.id })));
+
+        await interaction.reply({
+          content: `Closing **${event.title}** — select any no-shows, or press the button if everyone attended.`,
+          components: [new ActionRowBuilder().addComponents(select), new ActionRowBuilder().addComponents(noShowButton)],
+          ephemeral: true,
+        });
         return;
       }
 
@@ -717,6 +839,68 @@ client.on(Events.InteractionCreate, async (interaction) => {
         await interaction.reply({ embeds: [embed], ephemeral: true });
         return;
       }
+    }
+
+    // ----- /giveaway: draw winners from an event's attendees -----
+    if (interaction.isChatInputCommand() && interaction.commandName === 'giveaway') {
+      const eventId = interaction.options.getString('event_id');
+      const prize = interaction.options.getString('prize');
+      const winnersCount = interaction.options.getInteger('winners') || 1;
+
+      const event = events[eventId];
+      if (!event) {
+        await interaction.reply({ content: 'No event found with that ID.', ephemeral: true });
+        return;
+      }
+
+      if (!event.closed) {
+        await interaction.reply({
+          content:
+            'Close this event first with `/event close` — that\'s when no-shows get marked, and the giveaway needs to know who actually attended.',
+          ephemeral: true,
+        });
+        return;
+      }
+
+      const signedUp = getSignedUpUserIds(event);
+      const noShows = new Set(event.noShows || []);
+      const attendees = signedUp.filter((id) => !noShows.has(id));
+
+      if (attendees.length === 0) {
+        await interaction.reply({
+          content: "No eligible participants — everyone who signed up was marked as a no-show, or nobody signed up.",
+          ephemeral: true,
+        });
+        return;
+      }
+
+      const shuffled = [...attendees].sort(() => Math.random() - 0.5);
+      const drawCount = Math.min(winnersCount, shuffled.length);
+      const winners = shuffled.slice(0, drawCount);
+
+      const embed = new EmbedBuilder()
+        .setColor(0xf1c40f)
+        .setTitle('🎉 Giveaway!')
+        .addFields(
+          { name: 'Prize', value: prize },
+          { name: 'From event', value: event.title },
+          {
+            name: drawCount === 1 ? 'Winner' : 'Winners',
+            value: winners.map((id) => `<@${id}>`).join('\n'),
+          },
+          { name: 'Eligible attendees', value: String(attendees.length), inline: true }
+        )
+        .setFooter({ text: `Drawn by ${interaction.user.username}` });
+
+      if (drawCount < winnersCount) {
+        embed.addFields({
+          name: 'Note',
+          value: `Only ${attendees.length} attendee${attendees.length === 1 ? '' : 's'} available, so fewer winners were drawn than requested.`,
+        });
+      }
+
+      await interaction.reply({ embeds: [embed] });
+      return;
     }
 
     // ----- modal submit: create the event (manual path) -----
@@ -1017,6 +1201,58 @@ client.on(Events.InteractionCreate, async (interaction) => {
         content: `✅ Added <@${targetUserId}> as **${item.name}** (${category}).`,
         components: [],
       });
+      return;
+    }
+
+    // ----- close flow: no-shows picked from the multi-select -----
+    if (interaction.isStringSelectMenu() && interaction.customId.startsWith('event_close_select:')) {
+      const [, eventId] = interaction.customId.split(':');
+      const event = events[eventId];
+      if (!event) {
+        await interaction.update({ content: 'This event no longer exists.', components: [] });
+        return;
+      }
+      const isOrganizer = event.organizerId === interaction.user.id;
+      const canManage = interaction.memberPermissions?.has(PermissionFlagsBits.ManageGuild);
+      if (!isOrganizer && !canManage) {
+        await interaction.reply({ content: 'Only the organizer or a server manager can close this event.', ephemeral: true });
+        return;
+      }
+      if (event.closed) {
+        await interaction.update({ content: 'This event is already closed.', components: [] });
+        return;
+      }
+
+      const noShowIds = interaction.values;
+      await finalizeEventClose(client, event, noShowIds);
+      await interaction.update({
+        content: `Event closed. No-shows: ${noShowIds.length > 0 ? noShowIds.map((id) => `<@${id}>`).join(', ') : '*none*'}`,
+        components: [],
+      });
+      return;
+    }
+
+    // ----- close flow: "no no-shows" button -----
+    if (interaction.isButton() && interaction.customId.startsWith('event_close_none:')) {
+      const [, eventId] = interaction.customId.split(':');
+      const event = events[eventId];
+      if (!event) {
+        await interaction.update({ content: 'This event no longer exists.', components: [] });
+        return;
+      }
+      const isOrganizer = event.organizerId === interaction.user.id;
+      const canManage = interaction.memberPermissions?.has(PermissionFlagsBits.ManageGuild);
+      if (!isOrganizer && !canManage) {
+        await interaction.reply({ content: 'Only the organizer or a server manager can close this event.', ephemeral: true });
+        return;
+      }
+      if (event.closed) {
+        await interaction.update({ content: 'This event is already closed.', components: [] });
+        return;
+      }
+
+      await finalizeEventClose(client, event, []);
+      await interaction.update({ content: 'Event closed. No-shows: *none*', components: [] });
       return;
     }
 
