@@ -307,7 +307,7 @@ client.once(Events.ClientReady, (c) => {
         console.error('Failed to send reminder for event', event.id, e);
       }
     }
-  }, 30 * 60 * 1000);
+  }, 2 * 60 * 1000);
 });
 
 client.on(Events.MessageCreate, async (message) => {
