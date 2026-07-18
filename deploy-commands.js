@@ -83,6 +83,16 @@ const commands = [
         )
     )
     .addSubcommand((sub) => sub.setName('list').setDescription('List all saved compositions')),
+  new SlashCommandBuilder()
+    .setName('giveaway')
+    .setDescription("Draw winners from an event's attendees")
+    .addStringOption((opt) =>
+      opt.setName('event_id').setDescription('The event ID shown in the embed footer').setRequired(true)
+    )
+    .addStringOption((opt) => opt.setName('prize').setDescription('What the winner(s) get').setRequired(true))
+    .addIntegerOption((opt) =>
+      opt.setName('winners').setDescription('How many winners to draw (default 1)').setRequired(false)
+    ),
 ].map((c) => c.toJSON());
 
 const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
