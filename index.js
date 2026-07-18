@@ -218,9 +218,7 @@ const client = new Client({
 client.once(Events.ClientReady, (c) => {
   console.log(`Logged in as ${c.user.tag}`);
 });
-client.on('debug', (info) => console.log('[debug]', info));
-client.on('shardDisconnect', (event, id) => console.log('[shardDisconnect]', id, event?.code));
-client.on('shardError', (err) => console.error('[shardError]', err));
+
 client.on(Events.MessageCreate, async (message) => {
   if (message.author.bot) return;
   if (!message.mentions.has(client.user)) return;
