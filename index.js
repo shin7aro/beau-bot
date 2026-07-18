@@ -54,7 +54,7 @@ const pendingCreations = new Map(); // /event create (manual composition path)
 const pendingCompActions = new Map(); // /comp create and /comp edit
 
 // ---------- category metadata ----------
-const CATEGORY_ORDER = comps.CATEGORY_ORDER; // ['Tank', 'DPS', 'Healer', 'Support', 'Battlemount']
+const CATEGORY_ORDER = comps.CATEGORY_ORDER; // ['Tank', 'Support', 'DPS', 'Healer', 'Battlemount']
 const CATEGORY_META = {
   Tank: { emoji: '🔵', style: ButtonStyle.Primary },
   DPS: { emoji: '🔴', style: ButtonStyle.Danger },
@@ -221,6 +221,114 @@ client.once(Events.ClientReady, (c) => {
 client.on(Events.MessageCreate, async (message) => {
   if (message.author.bot) return;
   if (!message.mentions.has(client.user)) return;
+
+  // ----- manual sign-up management from inside an event's thread -----
+  // If this message is in a thread created directly from an event's posted
+  // message (Discord gives that thread the same ID as the message it was
+  // made from), and it mentions both a player and a role name, treat it as
+  // "add/remove this player from this role" instead of a normal AI question.
+  // This lets an organizer reserve or clear a slot for someone who isn't
+  // online to click the buttons themselves.
+  if (message.channel.isThread()) {
+    const event = events[message.channel.id];
+    if (event) {
+      const targetUser = message.mentions.users.find((u) => u.id !== client.user.id);
+      const contentNoMentions = message.content.replace(/<@!?\d+>/g, '').trim();
+      const roleMatch = CATEGORY_ORDER.find((cat) =>
+        new RegExp(`\\b${cat}\\b`, 'i').test(contentNoMentions)
+      );
+
+      if (targetUser && roleMatch) {
+        const isOrganizer = event.organizerId === message.author.id;
+        const canManage = message.member?.permissions?.has(PermissionFlagsBits.ManageGuild);
+        if (!isOrganizer && !canManage) {
+          await message.reply('Only the organizer or a server manager can manage sign-ups here.');
+          return;
+        }
+
+        if (event.closed) {
+          await message.reply('This event is closed, so sign-ups can no longer be changed.');
+          return;
+        }
+
+        const isRemoval = /\b(remove|retire|delete|unassign|unsign|cancel|drop|leave|out)\b/i.test(
+          contentNoMentions
+        );
+        const catData = event.categories[roleMatch];
+
+        if (!catData) {
+          await message.reply(`This event doesn't have a **${roleMatch}** role.`);
+          return;
+        }
+
+        if (isRemoval) {
+          let removed = false;
+          let itemName = null;
+          if (catData.mode === 'quota') {
+            const idx = catData.signups.findIndex((s) => s.userId === targetUser.id);
+            if (idx !== -1) {
+              itemName = catData.signups[idx].weapon;
+              catData.signups.splice(idx, 1);
+              removed = true;
+            }
+          } else {
+            const idx = catData.items.findIndex((it) => it.signups[0] === targetUser.id);
+            if (idx !== -1) {
+              itemName = catData.items[idx].name;
+              catData.items[idx].signups = [];
+              removed = true;
+            }
+          }
+
+          if (!removed) {
+            await message.reply(`<@${targetUser.id}> isn't currently signed up for **${roleMatch}**.`);
+            return;
+          }
+
+          saveEvents(events);
+          await updateEventMessage(client, event);
+          await message.reply(
+            `✅ Removed <@${targetUser.id}> from **${roleMatch}**${itemName ? ` (**${itemName}**)` : ''}.`
+          );
+          return;
+        }
+
+        // add / assign
+        if (catData.mode === 'quota') {
+          if (catData.signups.length >= catData.capacity) {
+            await message.reply(`All **${roleMatch}** slots are full.`);
+            return;
+          }
+          if (catData.weaponOptions.length !== 1) {
+            await message.reply(
+              `**${roleMatch}** has multiple weapon options, so I can't auto-assign — have <@${targetUser.id}> pick one from the buttons, or ask them to DM you their choice.`
+            );
+            return;
+          }
+          removeUserFromEvent(event, targetUser.id);
+          catData.signups.push({ userId: targetUser.id, weapon: catData.weaponOptions[0] });
+          saveEvents(events);
+          await updateEventMessage(client, event);
+          await message.reply(`✅ Added <@${targetUser.id}> to **${roleMatch}**.`);
+          return;
+        }
+
+        const idx = catData.items.findIndex((it) => it.signups.length === 0);
+        if (idx === -1) {
+          await message.reply(`All **${roleMatch}** slots are full.`);
+          return;
+        }
+        removeUserFromEvent(event, targetUser.id);
+        catData.items[idx].signups.push(targetUser.id);
+        saveEvents(events);
+        await updateEventMessage(client, event);
+        await message.reply(
+          `✅ Added <@${targetUser.id}> to **${roleMatch}** (**${catData.items[idx].name}**).`
+        );
+        return;
+      }
+    }
+  }
 
   const question = message.content.replace(/<@!?\d+>/g, '').trim();
   if (!question) {
