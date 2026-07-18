@@ -1,3 +1,4 @@
+require('dns').setDefaultResultOrder('ipv4first');
 require('./deploy-commands.js');
 const express = require('express');
 const app = express();
