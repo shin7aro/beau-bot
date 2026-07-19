@@ -12,7 +12,6 @@ app.listen(process.env.PORT || 3000, () => console.log('Web server running'));
 // saved comp when creating an event, or leave it blank to type one manually.
 
 require('dotenv').config();
-const fs = require('fs');
 const path = require('path');
 const {
   Client,
@@ -31,24 +30,22 @@ const {
 
 const comps = require('./comps');
 const { askAI, isOnCooldown, markAsked } = require('./ai-assistant');
+const storage = require('./storage');
 
-// ---------- storage (simple JSON file, keyed by the posted message id) ----------
-const DB_PATH = path.join(__dirname, 'events.json');
+// ---------- storage (Redis-backed via storage.js, keyed by the posted message id) ----------
+const DB_PATH = path.join(__dirname, 'events.json'); // local fallback path only
+const EVENTS_REDIS_KEY = 'events';
 
-function loadEvents() {
-  if (!fs.existsSync(DB_PATH)) return {};
-  try {
-    return JSON.parse(fs.readFileSync(DB_PATH, 'utf8'));
-  } catch {
-    return {};
-  }
+async function loadEvents() {
+  return storage.loadJSON(EVENTS_REDIS_KEY, DB_PATH);
 }
 
-function saveEvents(events) {
-  fs.writeFileSync(DB_PATH, JSON.stringify(events, null, 2));
+async function saveEvents(events) {
+  await storage.saveJSON(EVENTS_REDIS_KEY, DB_PATH, events);
 }
 
-let events = loadEvents();
+// Populated by the bootstrap at the bottom of this file, before login.
+let events = {};
 
 // Temporary holding areas between a slash command / button and the modal submit
 const pendingCreations = new Map(); // /event create (manual composition path)
@@ -243,7 +240,7 @@ function findDahaloRole(guild) {
 async function finalizeEventClose(client, event, noShowIds) {
   event.closed = true;
   event.noShows = noShowIds;
-  saveEvents(events);
+  await saveEvents(events);
 
   try {
     await updateEventMessage(client, event);
@@ -377,7 +374,7 @@ client.on(Events.MessageCreate, async (message) => {
             return;
           }
 
-          saveEvents(events);
+          await saveEvents(events);
           await updateEventMessage(client, event);
           await message.reply(
             `✅ Removed <@${targetUser.id}> from **${roleMatch}**${itemName ? ` (**${itemName}**)` : ''}.`
@@ -397,7 +394,7 @@ client.on(Events.MessageCreate, async (message) => {
           if (catData.weaponOptions.length === 1) {
             removeUserFromEvent(event, targetUser.id);
             catData.signups.push({ userId: targetUser.id, weapon: catData.weaponOptions[0] });
-            saveEvents(events);
+            await saveEvents(events);
             await updateEventMessage(client, event);
             await message.reply(`✅ Added <@${targetUser.id}> to **${roleMatch}**.`);
             return;
@@ -428,7 +425,7 @@ client.on(Events.MessageCreate, async (message) => {
         if (availableIndexes.length === 1) {
           removeUserFromEvent(event, targetUser.id);
           items[availableIndexes[0]].signups.push(targetUser.id);
-          saveEvents(events);
+          await saveEvents(events);
           await updateEventMessage(client, event);
           await message.reply(
             `✅ Added <@${targetUser.id}> to **${roleMatch}** (**${items[availableIndexes[0]].name}**).`
@@ -485,7 +482,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
   if (interaction.isAutocomplete()) {
     const focused = interaction.options.getFocused(true);
     if (focused.name === 'comp') {
-      const saved = comps.loadComps();
+      const saved = await comps.loadComps();
       const query = focused.value.toLowerCase();
       const choices = Object.entries(saved)
         .filter(([, c]) => c.label.toLowerCase().includes(query))
@@ -525,7 +522,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
         // ----- path 1: build from a saved comp -----
         if (compKey) {
-          const saved = comps.loadComps()[compKey];
+          const saved = (await comps.loadComps())[compKey];
           if (!saved) {
             await interaction.reply({
               content: "I couldn't find that saved composition — it may have been deleted. Try /comp list.",
@@ -546,7 +543,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
           const message = await interaction.fetchReply();
           event.id = message.id;
           events[event.id] = event;
-          saveEvents(events);
+          await saveEvents(events);
           await interaction.editReply({ embeds: [buildEmbed(event, interaction.guild)], components: buildButtons(event, interaction.guild) });
           return;
         }
@@ -661,7 +658,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
           return;
         }
 
-        const saved = comps.loadComps()[event.compKey];
+        const saved = (await comps.loadComps())[event.compKey];
         if (!saved) {
           await interaction.reply({
             content:
@@ -674,7 +671,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
         const { categories, dropped } = comps.refreshEventCategories(event.categories, saved.categories);
         event.categories = categories;
         event.compLabel = saved.label;
-        saveEvents(events);
+        await saveEvents(events);
 
         try {
           await updateEventMessage(client, event);
@@ -736,7 +733,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
       if (sub === 'edit') {
         const key = interaction.options.getString('comp');
-        const saved = comps.loadComps()[key];
+        const saved = (await comps.loadComps())[key];
         if (!saved) {
           await interaction.reply({ content: "I couldn't find that saved composition.", ephemeral: true });
           return;
@@ -785,7 +782,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
       if (sub === 'delete') {
         const key = interaction.options.getString('comp');
-        const saved = comps.loadComps()[key];
+        const saved = (await comps.loadComps())[key];
         if (!saved) {
           await interaction.reply({ content: "I couldn't find that saved composition.", ephemeral: true });
           return;
@@ -800,13 +797,13 @@ client.on(Events.InteractionCreate, async (interaction) => {
           return;
         }
 
-        comps.deleteComp(key);
+        await comps.deleteComp(key);
         await interaction.reply({ content: `Deleted saved composition **${saved.label}**.`, ephemeral: true });
         return;
       }
 
       if (sub === 'list') {
-        const saved = comps.loadComps();
+        const saved = await comps.loadComps();
         const keys = Object.keys(saved);
         if (keys.length === 0) {
           await interaction.reply({
@@ -940,7 +937,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
       event.id = message.id;
       events[event.id] = event;
-      saveEvents(events);
+      await saveEvents(events);
 
       await interaction.editReply({ embeds: [buildEmbed(event, interaction.guild)], components: buildButtons(event, interaction.guild) });
       return;
@@ -959,7 +956,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
       const label = interaction.fields.getTextInputValue('label');
       const compositionRaw = interaction.fields.getTextInputValue('composition');
 
-      const created = comps.createComp({ label, compositionRaw, userId: interaction.user.id, guild: interaction.guild });
+      const created = await comps.createComp({ label, compositionRaw, userId: interaction.user.id, guild: interaction.guild });
       if (!created) {
         await interaction.reply({
           content:
@@ -989,7 +986,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
       const label = interaction.fields.getTextInputValue('label');
       const compositionRaw = interaction.fields.getTextInputValue('composition');
 
-      const updated = comps.updateComp({ key: pending.key, newLabel: label, compositionRaw, userId: interaction.user.id, guild: interaction.guild });
+      const updated = await comps.updateComp({ key: pending.key, newLabel: label, compositionRaw, userId: interaction.user.id, guild: interaction.guild });
       if (!updated) {
         await interaction.reply({
           content:
@@ -1023,7 +1020,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
         if (catData.weaponOptions.length === 1) {
           removeUserFromEvent(event, interaction.user.id);
           catData.signups.push({ userId: interaction.user.id, weapon: catData.weaponOptions[0] });
-          saveEvents(events);
+          await saveEvents(events);
           await interaction.update({ embeds: [buildEmbed(event, interaction.guild)], components: buildButtons(event, interaction.guild) });
           return;
         }
@@ -1060,7 +1057,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
       if (availableIndexes.length === 1) {
         removeUserFromEvent(event, interaction.user.id);
         items[availableIndexes[0]].signups.push(interaction.user.id);
-        saveEvents(events);
+        await saveEvents(events);
         await interaction.update({ embeds: [buildEmbed(event, interaction.guild)], components: buildButtons(event, interaction.guild) });
         return;
       }
@@ -1105,7 +1102,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
         }
         removeUserFromEvent(event, interaction.user.id);
         catData.signups.push({ userId: interaction.user.id, weapon: chosenValue });
-        saveEvents(events);
+        await saveEvents(events);
 
         try {
           await updateEventMessage(client, event);
@@ -1125,7 +1122,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
       removeUserFromEvent(event, interaction.user.id);
       item.signups.push(interaction.user.id);
-      saveEvents(events);
+      await saveEvents(events);
 
       try {
         await updateEventMessage(client, event);
@@ -1166,7 +1163,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
         }
         removeUserFromEvent(event, targetUserId);
         catData.signups.push({ userId: targetUserId, weapon: chosenValue });
-        saveEvents(events);
+        await saveEvents(events);
 
         try {
           await updateEventMessage(client, event);
@@ -1189,7 +1186,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
       removeUserFromEvent(event, targetUserId);
       item.signups.push(targetUserId);
-      saveEvents(events);
+      await saveEvents(events);
 
       try {
         await updateEventMessage(client, event);
@@ -1265,7 +1262,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
         return;
       }
       removeUserFromEvent(event, interaction.user.id);
-      saveEvents(events);
+      await saveEvents(events);
       await interaction.update({ embeds: [buildEmbed(event, interaction.guild)], components: buildButtons(event, interaction.guild) });
       return;
     }
@@ -1289,6 +1286,11 @@ process.on('unhandledRejection', (err) => {
   console.error('Unhandled rejection:', err);
 });
 
-client.login(process.env.DISCORD_TOKEN).catch((err) => {
-  console.error('Failed to log in to Discord:', err);
-});
+(async () => {
+  events = await loadEvents();
+  try {
+    await client.login(process.env.DISCORD_TOKEN);
+  } catch (err) {
+    console.error('Failed to log in to Discord:', err);
+  }
+})();

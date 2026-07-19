@@ -4,26 +4,22 @@
 // the site is still useful for looking up exact builds/icons, so a link to it
 // gets attached to any event that was posted from a saved comp.
 
-const fs = require('fs');
 const path = require('path');
+const storage = require('./storage');
 
-const DB_PATH = path.join(__dirname, 'comps.json');
+const DB_PATH = path.join(__dirname, 'comps.json'); // local fallback path only
+const REDIS_KEY = 'comps';
 const BUILDS_LINK = 'https://shin7aro.github.io/Rise-of-Dahalo';
 
 // Keep this in sync with CATEGORY_ORDER in index.js.
 const CATEGORY_ORDER = ['Tank', 'Support', 'DPS', 'Healer', 'Battlemount'];
 
-function loadComps() {
-  if (!fs.existsSync(DB_PATH)) return {};
-  try {
-    return JSON.parse(fs.readFileSync(DB_PATH, 'utf8'));
-  } catch {
-    return {};
-  }
+async function loadComps() {
+  return storage.loadJSON(REDIS_KEY, DB_PATH);
 }
 
-function saveComps(comps) {
-  fs.writeFileSync(DB_PATH, JSON.stringify(comps, null, 2));
+async function saveComps(comps) {
+  await storage.saveJSON(REDIS_KEY, DB_PATH, comps);
 }
 
 function keyFor(label) {
@@ -344,11 +340,11 @@ function refreshEventCategories(oldCategories, newCategories) {
   return { categories, dropped };
 }
 
-function createComp({ label, compositionRaw, userId, guild }) {
+async function createComp({ label, compositionRaw, userId, guild }) {
   const categories = parseComposition(compositionRaw, guild);
   if (Object.keys(categories).length === 0) return null;
 
-  const comps = loadComps();
+  const comps = await loadComps();
   const key = keyFor(label);
   comps[key] = {
     label: label.trim(),
@@ -357,16 +353,16 @@ function createComp({ label, compositionRaw, userId, guild }) {
     updatedBy: userId,
     updatedAt: Date.now(),
   };
-  saveComps(comps);
+  await saveComps(comps);
   return comps[key];
 }
 
 // newLabel may be the same as the old one (rename support is just "free" here).
-function updateComp({ key, newLabel, compositionRaw, userId, guild }) {
+async function updateComp({ key, newLabel, compositionRaw, userId, guild }) {
   const categories = parseComposition(compositionRaw, guild);
   if (Object.keys(categories).length === 0) return null;
 
-  const comps = loadComps();
+  const comps = await loadComps();
   const existing = comps[key];
   if (!existing) return null;
 
@@ -379,15 +375,15 @@ function updateComp({ key, newLabel, compositionRaw, userId, guild }) {
     updatedBy: userId,
     updatedAt: Date.now(),
   };
-  saveComps(comps);
+  await saveComps(comps);
   return comps[newKey];
 }
 
-function deleteComp(key) {
-  const comps = loadComps();
+async function deleteComp(key) {
+  const comps = await loadComps();
   if (!comps[key]) return false;
   delete comps[key];
-  saveComps(comps);
+  await saveComps(comps);
   return true;
 }
 

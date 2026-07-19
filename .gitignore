@@ -1,0 +1,7 @@
+node_modules/
+.env
+
+# Local JSON storage fallback (only used when Upstash env vars aren't set —
+# see storage.js). Never commit real event/comp data.
+events.json
+comps.json
