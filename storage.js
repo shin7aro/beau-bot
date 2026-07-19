@@ -56,12 +56,17 @@ async function loadJSON(key, localPath) {
 async function saveJSON(key, localPath, value) {
   if (REDIS_ENABLED) {
     try {
-      const res = await fetch(`${UPSTASH_URL}/set/${encodeURIComponent(key)}`, {
+      const res = await fetch(UPSTASH_URL, {
         method: 'POST',
-        headers: { Authorization: `Bearer ${UPSTASH_TOKEN}` },
-        body: JSON.stringify(value),
+        headers: {
+          Authorization: `Bearer ${UPSTASH_TOKEN}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(['SET', key, JSON.stringify(value)]),
       });
       if (!res.ok) throw new Error(`Upstash SET ${key} -> HTTP ${res.status}`);
+      const data = await res.json();
+      if (data.error) throw new Error(`Upstash SET ${key} -> ${data.error}`);
     } catch (e) {
       console.error(`storage: failed to save "${key}" to Redis`, e);
     }
