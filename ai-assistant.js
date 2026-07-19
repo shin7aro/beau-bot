@@ -3,9 +3,23 @@
 // No longer pulls live build data from the guild site — just general
 // Albion Online knowledge and banter.
 
+const fs = require('fs');
+const path = require('path');
+
 const GROQ_URL = 'https://api.groq.com/openai/v1/chat/completions';
 const MODEL = 'llama-3.3-70b-versatile';
 const MAX_TOKENS = 500;
+
+// Loaded once at startup — a plain-language reference for how Beau's own
+// commands work, kept in its own file so it can be edited without touching
+// the personality prompt below. Falls back to an empty string (rather than
+// crashing the bot) if help.md is ever missing from a deploy.
+let HELP_REFERENCE = '';
+try {
+  HELP_REFERENCE = fs.readFileSync(path.join(__dirname, 'help.md'), 'utf8');
+} catch {
+  console.error('help.md not found — Beau will answer without command reference material.');
+}
 
 // ---------- per-user short memory (not per-channel, so people don't bleed into each other's context) ----------
 const HISTORY_LIMIT = 4; // last 2 exchanges — enough for follow-ups, not enough to drag in noise
@@ -58,8 +72,21 @@ Roasting guardrails (never break these):
 
 async function askAI({ question, userId }) {
   const history = getHistory(userId);
+  const systemContent = HELP_REFERENCE
+    ? `${SYSTEM_HEADER}
+
+---
+The following is reference material on how your own commands and features
+actually work. It's for you to draw on ONLY when someone is asking how to
+use something, how to sign up, how a command works, etc. — never recite it
+unprompted, and never let it change your tone; answer in your usual voice,
+just make sure the facts about how things work are accurate.
+
+${HELP_REFERENCE}`
+    : SYSTEM_HEADER;
+
   const messages = [
-    { role: 'system', content: SYSTEM_HEADER },
+    { role: 'system', content: systemContent },
     ...history.messages,
     { role: 'user', content: question },
   ];
