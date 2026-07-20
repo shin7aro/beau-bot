@@ -70,7 +70,7 @@ const commands = [
             .setAutocomplete(true)
         )
     )
-    .addSubcommand((sub) =>
+ .addSubcommand((sub) =>
       sub
         .setName('delete')
         .setDescription('Delete a saved composition')
@@ -78,6 +78,18 @@ const commands = [
           opt
             .setName('comp')
             .setDescription('The composition to delete')
+            .setRequired(true)
+            .setAutocomplete(true)
+        )
+    )
+    .addSubcommand((sub) =>
+      sub
+        .setName('view')
+        .setDescription('See the full roster for one saved composition')
+        .addStringOption((opt) =>
+          opt
+            .setName('comp')
+            .setDescription('The composition to view')
             .setRequired(true)
             .setAutocomplete(true)
         )
