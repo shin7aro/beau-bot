@@ -1,3 +1,4 @@
+require('./deploy-commands.js'); 
 require('dns').setDefaultResultOrder('ipv4first');
 require('./deploy-commands.js');
 const express = require('express');
@@ -802,7 +803,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
         return;
       }
 
-      if (sub === 'list') {
+    if (sub === 'list') {
         const saved = await comps.loadComps();
         const keys = Object.keys(saved);
         if (keys.length === 0) {
@@ -813,25 +814,54 @@ client.on(Events.InteractionCreate, async (interaction) => {
           return;
         }
 
-        const embed = new EmbedBuilder().setColor(0xe74c3c).setTitle('📋 Saved compositions');
-
-        for (const key of keys.sort((a, b) => saved[a].label.localeCompare(saved[b].label))) {
+        const sortedKeys = keys.sort((a, b) => saved[a].label.localeCompare(saved[b].label));
+        const nameLines = sortedKeys.map((key) => {
           const c = saved[key];
-          const allRows = comps.expandAllCategoryRows(c.categories, CATEGORY_ORDER);
-          const hasMultipleParties = allRows.some((row) => row.party > 0);
-          const lines = [];
-          let lastParty = null;
-          for (const row of allRows) {
-            if (hasMultipleParties && row.party !== lastParty) {
-              if (lastParty !== null) lines.push('');
-              lines.push(`**Party ${row.party + 1}**`);
-              lastParty = row.party;
-            }
-            const roleEmoji = roleEmojiText(interaction.guild, row.category);
-            lines.push(`${roleEmoji} - ${row.emoji || '🔹'} - **${row.name}**`);
-          }
-          embed.addFields({ name: c.label, value: lines.join('\n') || '*empty*' });
+          const slotCount = comps.expandAllCategoryRows(c.categories, CATEGORY_ORDER).length;
+          return `• **${c.label}** — ${slotCount} slot${slotCount === 1 ? '' : 's'}`;
+        });
+
+        const embed = new EmbedBuilder()
+          .setColor(0xe74c3c)
+          .setTitle('📋 Saved compositions')
+          .setDescription(nameLines.join('\n'))
+          .setFooter({ text: 'Use /comp view to see the full roster for one composition.' });
+
+        await interaction.reply({ embeds: [embed], ephemeral: true });
+        return;
+      }
+
+      if (sub === 'view') {
+        const key = interaction.options.getString('comp');
+        const saved = (await comps.loadComps())[key];
+        if (!saved) {
+          await interaction.reply({ content: "I couldn't find that saved composition.", ephemeral: true });
+          return;
         }
+
+        const allRows = comps.expandAllCategoryRows(saved.categories, CATEGORY_ORDER);
+        const hasMultipleParties = allRows.some((row) => row.party > 0);
+        const lines = [];
+        let lastParty = null;
+        for (const row of allRows) {
+          if (hasMultipleParties && row.party !== lastParty) {
+            if (lastParty !== null) lines.push('');
+            lines.push(`**Party ${row.party + 1}**`);
+            lastParty = row.party;
+          }
+          const roleEmoji = roleEmojiText(interaction.guild, row.category);
+          lines.push(`${roleEmoji} - ${row.emoji || '🔹'} - **${row.name}**`);
+        }
+
+        let description = lines.join('\n') || '*empty*';
+        if (description.length > 4096) {
+          description = description.slice(0, 4000) + '\n\n*(truncated — this composition is very large)*';
+        }
+
+        const embed = new EmbedBuilder()
+          .setColor(0xe74c3c)
+          .setTitle(`📋 ${saved.label}`)
+          .setDescription(description);
 
         await interaction.reply({ embeds: [embed], ephemeral: true });
         return;
