@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>War Ledger — Rise of Dahalo</title>
+<meta name="description" content="Priority-ranked gear builds for Rise of Dahalo — Brawl, Kite & Clap, and Tracking content.">
+<link rel="stylesheet" href="css/base.css">
+<link rel="stylesheet" href="css/builds.css">
+</head>
+<body class="app-shell">
+
+<!-- HEADER -->
+<header class="site-header">
+  <a href="index.html" class="brand">
+    <div class="guild-mark">
+      <svg viewBox="0 0 24 24"><path d="M12 2L4 6v6c0 5.5 3.4 9.7 8 11 4.6-1.3 8-5.5 8-11V6l-8-4z"/><path d="M12 7v9M9 10l3-3 3 3" stroke="#0d0d0f" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>
+    </div>
+    <div class="header-text">
+      <h1>RISE OF DAHALO</h1>
+      <span class="eyebrow">War ledger</span>
+    </div>
+  </a>
+  <nav class="site-nav">
+    <a href="index.html">Home</a>
+    <a href="builds.html" class="active">Builds</a>
+    <a href="comps.html" class="officer-only" id="comps-nav-link">Compositions</a>
+  </nav>
+  <div class="header-actions">
+    <button class="btn" id="copy-btn" aria-label="Copy Discord link">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="9" y="9" width="13" height="13" rx="2"/>
+        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+      </svg>
+      <span class="btn-label">Copy Discord link</span>
+    </button>
+    <div id="auth-control"></div>
+  </div>
+</header>
+
+<!-- TAB NAV -->
+<nav class="tab-nav" id="tab-nav">
+  <button class="tab-btn active" data-tab="brawl">Brawl</button>
+  <button class="tab-btn" data-tab="gank">Gank</button>
+  <button class="tab-btn" data-tab="kite">Kite &amp; Clap</button>
+  <button class="tab-btn" data-tab="brawlclap">Brawl &amp; Clap</button>
+  <button class="tab-btn" data-tab="tracking">Tracking</button>
+  <button class="tab-btn" data-tab="groupdungeon">Group Dungeon</button>
+  <button class="tab-btn" data-tab="avadungeon">Ava Dungeon</button>
+</nav>
+
+<div class="tab-panel active" id="tab-brawl">
+<div class="controls">
+  <div class="search-wrap">
+    <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+    <input type="text" id="search" placeholder="Search weapon, slot…" autocomplete="off">
+  </div>
+  <div class="filter-group" id="filter-group">
+    <button class="filter-btn active" data-role="all">All</button>
+    <button class="filter-btn" data-role="dps"><span class="fb-dot" style="background:var(--dps)"></span>DPS</button>
+    <button class="filter-btn" data-role="healer"><span class="fb-dot" style="background:var(--healer)"></span>Healer</button>
+    <button class="filter-btn" data-role="support"><span class="fb-dot" style="background:var(--support)"></span>Support</button>
+    <button class="filter-btn" data-role="tank"><span class="fb-dot" style="background:var(--tank)"></span>Tank</button>
+  </div>
+  <span class="count-label" id="count-label">0 builds</span>
+  <button class="comp-add-btn" id="add-build-btn"><span class="btn-label">+ New build</span></button>
+  <button class="comp-reset-btn" id="reset-build-btn"><span class="btn-label">Reset</span></button>
+</div>
+<div class="main">
+  <div class="table-pane">
+    <table>
+      <colgroup><col class="c-role"><col class="c-weapon"></colgroup>
+      <thead><tr><th>Role</th><th>Main weapon</th></tr></thead>
+      <tbody id="tbody"></tbody>
+    </table>
+    <div class="empty-state" id="empty" style="display:none">No builds match your filter.</div>
+  </div>
+  <div class="detail-pane" id="brawl-detail-pane">
+    <div class="detail-placeholder" id="detail-placeholder">
+      <div class="ph-grid">
+        <div class="ph-slot"></div><div class="ph-slot"></div><div class="ph-slot"></div>
+        <div class="ph-slot"></div><div class="ph-slot"></div><div class="ph-slot"></div>
+        <div class="ph-slot"></div><div class="ph-slot"></div><div class="ph-slot"></div>
+      </div>
+      <p>Select a build to inspect it</p>
+      <small>Click any row on the left</small>
+    </div>
+    <button class="detail-back-btn" data-back-for="brawl">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+      Back to builds
+    </button>
+    <div class="detail-card" id="detail-card"></div>
+  </div>
+</div>
+</div>
+
+<div class="tab-panel" id="tab-gank"><div class="tab-empty">
+  <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+  <p>Gank comp — coming soon</p><small>This tab will be filled in later</small>
+</div></div>
+
+<div class="tab-panel" id="tab-kite">
+<div class="controls">
+  <div class="search-wrap">
+    <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+    <input type="text" id="kite-search" placeholder="Search weapon, slot…" autocomplete="off">
+  </div>
+  <div class="filter-group" id="kite-filter-group">
+    <button class="filter-btn active" data-role="all">All</button>
+    <button class="filter-btn" data-role="dps"><span class="fb-dot" style="background:var(--dps)"></span>DPS</button>
+    <button class="filter-btn" data-role="healer"><span class="fb-dot" style="background:var(--healer)"></span>Healer</button>
+    <button class="filter-btn" data-role="support"><span class="fb-dot" style="background:var(--support)"></span>Support</button>
+    <button class="filter-btn" data-role="tank"><span class="fb-dot" style="background:var(--tank)"></span>Tank</button>
+  </div>
+  <span class="count-label" id="kite-count-label">0 builds</span>
+  <button class="comp-add-btn" id="kite-add-build-btn"><span class="btn-label">+ New build</span></button>
+  <button class="comp-reset-btn" id="kite-reset-build-btn"><span class="btn-label">Reset</span></button>
+</div>
+<div class="main">
+  <div class="table-pane">
+    <table>
+      <colgroup><col class="c-role"><col class="c-weapon"></colgroup>
+      <thead><tr><th>Role</th><th>Main weapon</th></tr></thead>
+      <tbody id="kite-tbody"></tbody>
+    </table>
+    <div class="empty-state" id="kite-empty" style="display:none">No builds match your filter.</div>
+  </div>
+  <div class="detail-pane" id="kite-detail-pane">
+    <div class="detail-placeholder" id="kite-detail-placeholder">
+      <div class="ph-grid">
+        <div class="ph-slot"></div><div class="ph-slot"></div><div class="ph-slot"></div>
+        <div class="ph-slot"></div><div class="ph-slot"></div><div class="ph-slot"></div>
+        <div class="ph-slot"></div><div class="ph-slot"></div><div class="ph-slot"></div>
+      </div>
+      <p>Select a build to inspect it</p>
+      <small>Click any row on the left</small>
+    </div>
+    <button class="detail-back-btn" data-back-for="kite">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+      Back to builds
+    </button>
+    <div class="detail-card" id="kite-detail-card"></div>
+  </div>
+</div>
+</div>
+
+<div class="tab-panel" id="tab-brawlclap"><div class="tab-empty">
+  <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+  <p>Brawl &amp; Clap comp — coming soon</p><small>This tab will be filled in later</small>
+</div></div>
+
+<div class="tab-panel" id="tab-tracking">
+<div class="controls">
+  <div class="search-wrap">
+    <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+    <input type="text" id="tracking-search" placeholder="Search weapon, slot…" autocomplete="off">
+  </div>
+  <div class="filter-group" id="tracking-filter-group">
+    <button class="filter-btn active" data-role="all">All</button>
+    <button class="filter-btn" data-role="dps"><span class="fb-dot" style="background:var(--dps)"></span>DPS</button>
+    <button class="filter-btn" data-role="healer"><span class="fb-dot" style="background:var(--healer)"></span>Healer</button>
+    <button class="filter-btn" data-role="tank"><span class="fb-dot" style="background:var(--tank)"></span>Tank</button>
+  </div>
+  <span class="count-label" id="tracking-count-label">0 builds</span>
+  <button class="comp-add-btn" id="tracking-add-build-btn"><span class="btn-label">+ New build</span></button>
+  <button class="comp-reset-btn" id="tracking-reset-build-btn"><span class="btn-label">Reset</span></button>
+</div>
+<div class="main">
+  <div class="table-pane">
+    <table>
+      <colgroup><col class="c-role"><col class="c-weapon"></colgroup>
+      <thead><tr><th>Role</th><th>Main weapon</th></tr></thead>
+      <tbody id="tracking-tbody"></tbody>
+    </table>
+    <div class="empty-state" id="tracking-empty" style="display:none">No builds match your filter.</div>
+  </div>
+  <div class="detail-pane" id="tracking-detail-pane">
+    <div class="detail-placeholder" id="tracking-detail-placeholder">
+      <div class="ph-grid">
+        <div class="ph-slot"></div><div class="ph-slot"></div><div class="ph-slot"></div>
+        <div class="ph-slot"></div><div class="ph-slot"></div><div class="ph-slot"></div>
+        <div class="ph-slot"></div><div class="ph-slot"></div><div class="ph-slot"></div>
+      </div>
+      <p>Select a build to inspect it</p>
+      <small>Click any row on the left</small>
+    </div>
+    <button class="detail-back-btn" data-back-for="tracking">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+      Back to builds
+    </button>
+    <div class="detail-card" id="tracking-detail-card"></div>
+  </div>
+</div>
+</div>
+
+<div class="tab-panel" id="tab-groupdungeon"><div class="tab-empty">
+  <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+  <p>Group Dungeon comp — coming soon</p><small>This tab will be filled in later</small>
+</div></div>
+
+<div class="tab-panel" id="tab-avadungeon"><div class="tab-empty">
+  <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+  <p>Ava Dungeon comp — coming soon</p><small>This tab will be filled in later</small>
+</div></div>
+
+<div id="toast"></div>
+
+<script src="js/auth.js"></script>
+<script src="js/builds.js"></script>
+<script src="js/site.js"></script>
+</body>
+</html>

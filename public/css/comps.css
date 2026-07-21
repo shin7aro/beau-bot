@@ -1,0 +1,46 @@
+/* ─────────────────────────────────────────
+   COMPS PAGE — composition editor
+   (builds on tokens + shared classes from
+   base.css / builds.css)
+───────────────────────────────────────── */
+.role-battlemount { color: var(--gank); background: var(--gank-bg); }
+
+.comp-label-input {
+  font-size: 20px; font-weight: 700; font-family: 'Big Shoulders Display', sans-serif;
+  background: transparent; border: none; color: var(--ink);
+  border-bottom: 1px dashed var(--line-2); padding: 4px 0; flex: 1; min-width: 0;
+}
+.comp-label-input:focus { outline: none; border-color: var(--accent); }
+
+.comp-categories { display: flex; flex-direction: column; gap: 18px; padding: 18px 20px; }
+.comp-category-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+.comp-items-list { display: flex; flex-direction: column; gap: 6px; }
+
+.comp-item-row {
+  display: grid;
+  grid-template-columns: 1.4fr 70px 1.6fr auto;
+  gap: 8px; align-items: center;
+}
+.comp-item-row input, .comp-item-row select {
+  background: var(--surface-2); border: 1px solid var(--line-2); border-radius: 7px;
+  color: var(--ink); font: inherit; font-size: 12.5px; padding: 7px 9px; min-width: 0;
+}
+.comp-item-row input:focus, .comp-item-row select:focus { outline: none; border-color: var(--accent); }
+.comp-item-remove {
+  background: transparent; border: 1px solid var(--line-2); border-radius: 7px;
+  color: var(--ink-faint); cursor: pointer; width: 30px; height: 30px;
+  display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+}
+.comp-item-remove:hover { color: var(--dps); border-color: var(--dps); }
+
+.comp-add-item-btn {
+  background: transparent; border: 1px dashed var(--line-2); border-radius: 7px;
+  color: var(--ink-dim); font: inherit; font-size: 12px; padding: 6px 10px; cursor: pointer;
+}
+.comp-add-item-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+.comp-save-row { padding: 16px 20px; border-top: 1px solid var(--line); display: flex; justify-content: flex-end; }
+
+@media (max-width: 700px) {
+  .comp-item-row { grid-template-columns: 1fr; }
+}
