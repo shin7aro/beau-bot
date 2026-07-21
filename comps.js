@@ -9,7 +9,7 @@ const storage = require('./storage');
 
 const DB_PATH = path.join(__dirname, 'comps.json'); // local fallback path only
 const REDIS_KEY = 'comps';
-const BUILDS_LINK = 'https://shin7aro.github.io/Rise-of-Dahalo';
+const BUILDS_LINK = process.env.PUBLIC_URL || 'https://shin7aro.github.io/Rise-of-Dahalo';
 
 // Keep this in sync with CATEGORY_ORDER in index.js.
 const CATEGORY_ORDER = ['Tank', 'Support', 'DPS', 'Healer', 'Battlemount'];
@@ -209,6 +209,8 @@ function expandCategoryRows(catData, startNumber = 1) {
       name: item.name,
       emoji: item.emoji || null,
       signedUserId: item.signups[0] || null,
+      buildId: item.buildId ?? null,
+      buildTab: item.buildTab ?? null,
     });
   });
 
@@ -269,6 +271,8 @@ function expandAllCategoryRows(categories, categoryOrder = CATEGORY_ORDER) {
           name: item.name,
           emoji: item.emoji || null,
           signedUserId: item.signups[0] || null,
+          buildId: item.buildId ?? null,
+          buildTab: item.buildTab ?? null,
         });
       });
     }
@@ -504,6 +508,14 @@ async function updateCompStructured({ key, newLabel, categories, userId }) {
   return { key: newKey, ...comps[newKey] };
 }
 
+// Deep-links straight to a specific build on the War Ledger — e.g. so a
+// posted event's roster can point at the exact gear for a role, not just
+// the ledger's homepage. Returns null if this row has no linked build.
+function buildLinkFor(row) {
+  if (row.buildId == null || !row.buildTab) return null;
+  return `${BUILDS_LINK}/builds.html?tab=${encodeURIComponent(row.buildTab)}&build=${encodeURIComponent(row.buildId)}`;
+}
+
 module.exports = {
   CATEGORY_ORDER,
   BUILDS_LINK,
@@ -524,4 +536,5 @@ module.exports = {
   getCompByKey,
   createCompStructured,
   updateCompStructured,
+  buildLinkFor,
 };

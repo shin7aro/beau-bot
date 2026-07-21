@@ -94,10 +94,57 @@
 </div>
 </div>
 
-<div class="tab-panel" id="tab-gank"><div class="tab-empty">
+<div class="tab-panel" id="tab-gank">
+<div class="tab-empty" id="gank-comingsoon">
   <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-  <p>Gank comp — coming soon</p><small>This tab will be filled in later</small>
-</div></div>
+  <p>Gank comp &mdash; coming soon</p><small>This tab will be filled in later</small>
+</div>
+<div id="gank-builder" style="display:none">
+<div class="controls">
+  <div class="search-wrap">
+    <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+    <input type="text" id="gank-search" placeholder="Search weapon, slot…" autocomplete="off">
+  </div>
+  <div class="filter-group" id="gank-filter-group">
+    <button class="filter-btn active" data-role="all">All</button>
+    <button class="filter-btn" data-role="gank"><span class="fb-dot" style="background:var(--gank)"></span>Gank</button>
+    <button class="filter-btn" data-role="dps"><span class="fb-dot" style="background:var(--dps)"></span>DPS</button>
+    <button class="filter-btn" data-role="healer"><span class="fb-dot" style="background:var(--healer)"></span>Healer</button>
+    <button class="filter-btn" data-role="support"><span class="fb-dot" style="background:var(--support)"></span>Support</button>
+    <button class="filter-btn" data-role="tank"><span class="fb-dot" style="background:var(--tank)"></span>Tank</button>
+  </div>
+  <span class="count-label" id="gank-count-label">0 builds</span>
+  <button class="comp-add-btn" id="gank-add-build-btn"><span class="btn-label">+ New build</span></button>
+  <button class="comp-reset-btn" id="gank-reset-build-btn"><span class="btn-label">Reset</span></button>
+</div>
+<div class="main">
+  <div class="table-pane">
+    <table>
+      <colgroup><col class="c-role"><col class="c-weapon"></colgroup>
+      <thead><tr><th>Role</th><th>Main weapon</th></tr></thead>
+      <tbody id="gank-tbody"></tbody>
+    </table>
+    <div class="empty-state" id="gank-empty" style="display:none">No builds match your filter.</div>
+  </div>
+  <div class="detail-pane" id="gank-detail-pane">
+    <div class="detail-placeholder" id="gank-detail-placeholder">
+      <div class="ph-grid">
+        <div class="ph-slot"></div><div class="ph-slot"></div><div class="ph-slot"></div>
+        <div class="ph-slot"></div><div class="ph-slot"></div><div class="ph-slot"></div>
+        <div class="ph-slot"></div><div class="ph-slot"></div><div class="ph-slot"></div>
+      </div>
+      <p>Select a build to inspect it</p>
+      <small>Click any row on the left</small>
+    </div>
+    <button class="detail-back-btn" data-back-for="gank">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+      Back to builds
+    </button>
+    <div class="detail-card" id="gank-detail-card"></div>
+  </div>
+</div>
+</div>
+</div>
 
 <div class="tab-panel" id="tab-kite">
 <div class="controls">
@@ -144,10 +191,56 @@
 </div>
 </div>
 
-<div class="tab-panel" id="tab-brawlclap"><div class="tab-empty">
+<div class="tab-panel" id="tab-brawlclap">
+<div class="tab-empty" id="brawlclap-comingsoon">
   <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-  <p>Brawl &amp; Clap comp — coming soon</p><small>This tab will be filled in later</small>
-</div></div>
+  <p>Brawl &amp; Clap comp &mdash; coming soon</p><small>This tab will be filled in later</small>
+</div>
+<div id="brawlclap-builder" style="display:none">
+<div class="controls">
+  <div class="search-wrap">
+    <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+    <input type="text" id="brawlclap-search" placeholder="Search weapon, slot…" autocomplete="off">
+  </div>
+  <div class="filter-group" id="brawlclap-filter-group">
+    <button class="filter-btn active" data-role="all">All</button>
+    <button class="filter-btn" data-role="dps"><span class="fb-dot" style="background:var(--dps)"></span>DPS</button>
+    <button class="filter-btn" data-role="healer"><span class="fb-dot" style="background:var(--healer)"></span>Healer</button>
+    <button class="filter-btn" data-role="support"><span class="fb-dot" style="background:var(--support)"></span>Support</button>
+    <button class="filter-btn" data-role="tank"><span class="fb-dot" style="background:var(--tank)"></span>Tank</button>
+  </div>
+  <span class="count-label" id="brawlclap-count-label">0 builds</span>
+  <button class="comp-add-btn" id="brawlclap-add-build-btn"><span class="btn-label">+ New build</span></button>
+  <button class="comp-reset-btn" id="brawlclap-reset-build-btn"><span class="btn-label">Reset</span></button>
+</div>
+<div class="main">
+  <div class="table-pane">
+    <table>
+      <colgroup><col class="c-role"><col class="c-weapon"></colgroup>
+      <thead><tr><th>Role</th><th>Main weapon</th></tr></thead>
+      <tbody id="brawlclap-tbody"></tbody>
+    </table>
+    <div class="empty-state" id="brawlclap-empty" style="display:none">No builds match your filter.</div>
+  </div>
+  <div class="detail-pane" id="brawlclap-detail-pane">
+    <div class="detail-placeholder" id="brawlclap-detail-placeholder">
+      <div class="ph-grid">
+        <div class="ph-slot"></div><div class="ph-slot"></div><div class="ph-slot"></div>
+        <div class="ph-slot"></div><div class="ph-slot"></div><div class="ph-slot"></div>
+        <div class="ph-slot"></div><div class="ph-slot"></div><div class="ph-slot"></div>
+      </div>
+      <p>Select a build to inspect it</p>
+      <small>Click any row on the left</small>
+    </div>
+    <button class="detail-back-btn" data-back-for="brawlclap">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+      Back to builds
+    </button>
+    <div class="detail-card" id="brawlclap-detail-card"></div>
+  </div>
+</div>
+</div>
+</div>
 
 <div class="tab-panel" id="tab-tracking">
 <div class="controls">
@@ -193,15 +286,107 @@
 </div>
 </div>
 
-<div class="tab-panel" id="tab-groupdungeon"><div class="tab-empty">
+<div class="tab-panel" id="tab-groupdungeon">
+<div class="tab-empty" id="groupdungeon-comingsoon">
   <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-  <p>Group Dungeon comp — coming soon</p><small>This tab will be filled in later</small>
-</div></div>
+  <p>Group Dungeon comp &mdash; coming soon</p><small>This tab will be filled in later</small>
+</div>
+<div id="groupdungeon-builder" style="display:none">
+<div class="controls">
+  <div class="search-wrap">
+    <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+    <input type="text" id="groupdungeon-search" placeholder="Search weapon, slot…" autocomplete="off">
+  </div>
+  <div class="filter-group" id="groupdungeon-filter-group">
+    <button class="filter-btn active" data-role="all">All</button>
+    <button class="filter-btn" data-role="dps"><span class="fb-dot" style="background:var(--dps)"></span>DPS</button>
+    <button class="filter-btn" data-role="healer"><span class="fb-dot" style="background:var(--healer)"></span>Healer</button>
+    <button class="filter-btn" data-role="support"><span class="fb-dot" style="background:var(--support)"></span>Support</button>
+    <button class="filter-btn" data-role="tank"><span class="fb-dot" style="background:var(--tank)"></span>Tank</button>
+  </div>
+  <span class="count-label" id="groupdungeon-count-label">0 builds</span>
+  <button class="comp-add-btn" id="groupdungeon-add-build-btn"><span class="btn-label">+ New build</span></button>
+  <button class="comp-reset-btn" id="groupdungeon-reset-build-btn"><span class="btn-label">Reset</span></button>
+</div>
+<div class="main">
+  <div class="table-pane">
+    <table>
+      <colgroup><col class="c-role"><col class="c-weapon"></colgroup>
+      <thead><tr><th>Role</th><th>Main weapon</th></tr></thead>
+      <tbody id="groupdungeon-tbody"></tbody>
+    </table>
+    <div class="empty-state" id="groupdungeon-empty" style="display:none">No builds match your filter.</div>
+  </div>
+  <div class="detail-pane" id="groupdungeon-detail-pane">
+    <div class="detail-placeholder" id="groupdungeon-detail-placeholder">
+      <div class="ph-grid">
+        <div class="ph-slot"></div><div class="ph-slot"></div><div class="ph-slot"></div>
+        <div class="ph-slot"></div><div class="ph-slot"></div><div class="ph-slot"></div>
+        <div class="ph-slot"></div><div class="ph-slot"></div><div class="ph-slot"></div>
+      </div>
+      <p>Select a build to inspect it</p>
+      <small>Click any row on the left</small>
+    </div>
+    <button class="detail-back-btn" data-back-for="groupdungeon">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+      Back to builds
+    </button>
+    <div class="detail-card" id="groupdungeon-detail-card"></div>
+  </div>
+</div>
+</div>
+</div>
 
-<div class="tab-panel" id="tab-avadungeon"><div class="tab-empty">
+<div class="tab-panel" id="tab-avadungeon">
+<div class="tab-empty" id="avadungeon-comingsoon">
   <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-  <p>Ava Dungeon comp — coming soon</p><small>This tab will be filled in later</small>
-</div></div>
+  <p>Ava Dungeon comp &mdash; coming soon</p><small>This tab will be filled in later</small>
+</div>
+<div id="avadungeon-builder" style="display:none">
+<div class="controls">
+  <div class="search-wrap">
+    <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+    <input type="text" id="avadungeon-search" placeholder="Search weapon, slot…" autocomplete="off">
+  </div>
+  <div class="filter-group" id="avadungeon-filter-group">
+    <button class="filter-btn active" data-role="all">All</button>
+    <button class="filter-btn" data-role="dps"><span class="fb-dot" style="background:var(--dps)"></span>DPS</button>
+    <button class="filter-btn" data-role="healer"><span class="fb-dot" style="background:var(--healer)"></span>Healer</button>
+    <button class="filter-btn" data-role="support"><span class="fb-dot" style="background:var(--support)"></span>Support</button>
+    <button class="filter-btn" data-role="tank"><span class="fb-dot" style="background:var(--tank)"></span>Tank</button>
+  </div>
+  <span class="count-label" id="avadungeon-count-label">0 builds</span>
+  <button class="comp-add-btn" id="avadungeon-add-build-btn"><span class="btn-label">+ New build</span></button>
+  <button class="comp-reset-btn" id="avadungeon-reset-build-btn"><span class="btn-label">Reset</span></button>
+</div>
+<div class="main">
+  <div class="table-pane">
+    <table>
+      <colgroup><col class="c-role"><col class="c-weapon"></colgroup>
+      <thead><tr><th>Role</th><th>Main weapon</th></tr></thead>
+      <tbody id="avadungeon-tbody"></tbody>
+    </table>
+    <div class="empty-state" id="avadungeon-empty" style="display:none">No builds match your filter.</div>
+  </div>
+  <div class="detail-pane" id="avadungeon-detail-pane">
+    <div class="detail-placeholder" id="avadungeon-detail-placeholder">
+      <div class="ph-grid">
+        <div class="ph-slot"></div><div class="ph-slot"></div><div class="ph-slot"></div>
+        <div class="ph-slot"></div><div class="ph-slot"></div><div class="ph-slot"></div>
+        <div class="ph-slot"></div><div class="ph-slot"></div><div class="ph-slot"></div>
+      </div>
+      <p>Select a build to inspect it</p>
+      <small>Click any row on the left</small>
+    </div>
+    <button class="detail-back-btn" data-back-for="avadungeon">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+      Back to builds
+    </button>
+    <div class="detail-card" id="avadungeon-detail-card"></div>
+  </div>
+</div>
+</div>
+</div>
 
 <div id="toast"></div>
 

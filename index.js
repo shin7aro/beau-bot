@@ -140,7 +140,9 @@ function buildEmbed(event, guild) {
     const status = row.signedUserId ? `<@${row.signedUserId}>` : '*Open*';
     const weaponEmoji = row.emoji || '🔹';
     const label = row.name ? `**${row.name}**` : '*Any*';
-    rosterLines.push(`${roleEmoji} - ${weaponEmoji} - ${label} : ${status}`);
+    const buildLink = comps.buildLinkFor(row);
+    const buildLinkText = buildLink ? ` ([build](${buildLink}))` : '';
+    rosterLines.push(`${roleEmoji} - ${weaponEmoji} - ${label}${buildLinkText} : ${status}`);
   }
 
   if (rosterLines.length > 0) {

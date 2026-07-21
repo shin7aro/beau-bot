@@ -594,6 +594,45 @@ function createTab(opts) {
   }
 
   render(workingBuilds);
+
+  // Optional tabs (gank, brawl & clap, group dungeon, ava dungeon) start life
+  // as a "coming soon" placeholder for everyone. The moment an officer/admin
+  // is logged in — or the tab already has builds in it, for regular members
+  // once someone's added the first one — the real builder UI takes over.
+  if (opts.comingSoonId && opts.builderId) {
+    const comingSoon = document.getElementById(opts.comingSoonId);
+    const builder = document.getElementById(opts.builderId);
+    const show = canEdit() || workingBuilds.length > 0;
+    if (comingSoon) comingSoon.style.display = show ? 'none' : '';
+    if (builder) builder.style.display = show ? '' : 'none';
+  }
+
+  // Lets a deep link (?tab=kite&build=3, e.g. from a posted Discord event's
+  // roster) jump straight to this build once the page loads.
+  TAB_SELECT_BY_INDEX[opts.tabKey] = (idx) => {
+    activeRole = 'all'; searchStr = '';
+    applyFilters();
+    const build = workingBuilds[idx];
+    const listIdx = build ? currentList.indexOf(build) : -1;
+    if (listIdx !== -1) select(listIdx);
+  };
+}
+
+const TAB_SELECT_BY_INDEX = {};
+
+// Reads ?tab=<tabKey>&build=<index> from the URL (used by links the bot
+// posts in Discord event rosters) and jumps straight to that build.
+function applyDeepLinkFromURL() {
+  const params = new URLSearchParams(location.search);
+  const tab = params.get('tab');
+  const buildIdx = params.get('build');
+  if (!tab || buildIdx === null) return;
+
+  const tabBtn = document.querySelector(`.tab-btn[data-tab="${tab}"]`);
+  if (tabBtn) tabBtn.click();
+
+  const selector = TAB_SELECT_BY_INDEX[tab];
+  if (selector) selector(parseInt(buildIdx, 10));
 }
 
 async function initTabs() {
@@ -603,6 +642,15 @@ async function initTabs() {
   createTab({ tabKey: 'brawl',    searchId: 'search',          filterId: 'filter-group',          countId: 'count-label',          tbodyId: 'tbody',          emptyId: 'empty',          placeholderId: 'detail-placeholder',          cardId: 'detail-card',          paneId: 'brawl-detail-pane',    addBtnId: 'add-build-btn',          resetBtnId: 'reset-build-btn',          roles: ['dps','healer','support','tank'] });
   createTab({ tabKey: 'kite',     searchId: 'kite-search',     filterId: 'kite-filter-group',     countId: 'kite-count-label',     tbodyId: 'kite-tbody',     emptyId: 'kite-empty',     placeholderId: 'kite-detail-placeholder',     cardId: 'kite-detail-card',     paneId: 'kite-detail-pane',     addBtnId: 'kite-add-build-btn',     resetBtnId: 'kite-reset-build-btn',     roles: ['dps','healer','support','tank'] });
   createTab({ tabKey: 'tracking', searchId: 'tracking-search', filterId: 'tracking-filter-group', countId: 'tracking-count-label', tbodyId: 'tracking-tbody', emptyId: 'tracking-empty', placeholderId: 'tracking-detail-placeholder', cardId: 'tracking-detail-card', paneId: 'tracking-detail-pane', addBtnId: 'tracking-add-build-btn', resetBtnId: 'tracking-reset-build-btn', roles: ['dps','healer','tank'] });
+
+  // Optional tabs — "coming soon" for everyone until an officer/admin logs
+  // in and starts building it out, or it already has builds in it.
+  createTab({ tabKey: 'gank',         searchId: 'gank-search',         filterId: 'gank-filter-group',         countId: 'gank-count-label',         tbodyId: 'gank-tbody',         emptyId: 'gank-empty',         placeholderId: 'gank-detail-placeholder',         cardId: 'gank-detail-card',         paneId: 'gank-detail-pane',         addBtnId: 'gank-add-build-btn',         resetBtnId: 'gank-reset-build-btn',         roles: ['gank','dps','healer','support','tank'], comingSoonId: 'gank-comingsoon',         builderId: 'gank-builder' });
+  createTab({ tabKey: 'brawlclap',    searchId: 'brawlclap-search',    filterId: 'brawlclap-filter-group',    countId: 'brawlclap-count-label',    tbodyId: 'brawlclap-tbody',    emptyId: 'brawlclap-empty',    placeholderId: 'brawlclap-detail-placeholder',    cardId: 'brawlclap-detail-card',    paneId: 'brawlclap-detail-pane',    addBtnId: 'brawlclap-add-build-btn',    resetBtnId: 'brawlclap-reset-build-btn',    roles: ['dps','healer','support','tank'],          comingSoonId: 'brawlclap-comingsoon',    builderId: 'brawlclap-builder' });
+  createTab({ tabKey: 'groupdungeon', searchId: 'groupdungeon-search', filterId: 'groupdungeon-filter-group', countId: 'groupdungeon-count-label', tbodyId: 'groupdungeon-tbody', emptyId: 'groupdungeon-empty', placeholderId: 'groupdungeon-detail-placeholder', cardId: 'groupdungeon-detail-card', paneId: 'groupdungeon-detail-pane', addBtnId: 'groupdungeon-add-build-btn', resetBtnId: 'groupdungeon-reset-build-btn', roles: ['dps','healer','support','tank'],          comingSoonId: 'groupdungeon-comingsoon', builderId: 'groupdungeon-builder' });
+  createTab({ tabKey: 'avadungeon',  searchId: 'avadungeon-search',  filterId: 'avadungeon-filter-group',  countId: 'avadungeon-count-label',  tbodyId: 'avadungeon-tbody',  emptyId: 'avadungeon-empty',  placeholderId: 'avadungeon-detail-placeholder',  cardId: 'avadungeon-detail-card',  paneId: 'avadungeon-detail-pane',  addBtnId: 'avadungeon-add-build-btn',  resetBtnId: 'avadungeon-reset-build-btn',  roles: ['dps','healer','support','tank'],          comingSoonId: 'avadungeon-comingsoon',  builderId: 'avadungeon-builder' });
+
+  applyDeepLinkFromURL();
 }
 
 initTabs();

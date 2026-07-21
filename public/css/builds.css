@@ -176,6 +176,7 @@ body.app-shell .site-header { flex-shrink: 0; }
   .role-support { color: var(--support); background: var(--support-bg); }
   .role-dps     { color: var(--dps);     background: var(--dps-bg); }
   .role-tank    { color: var(--tank);    background: var(--tank-bg); }
+  .role-gank    { color: var(--gank);    background: var(--gank-bg); }
 
   .weapon-cell { display: flex; align-items: center; gap: 9px; }
   .weapon-cell img {
