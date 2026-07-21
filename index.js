@@ -1,9 +1,14 @@
 require('./deploy-commands.js'); 
 require('dns').setDefaultResultOrder('ipv4first');
 require('./deploy-commands.js');
+const path = require('path');
 const express = require('express');
 const app = express();
-app.get('/', (req, res) => res.send('Bot is alive!'));
+// Website (index.html / builds.html / comps.html + assets) lives in /public
+// and is served straight off this same Render service — no separate host.
+app.use(express.static(path.join(__dirname, 'public')));
+// Auth + builds/comps/home REST API used by the site (see api.js).
+app.use(require('./api.js'));
 app.listen(process.env.PORT || 3000, () => console.log('Web server running'));
 
 // Albion Event Bot - index.js
@@ -13,7 +18,6 @@ app.listen(process.env.PORT || 3000, () => console.log('Web server running'));
 // saved comp when creating an event, or leave it blank to type one manually.
 
 require('dotenv').config();
-const path = require('path');
 const {
   Client,
   GatewayIntentBits,

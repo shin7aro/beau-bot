@@ -128,7 +128,7 @@ function parseComposition(raw, guild) {
     // Expand "Name: N" into N separate one-slot lines, so duplicates never
     // need a merged counter — the display just repeats the row.
     for (let i = 0; i < count; i++) {
-      grouped[current].push({ name, emoji, party, signups: [] });
+      grouped[current].push({ name, emoji, party, signups: [], buildId: null, buildTab: null });
     }
   }
 
@@ -340,6 +340,37 @@ function refreshEventCategories(oldCategories, newCategories) {
   return { categories, dropped };
 }
 
+// A raw-text /comp edit on Discord has no way to express a build link, so
+// parseComposition() always comes back with buildId/buildTab set to null.
+// Without this, editing a comp's text on Discord would silently wipe out
+// every link the site editor had set up. We carry links forward by matching
+// old vs new items on (party, name, emoji) — the same identity key used
+// elsewhere in this file — same as refreshEventCategories does for signups.
+function carryOverBuildLinks(oldCategories, newCategories) {
+  for (const cat of Object.keys(newCategories)) {
+    const newCatData = newCategories[cat];
+    const oldCatData = oldCategories[cat];
+    if (!newCatData || !newCatData.items || !oldCatData || !oldCatData.items) continue;
+
+    const used = new Array(oldCatData.items.length).fill(false);
+    for (const item of newCatData.items) {
+      const matchIdx = oldCatData.items.findIndex(
+        (oi, idx) =>
+          !used[idx] &&
+          (oi.party || 0) === (item.party || 0) &&
+          oi.name === item.name &&
+          oi.emoji === item.emoji
+      );
+      if (matchIdx !== -1) {
+        item.buildId = oldCatData.items[matchIdx].buildId ?? null;
+        item.buildTab = oldCatData.items[matchIdx].buildTab ?? null;
+        used[matchIdx] = true;
+      }
+    }
+  }
+  return newCategories;
+}
+
 async function createComp({ label, compositionRaw, userId, guild }) {
   const categories = parseComposition(compositionRaw, guild);
   if (Object.keys(categories).length === 0) return null;
@@ -365,6 +396,8 @@ async function updateComp({ key, newLabel, compositionRaw, userId, guild }) {
   const comps = await loadComps();
   const existing = comps[key];
   if (!existing) return null;
+
+  carryOverBuildLinks(existing.categories, categories);
 
   const newKey = keyFor(newLabel);
   delete comps[key];
@@ -393,6 +426,84 @@ function cloneCategories(categories) {
   return JSON.parse(JSON.stringify(categories));
 }
 
+// ── Structured (site) API ──────────────────────────────────────────────
+// The Discord /comp create|edit flow works from a single block of raw text
+// (parseComposition/stringifyComposition above). The site's comp editor
+// instead sends already-structured categories straight from its form state,
+// including each item's buildId/buildTab — so no text round-trip needed.
+
+function normalizeStructuredCategories(categories) {
+  const out = {};
+  for (const cat of CATEGORY_ORDER) {
+    const catData = categories[cat];
+    if (!catData || !Array.isArray(catData.items) || catData.items.length === 0) continue;
+    out[cat] = {
+      mode: 'items',
+      items: catData.items.map((it) => ({
+        name: String(it.name || '').trim(),
+        emoji: it.emoji || null,
+        party: Number.isInteger(it.party) ? it.party : 0,
+        signups: [],
+        buildId: it.buildId ?? null,
+        buildTab: it.buildTab ?? null,
+      })).filter((it) => it.name),
+    };
+  }
+  return out;
+}
+
+async function listComps() {
+  const comps = await loadComps();
+  return Object.entries(comps).map(([key, c]) => ({ key, ...c }));
+}
+
+async function getCompByKey(key) {
+  const comps = await loadComps();
+  return comps[key] || null;
+}
+
+async function createCompStructured({ label, categories, userId }) {
+  const clean = normalizeStructuredCategories(categories);
+  if (Object.keys(clean).length === 0) return null;
+
+  const comps = await loadComps();
+  const key = keyFor(label);
+  if (comps[key]) return null; // caller should use update instead
+
+  comps[key] = {
+    label: label.trim(),
+    categories: clean,
+    createdBy: userId,
+    updatedBy: userId,
+    updatedAt: Date.now(),
+  };
+  await saveComps(comps);
+  return { key, ...comps[key] };
+}
+
+async function updateCompStructured({ key, newLabel, categories, userId }) {
+  const clean = normalizeStructuredCategories(categories);
+  if (Object.keys(clean).length === 0) return null;
+
+  const comps = await loadComps();
+  const existing = comps[key];
+  if (!existing) return null;
+
+  const newKey = keyFor(newLabel);
+  if (newKey !== key && comps[newKey]) return null; // name collision
+
+  delete comps[key];
+  comps[newKey] = {
+    label: newLabel.trim(),
+    categories: clean,
+    createdBy: existing.createdBy,
+    updatedBy: userId,
+    updatedAt: Date.now(),
+  };
+  await saveComps(comps);
+  return { key: newKey, ...comps[newKey] };
+}
+
 module.exports = {
   CATEGORY_ORDER,
   BUILDS_LINK,
@@ -408,4 +519,9 @@ module.exports = {
   expandCategoryRows,
   expandAllCategoryRows,
   refreshEventCategories,
+  carryOverBuildLinks,
+  listComps,
+  getCompByKey,
+  createCompStructured,
+  updateCompStructured,
 };
