@@ -288,6 +288,45 @@ function linkedBuildRowsFor(event) {
   return out;
 }
 
+// A single Discord select menu is capped at 25 options — an event spanning
+// several parties can easily have more than 25 linked-build rows across all
+// categories combined, which silently truncated the list under the old
+// one-menu-for-everything approach. Splitting into one menu per category
+// instead uses Discord's 5-action-rows-per-message allowance (which happens
+// to match CATEGORY_ORDER's 5 categories exactly) to get up to 125 slots
+// total (25 per category) rather than 25 overall.
+function buildAskBuildSelectRows(eventId, linkedRows) {
+  const rowsByCategory = new Map();
+  for (const row of linkedRows) {
+    if (!rowsByCategory.has(row.category)) rowsByCategory.set(row.category, []);
+    rowsByCategory.get(row.category).push(row);
+  }
+
+  const actionRows = [];
+  const truncatedCategories = [];
+
+  for (const cat of CATEGORY_ORDER) {
+    const rows = rowsByCategory.get(cat);
+    if (!rows || rows.length === 0) continue;
+
+    if (rows.length > 25) truncatedCategories.push(cat);
+
+    const select = new StringSelectMenuBuilder()
+      .setCustomId(`event_askbuild_select:${eventId}:${cat}`)
+      .setPlaceholder(`Choose a ${cat} build`)
+      .addOptions(
+        rows.slice(0, 25).map((row) => ({
+          label: row.name || 'Unnamed build',
+          value: `${row.buildTab}:${row.buildId}`,
+        }))
+      );
+
+    actionRows.push(new ActionRowBuilder().addComponents(select));
+  }
+
+  return { actionRows, truncatedCategories };
+}
+
 function removeUserFromEvent(event, userId) {
   for (const cat of Object.values(event.categories)) {
     if (cat.mode === 'quota') {
@@ -1449,19 +1488,16 @@ client.on(Events.InteractionCreate, async (interaction) => {
         return;
       }
 
-      const select = new StringSelectMenuBuilder()
-        .setCustomId(`event_askbuild_select:${eventId}`)
-        .setPlaceholder('Choose a build to view')
-        .addOptions(
-          linkedRows.slice(0, 25).map((row) => ({
-            label: `${row.category} · ${row.name || 'Unnamed build'}`,
-            value: `${row.buildTab}:${row.buildId}`,
-          }))
-        );
+      const { actionRows, truncatedCategories } = buildAskBuildSelectRows(eventId, linkedRows);
+
+      let content = 'Which build would you like to see?';
+      if (truncatedCategories.length > 0) {
+        content += `\n\n⚠️ Discord caps each dropdown at 25 options — showing only the first 25 for: ${truncatedCategories.join(', ')}.`;
+      }
 
       await interaction.reply({
-        content: 'Which build would you like to see?',
-        components: [new ActionRowBuilder().addComponents(select)],
+        content,
+        components: actionRows,
         ephemeral: true,
       });
       return;
