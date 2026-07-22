@@ -87,33 +87,43 @@ async function renderBuildCard(build) {
   const height = CELL_H * ROWS;
   const tileBg = tileBackgroundSvg();
 
-  const composites = [];
-
+  // Collect every occupied cell first, then fetch + resize all icons in
+  // parallel. Fetching them one at a time (the original approach) chained
+  // up to 8 sequential network round-trips to render.albiononline.com,
+  // which was slow enough in practice to blow past Discord's 3-second
+  // interaction window even with a defer in place.
+  const cells = [];
   for (let r = 0; r < ROWS; r++) {
     for (let c = 0; c < COLS; c++) {
       const slotKey = LAYOUT[r][c];
       if (!slotKey) continue;
-
-      const left = c * CELL_W + GAP / 2;
-      const top = r * CELL_H + GAP / 2;
-      const itemName = build[slotKey];
-
-      composites.push({ input: tileBg, left, top });
-
-      if (itemName) {
-        const iconBuf = await fetchIconBuffer(itemName);
-        if (iconBuf) {
-          const resized = await sharp(iconBuf)
-            .resize(TILE - 10, TILE - 10, { fit: 'contain' })
-            .png()
-            .toBuffer();
-          composites.push({ input: resized, left: left + 5, top: top + 5 });
-        }
-      }
-
-      composites.push({ input: labelSvg(itemName || '—'), left, top: top + TILE });
+      cells.push({
+        left: c * CELL_W + GAP / 2,
+        top: r * CELL_H + GAP / 2,
+        itemName: build[slotKey],
+      });
     }
   }
+
+  const icons = await Promise.all(
+    cells.map(async (cell) => {
+      if (!cell.itemName) return null;
+      const iconBuf = await fetchIconBuffer(cell.itemName);
+      if (!iconBuf) return null;
+      try {
+        return await sharp(iconBuf).resize(TILE - 10, TILE - 10, { fit: 'contain' }).png().toBuffer();
+      } catch {
+        return null; // corrupt/unexpected image data — just skip the icon, keep the label
+      }
+    })
+  );
+
+  const composites = [];
+  cells.forEach((cell, i) => {
+    composites.push({ input: tileBg, left: cell.left, top: cell.top });
+    if (icons[i]) composites.push({ input: icons[i], left: cell.left + 5, top: cell.top + 5 });
+    composites.push({ input: labelSvg(cell.itemName || '—'), left: cell.left, top: cell.top + TILE });
+  });
 
   return sharp({ create: { width, height, channels: 4, background: CANVAS_BG } })
     .composite(composites)
