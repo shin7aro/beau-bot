@@ -576,7 +576,6 @@ function createTab(opts) {
             <span class="role-pill-dot" style="background:${color}"></span>
             ${ROLE_LABELS[b.role]}
           </button>
-          <span class="card-note-wrap${b.note ? '' : ' empty'}"${editable ? ' title="Click to edit note"' : ''}>${b.note ? FLAG_SVG + escapeHtml(b.note) : (editable ? '+ Add note' : '')}</span>
         </div>
       </div>
       <div>
@@ -592,7 +591,11 @@ function createTab(opts) {
           ${slotCard('Feet', b.feet, editable ? 'feet' : null)}
           ${slotCard('Food', b.food, editable ? 'food' : null)}
         </div>
-      </div>`;
+      </div>
+      ${(b.note || editable) ? `
+      <div class="card-note-block${b.note ? '' : ' empty'}"${editable ? ' title="Click to edit note"' : ''}>
+        ${FLAG_SVG}<span class="card-note-text">${b.note ? escapeHtml(b.note) : 'Add a note…'}</span>
+      </div>` : ''}`;
 
     if (editable) {
       // Slot clicks open the item picker for that slot.
@@ -616,7 +619,8 @@ function createTab(opts) {
       });
 
       // Note — click to edit inline.
-      card.querySelector('.card-note-wrap').addEventListener('click', function () {
+      const noteBlock = card.querySelector('.card-note-block');
+      if (noteBlock) noteBlock.addEventListener('click', function () {
         const input = document.createElement('input');
         input.type = 'text';
         input.className = 'card-note-input';
