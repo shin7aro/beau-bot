@@ -33,6 +33,8 @@ function renderTextFields() {
   });
   const discordLink = document.getElementById('discord-invite-link');
   if (discordLink && homeContent.discordInviteUrl) discordLink.href = homeContent.discordInviteUrl;
+  const footerDiscordLink = document.getElementById('footer-discord-link');
+  if (footerDiscordLink && homeContent.discordInviteUrl) footerDiscordLink.href = homeContent.discordInviteUrl;
 }
 
 function renderStats() {
@@ -50,33 +52,6 @@ function escapeHtml(s) {
   return String(s || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
 
-async function renderLedgerPreview() {
-  const grid = document.getElementById('ledger-preview-grid');
-  if (!grid) return;
-  try {
-    const res = await fetch('/api/builds');
-    const all = await res.json();
-    const tracks = [
-      { tab: 'brawl', label: 'Brawl' },
-      { tab: 'kite', label: 'Kite & Clap' },
-      { tab: 'tracking', label: 'Tracking' },
-    ];
-    const cards = tracks.map(t => {
-      const b = (all[t.tab] || [])[0];
-      if (!b) return '';
-      const color = { tank: 'var(--tank)', dps: 'var(--dps)', healer: 'var(--healer)', support: 'var(--support)' }[b.role] || 'var(--accent)';
-      return `<a class="lcard" style="--role-color:${color}" href="builds.html">
-        <div class="lc-track">${t.label}</div>
-        <div class="lc-weapon">${escapeHtml(b.weapon || 'Unnamed build')}</div>
-        <div class="lc-meta"><span class="ls-pill" style="color:${color}">${b.role}</span></div>
-      </a>`;
-    }).join('');
-    grid.innerHTML = cards || '<p class="section-sub">No builds logged yet.</p>';
-  } catch {
-    grid.innerHTML = '';
-  }
-}
-
 function renderHighlights() {
   const grid = document.getElementById('highlights-grid');
   if (!grid) return;
@@ -85,6 +60,7 @@ function renderHighlights() {
     grid.innerHTML = `<p class="section-sub">No highlights posted yet.</p>`;
     return;
   }
+  const adminVisible = typeof isAdmin === 'function' && isAdmin();
   grid.innerHTML = highlights.map(h => {
     const embed = youtubeEmbedUrl(h.youtubeUrl);
     return `<div class="highlight-card">
@@ -92,7 +68,7 @@ function renderHighlights() {
         ? `<div class="highlight-frame"><iframe src="${embed}" title="${escapeHtml(h.title)}" frameborder="0" allowfullscreen loading="lazy"></iframe></div>`
         : `<div class="highlight-frame highlight-broken">Invalid YouTube URL</div>`}
       <div class="highlight-title">${escapeHtml(h.title || 'Untitled')}</div>
-      <button class="btn admin-only visible" data-id="${h.id}" style="margin-top:6px">Remove</button>
+      <button class="btn admin-only${adminVisible ? ' visible' : ''}" data-id="${h.id}" style="margin-top:6px">Remove</button>
     </div>`;
   }).join('');
   grid.querySelectorAll('button[data-id]').forEach(btn => {
@@ -129,19 +105,21 @@ async function init() {
   const res = await fetch('/api/home');
   homeContent = await res.json();
   renderAll();
-  renderLedgerPreview();
 
   await window.SITE_AUTH_READY;
+  renderHighlights();
 
   const editBtn = document.getElementById('edit-home-btn');
   const editBar = document.getElementById('edit-bar');
   const saveBtn = document.getElementById('save-home-btn');
   const cancelBtn = document.getElementById('cancel-edit-btn');
+  const discordUrlInput = document.getElementById('discord-url-input');
 
   editBtn && editBtn.addEventListener('click', () => {
     editMode = true;
     editBar.style.display = 'flex';
     document.querySelectorAll('[data-cms]').forEach(el => el.contentEditable = 'true');
+    if (discordUrlInput) discordUrlInput.value = homeContent.discordInviteUrl || '';
   });
 
   cancelBtn && cancelBtn.addEventListener('click', () => {
@@ -155,6 +133,7 @@ async function init() {
     document.querySelectorAll('[data-cms]').forEach(el => {
       setPath(homeContent, el.dataset.cms, el.textContent.trim());
     });
+    if (discordUrlInput) homeContent.discordInviteUrl = discordUrlInput.value.trim();
     editMode = false;
     editBar.style.display = 'none';
     document.querySelectorAll('[data-cms]').forEach(el => el.contentEditable = 'false');
