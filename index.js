@@ -37,6 +37,9 @@ const comps = require('./comps');
 const { askAI, isOnCooldown, markAsked } = require('./ai-assistant');
 const storage = require('./storage');
 const activityStore = require('./activity-store');
+const buildsStore = require('./builds-store');
+const itemMap = require('./item-map');
+const { weaponEmoji } = require('./live-comps');
 
 // Shapes a Discord user into the { id, username, role } shape activity-store
 // expects — "role" here is just a label for the log (Discord doesn't have
@@ -147,11 +150,13 @@ function buildEmbed(event, guild) {
     }
     const roleEmoji = roleEmojiText(guild, row.category);
     const status = row.signedUserId ? `<@${row.signedUserId}>` : '*Open*';
-    const weaponEmoji = row.emoji || '🔹';
+    const rowWeaponEmoji = row.emoji || '🔹';
     const label = row.name ? `**${row.name}**` : '*Any*';
-    const buildLink = comps.buildLinkFor(row);
-    const buildLinkText = buildLink ? ` ([build](${buildLink}))` : '';
-    rosterLines.push(`${roleEmoji} - ${weaponEmoji} - ${label}${buildLinkText} : ${status}`);
+    // Per-row "[build]" links used to live here — removed per the person's
+    // request (see part C hand-off). Use the "Ask a build" button instead.
+    // The comp-level "🔗 Builds" field below (comps.BUILDS_LINK) is a
+    // different mechanism and was intentionally left alone.
+    rosterLines.push(`${roleEmoji} - ${rowWeaponEmoji} - ${label} : ${status}`);
   }
 
   if (rosterLines.length > 0) {
@@ -179,11 +184,14 @@ function buildEmbed(event, guild) {
 }
 
 function buildButtons(event, guild) {
-  const row = new ActionRowBuilder();
+  // Row 1: up to 5 role buttons, one per active category (Discord's
+  // 5-buttons-per-row limit means this can't share a row with anything else
+  // once all categories in CATEGORY_ORDER are active).
+  const roleRow = new ActionRowBuilder();
   const activeCats = CATEGORY_ORDER.filter((c) => event.categories[c]);
 
   for (const cat of activeCats) {
-    row.addComponents(
+    roleRow.addComponents(
       new ButtonBuilder()
         .setCustomId(`event_role:${cat}:${event.id}`)
         .setLabel(cat)
@@ -193,16 +201,73 @@ function buildButtons(event, guild) {
     );
   }
 
-  row.addComponents(
+  // Row 2: Leave + Ask a build. "Ask a build" stays enabled even once the
+  // event is closed — people should still be able to check gear afterward.
+  const actionRow = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
       .setCustomId(`event_leave:${event.id}`)
       .setLabel('Leave')
       .setEmoji('🚪')
       .setStyle(ButtonStyle.Danger)
-      .setDisabled(event.closed)
+      .setDisabled(event.closed),
+    new ButtonBuilder()
+      .setCustomId(`event_askbuild:${event.id}`)
+      .setLabel('Ask a build')
+      .setEmoji('🧭')
+      .setStyle(ButtonStyle.Secondary)
   );
 
-  return [row];
+  return [roleRow, actionRow];
+}
+
+// Colors match the CSS custom properties in public/css/base.css
+// (--tank, --healer, --support, --dps, --gank), hex-ified.
+const ROLE_EMBED_COLORS = { tank: 0x5d8fc9, healer: 0x6bab7a, support: 0xcf9d3f, dps: 0xc75847, gank: 0x9b72c4 };
+
+// Builds the "Ask a build" detail embed — mirrors the detail card shown on
+// the right side of builds.html when you click a build there.
+function buildAskBuildEmbed(build) {
+  const slot = (name) => name || '—';
+  const emoji = weaponEmoji(build.weapon, itemMap.ITEM_MAP);
+  const embed = new EmbedBuilder()
+    .setTitle(`${emoji} ${build.weapon || 'Unnamed build'}`)
+    .setColor(ROLE_EMBED_COLORS[build.role] ?? 0x99aab5);
+
+  const thumb = itemMap.itemImageUrl(build.weapon);
+  if (thumb) embed.setThumbnail(thumb);
+
+  embed.addFields(
+    { name: 'Role', value: build.role ? build.role[0].toUpperCase() + build.role.slice(1) : '—', inline: true },
+    { name: 'Head', value: slot(build.head), inline: true },
+    { name: 'Cape', value: slot(build.cape), inline: true },
+    { name: 'Chest', value: slot(build.chest), inline: true },
+    { name: 'Offhand', value: slot(build.offhand), inline: true },
+    { name: 'Feet', value: slot(build.feet), inline: true },
+    { name: 'Potion', value: slot(build.potion), inline: true },
+    { name: 'Food', value: slot(build.food), inline: true }
+  );
+
+  if (build.note) {
+    embed.addFields({ name: '📌 Note', value: build.note });
+  }
+
+  return embed;
+}
+
+// Every role row in an event that has a build linked, deduped by
+// tab:id — used by both the "Ask a build" button and its follow-up select.
+function linkedBuildRowsFor(event) {
+  const rows = comps.expandAllCategoryRows(event.categories, CATEGORY_ORDER);
+  const seen = new Set();
+  const out = [];
+  for (const row of rows) {
+    if (!row.buildTab || row.buildId == null) continue;
+    const key = `${row.buildTab}:${row.buildId}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(row);
+  }
+  return out;
 }
 
 function removeUserFromEvent(event, userId) {
@@ -1328,6 +1393,70 @@ client.on(Events.InteractionCreate, async (interaction) => {
       removeUserFromEvent(event, interaction.user.id);
       await saveEvents(events);
       await interaction.update({ embeds: [buildEmbed(event, interaction.guild)], components: buildButtons(event, interaction.guild) });
+      return;
+    }
+
+    // ----- "Ask a build" button: reply (ephemeral) with the build card for
+    // whichever role(s) on this event have a build linked -----
+    if (interaction.isButton() && interaction.customId.startsWith('event_askbuild:')) {
+      const [, eventId] = interaction.customId.split(':');
+      const event = events[eventId];
+      if (!event) {
+        await interaction.reply({ content: 'Event not found.', ephemeral: true });
+        return;
+      }
+
+      const linkedRows = linkedBuildRowsFor(event);
+
+      if (linkedRows.length === 0) {
+        await interaction.reply({ content: 'No builds are linked to this event.', ephemeral: true });
+        return;
+      }
+
+      if (linkedRows.length === 1) {
+        const row = linkedRows[0];
+        const allBuilds = await buildsStore.loadAllBuilds();
+        const build = (allBuilds[row.buildTab] || [])[row.buildId];
+        if (!build) {
+          await interaction.reply({ content: 'That build could not be found — it may have been removed from the war ledger.', ephemeral: true });
+          return;
+        }
+        await interaction.reply({ embeds: [buildAskBuildEmbed(build)], ephemeral: true });
+        return;
+      }
+
+      const select = new StringSelectMenuBuilder()
+        .setCustomId(`event_askbuild_select:${eventId}`)
+        .setPlaceholder('Choose a build to view')
+        .addOptions(
+          linkedRows.slice(0, 25).map((row) => ({
+            label: `${row.category} · ${row.name || 'Unnamed build'}`,
+            value: `${row.buildTab}:${row.buildId}`,
+          }))
+        );
+
+      await interaction.reply({
+        content: 'Which build would you like to see?',
+        components: [new ActionRowBuilder().addComponents(select)],
+        ephemeral: true,
+      });
+      return;
+    }
+
+    // ----- follow-up select for "Ask a build" when more than one role has a
+    // linked build -----
+    if (interaction.isStringSelectMenu() && interaction.customId.startsWith('event_askbuild_select:')) {
+      const [buildTab, buildIdRaw] = interaction.values[0].split(':');
+      const buildId = Number(buildIdRaw);
+
+      const allBuilds = await buildsStore.loadAllBuilds();
+      const build = (allBuilds[buildTab] || [])[buildId];
+      if (!build) {
+        await interaction.update({ content: 'That build could not be found — it may have been removed from the war ledger.', embeds: [], components: [] });
+        return;
+      }
+
+      await interaction.update({ content: null, embeds: [buildAskBuildEmbed(build)], components: [] });
       return;
     }
   } catch (err) {
