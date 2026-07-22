@@ -13,6 +13,7 @@ const auth = require('./web-auth');
 const buildsStore = require('./builds-store');
 const homeStore = require('./home-store');
 const comps = require('./comps');
+const activityStore = require('./activity-store');
 
 const router = express.Router();
 router.use(cookieParser());
@@ -86,6 +87,7 @@ router.put('/api/builds/:tab', auth.requireOfficer, async (req, res) => {
   try {
     if (!Array.isArray(req.body)) return res.status(400).json({ error: 'Body must be an array of builds.' });
     const saved = await buildsStore.saveTab(req.params.tab, req.body);
+    activityStore.log(req.user, 'builds.update', `Updated the "${req.params.tab}" build list (${saved.length} build${saved.length === 1 ? '' : 's'})`);
     res.json(saved);
   } catch (err) {
     console.error(err);
@@ -115,6 +117,7 @@ router.post('/api/comps', auth.requireOfficer, async (req, res) => {
   if (!label || !categories) return res.status(400).json({ error: 'label and categories are required.' });
   const result = await comps.createCompStructured({ label, categories, userId: req.user.id });
   if (!result) return res.status(400).json({ error: 'A composition with that name already exists, or it had no items.' });
+  activityStore.log(req.user, 'comp.create', `Created composition "${label}"`);
   res.status(201).json(result);
 });
 
@@ -125,12 +128,15 @@ router.put('/api/comps/:key', auth.requireOfficer, async (req, res) => {
     key: req.params.key, newLabel, categories, userId: req.user.id,
   });
   if (!result) return res.status(400).json({ error: 'Composition not found, name collision, or no items.' });
+  activityStore.log(req.user, 'comp.update', `Updated composition "${newLabel}"`);
   res.json(result);
 });
 
 router.delete('/api/comps/:key', auth.requireOfficer, async (req, res) => {
+  const existing = await comps.getCompByKey(req.params.key);
   const ok = await comps.deleteComp(req.params.key);
   if (!ok) return res.status(404).json({ error: 'Composition not found.' });
+  activityStore.log(req.user, 'comp.delete', `Deleted composition "${existing ? existing.label : req.params.key}"`);
   res.status(204).end();
 });
 
@@ -146,7 +152,20 @@ router.get('/api/home', async (req, res) => {
 
 router.put('/api/home', auth.requireAdmin, async (req, res) => {
   if (!req.body || typeof req.body !== 'object') return res.status(400).json({ error: 'Invalid body.' });
-  res.json(await homeStore.saveHomeContent(req.body));
+  const saved = await homeStore.saveHomeContent(req.body);
+  activityStore.log(req.user, 'home.update', 'Updated home page content');
+  res.json(saved);
+});
+
+// ── HISTORY (admin only) ──────────────────────────────────────────────────
+
+router.get('/api/history', auth.requireAdmin, async (req, res) => {
+  try {
+    res.json(await activityStore.listEntries());
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to load history.' });
+  }
 });
 
 module.exports = router;
