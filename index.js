@@ -36,6 +36,15 @@ const {
 const comps = require('./comps');
 const { askAI, isOnCooldown, markAsked } = require('./ai-assistant');
 const storage = require('./storage');
+const activityStore = require('./activity-store');
+
+// Shapes a Discord user into the { id, username, role } shape activity-store
+// expects — "role" here is just a label for the log (Discord doesn't have
+// officer/admin the same way the site's OAuth session does), not a
+// permission check.
+function logUser(discordUser) {
+  return { id: discordUser.id, username: discordUser.username, role: 'discord' };
+}
 
 // ---------- storage (Redis-backed via storage.js, keyed by the posted message id) ----------
 const DB_PATH = path.join(__dirname, 'events.json'); // local fallback path only
@@ -244,10 +253,18 @@ function findDahaloRole(guild) {
 // Shared by both the "pick no-shows" select menu and the "no no-shows"
 // button — marks the event closed, records who didn't show, updates the
 // posted embed, and announces the outcome publicly in the event's channel.
-async function finalizeEventClose(client, event, noShowIds) {
+async function finalizeEventClose(client, event, noShowIds, closedByUser) {
   event.closed = true;
   event.noShows = noShowIds;
   await saveEvents(events);
+
+  if (closedByUser) {
+    activityStore.log(
+      logUser(closedByUser),
+      'event.close',
+      `Closed event "${event.title}" (${event.type})${noShowIds.length ? ` — ${noShowIds.length} no-show${noShowIds.length === 1 ? '' : 's'}` : ''}`
+    );
+  }
 
   try {
     await updateEventMessage(client, event);
@@ -551,6 +568,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
           event.id = message.id;
           events[event.id] = event;
           await saveEvents(events);
+          activityStore.log(logUser(interaction.user), 'event.create', `Created event "${event.title}" (${event.type}) from comp "${saved.label}"`);
           await interaction.editReply({ embeds: [buildEmbed(event, interaction.guild)], components: buildButtons(event, interaction.guild) });
           return;
         }
@@ -607,7 +625,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
         if (signedUpIds.length === 0) {
           // nobody signed up at all — nothing to pick from, just close
-          await finalizeEventClose(client, event, []);
+          await finalizeEventClose(client, event, [], interaction.user);
           await interaction.reply({ content: `Event \`${eventId}\` closed. Nobody had signed up.`, ephemeral: true });
           return;
         }
@@ -679,6 +697,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
         event.categories = categories;
         event.compLabel = saved.label;
         await saveEvents(events);
+        activityStore.log(logUser(interaction.user), 'event.refresh', `Refreshed event "${event.title}" from comp "${saved.label}"`);
 
         try {
           await updateEventMessage(client, event);
@@ -805,6 +824,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
         }
 
         await comps.deleteComp(key);
+        activityStore.log(logUser(interaction.user), 'comp.delete', `Deleted composition "${saved.label}"`);
         await interaction.reply({ content: `Deleted saved composition **${saved.label}**.`, ephemeral: true });
         return;
       }
@@ -933,6 +953,11 @@ client.on(Events.InteractionCreate, async (interaction) => {
       }
 
       await interaction.reply({ embeds: [embed] });
+      activityStore.log(
+        logUser(interaction.user),
+        'giveaway.draw',
+        `Drew ${drawCount} winner${drawCount === 1 ? '' : 's'} for "${prize}" from event "${event.title}"`
+      );
       return;
     }
 
@@ -974,6 +999,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
       event.id = message.id;
       events[event.id] = event;
       await saveEvents(events);
+      activityStore.log(logUser(interaction.user), 'event.create', `Created event "${event.title}" (${event.type}, manual composition)`);
 
       await interaction.editReply({ embeds: [buildEmbed(event, interaction.guild)], components: buildButtons(event, interaction.guild) });
       return;
@@ -1006,6 +1032,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
         content: `Saved composition **${created.label}** — use it next time with \`/event create comp:${created.label}\`.`,
         ephemeral: true,
       });
+      activityStore.log(logUser(interaction.user), 'comp.create', `Created composition "${created.label}"`);
       return;
     }
 
@@ -1033,6 +1060,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
       }
 
       await interaction.reply({ content: `Updated saved composition **${updated.label}**.`, ephemeral: true });
+      activityStore.log(logUser(interaction.user), 'comp.update', `Updated composition "${updated.label}"`);
       return;
     }
 
@@ -1257,7 +1285,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
       }
 
       const noShowIds = interaction.values;
-      await finalizeEventClose(client, event, noShowIds);
+      await finalizeEventClose(client, event, noShowIds, interaction.user);
       await interaction.update({
         content: `Event closed. No-shows: ${noShowIds.length > 0 ? noShowIds.map((id) => `<@${id}>`).join(', ') : '*none*'}`,
         components: [],
@@ -1284,7 +1312,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
         return;
       }
 
-      await finalizeEventClose(client, event, []);
+      await finalizeEventClose(client, event, [], interaction.user);
       await interaction.update({ content: 'Event closed. No-shows: *none*', components: [] });
       return;
     }
