@@ -31,6 +31,7 @@ const {
   StringSelectMenuBuilder,
   EmbedBuilder,
   PermissionFlagsBits,
+  AttachmentBuilder,
 } = require('discord.js');
 
 const comps = require('./comps');
@@ -40,6 +41,7 @@ const activityStore = require('./activity-store');
 const buildsStore = require('./builds-store');
 const itemMap = require('./item-map');
 const { weaponEmoji } = require('./live-comps');
+const { renderBuildCard } = require('./build-card-image');
 
 // Shapes a Discord user into the { id, username, role } shape activity-store
 // expects — "role" here is just a label for the log (Discord doesn't have
@@ -224,9 +226,15 @@ function buildButtons(event, guild) {
 // (--tank, --healer, --support, --dps, --gank), hex-ified.
 const ROLE_EMBED_COLORS = { tank: 0x5d8fc9, healer: 0x6bab7a, support: 0xcf9d3f, dps: 0xc75847, gank: 0x9b72c4 };
 
-// Builds the "Ask a build" detail embed — mirrors the detail card shown on
-// the right side of builds.html when you click a build there.
-function buildAskBuildEmbed(build) {
+// Builds the "Ask a build" reply payload — mirrors the detail card shown on
+// the right side of builds.html when you click a build there. Text fields
+// (Role/Head/Cape/etc.) are always included; the composited slot-icon image
+// (see build-card-image.js) is added on top when rendering succeeds, since a
+// Discord embed can only carry one setImage()/setThumbnail(), not a
+// per-field icon. If the image render fails for any reason (network hiccup
+// to render.albiononline.com, sharp error, etc.), the reply still goes out
+// with just the weapon thumbnail and text fields — never blocks on this.
+async function buildAskBuildEmbed(build) {
   const slot = (name) => name || '—';
   const emoji = weaponEmoji(build.weapon, itemMap.ITEM_MAP);
   const embed = new EmbedBuilder()
@@ -251,7 +259,17 @@ function buildAskBuildEmbed(build) {
     embed.addFields({ name: '📌 Note', value: build.note });
   }
 
-  return embed;
+  const files = [];
+  try {
+    const cardBuffer = await renderBuildCard(build);
+    const attachment = new AttachmentBuilder(cardBuffer, { name: 'build-card.png' });
+    embed.setImage('attachment://build-card.png');
+    files.push(attachment);
+  } catch (e) {
+    console.error('Failed to render build card image, falling back to text-only embed', e);
+  }
+
+  return { embeds: [embed], files };
 }
 
 // Every role row in an event that has a build linked, deduped by
@@ -1421,7 +1439,8 @@ client.on(Events.InteractionCreate, async (interaction) => {
           await interaction.reply({ content: 'That build could not be found — it may have been removed from the war ledger.', ephemeral: true });
           return;
         }
-        await interaction.reply({ embeds: [buildAskBuildEmbed(build)], ephemeral: true });
+        const payload = await buildAskBuildEmbed(build);
+        await interaction.reply({ ...payload, ephemeral: true });
         return;
       }
 
@@ -1456,7 +1475,8 @@ client.on(Events.InteractionCreate, async (interaction) => {
         return;
       }
 
-      await interaction.update({ content: null, embeds: [buildAskBuildEmbed(build)], components: [] });
+      const payload = await buildAskBuildEmbed(build);
+      await interaction.update({ content: null, components: [], ...payload });
       return;
     }
   } catch (err) {
