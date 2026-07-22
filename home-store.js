@@ -20,6 +20,13 @@ const DEFAULT_CONTENT = {
     { num: 'T8', label: 'Standard gear tier' },
     { num: '4', label: 'Tracks in progress' },
   ],
+  quicklinksEyebrow: 'Inside the guild',
+  quicklinksTitle: 'Where to go',
+  quicklinksSub: "The site's still being built out — the Ledger's live, the rest is on the way.",
+  highlightsEyebrow: 'Watch the fights',
+  highlightsTitle: 'Highlights',
+  highlightsSub: 'Clips from recent content — ZvZs, ganks, and the odd disaster.',
+  aboutTitle: 'Built for the fights that matter',
   aboutParagraphs: [
     "Rise of Dahalo formed around a simple frustration: showing up to a fight without knowing what your five teammates were wearing. We fixed that by writing it down — every comp, every swap — so the only thing left to figure out in voice chat is the call, not the kit.",
     "We run black-zone PvP at every scale: five-man brawls, gank squads, kiting comps for sieges, and the slow grind of tracking parties between fights. The Ledger covers what's live today and keeps growing as we document the rest.",
