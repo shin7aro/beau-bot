@@ -75,13 +75,6 @@
         <text class="stamp-text" x="100" y="183" text-anchor="middle" style="letter-spacing:4px">&#8226; &#8226; &#8226;</text>
       </svg>
     </div>
-    <div class="ledger-slip">
-      <div class="ls-eyebrow">Brawl</div>
-      <div class="ls-title">1H Mace</div>
-      <div class="ls-meta">
-        <span class="ls-pill">Tank</span>
-      </div>
-    </div>
   </div>
 </section>
 
@@ -93,9 +86,9 @@
 <!-- QUICKLINKS -->
 <section class="wrap section">
   <div class="section-head">
-    <div class="section-eyebrow">Inside the guild</div>
-    <h2 class="section-title">Where to go</h2>
-    <p class="section-sub">The site's still being built out — the Ledger's live, the rest is on the way.</p>
+    <div class="section-eyebrow" data-cms="quicklinksEyebrow">Inside the guild</div>
+    <h2 class="section-title" data-cms="quicklinksTitle">Where to go</h2>
+    <p class="section-sub" data-cms="quicklinksSub">The site's still being built out — the Ledger's live, the rest is on the way.</p>
   </div>
   <div class="cards-grid">
     <a class="qcard live" href="builds.html">
@@ -122,25 +115,12 @@
   </div>
 </section>
 
-<!-- LEDGER PREVIEW -->
-<section class="wrap section">
-  <div class="section-head">
-    <div class="section-eyebrow">Straight from the ledger</div>
-    <h2 class="section-title">Top of the list</h2>
-    <p class="section-sub">A sample from each live content track — open the full ledger for the entire kit, swaps, and notes.</p>
-  </div>
-  <div class="ledger-grid" id="ledger-preview-grid"><!-- filled by js/home.js --></div>
-  <div class="section-foot">
-    <a class="text-link" href="builds.html">View the full ledger →</a>
-  </div>
-</section>
-
 <!-- HIGHLIGHTS -->
 <section class="wrap section">
   <div class="section-head">
-    <div class="section-eyebrow">Watch the fights</div>
-    <h2 class="section-title">Highlights</h2>
-    <p class="section-sub">Clips from recent content — ZvZs, ganks, and the odd disaster.</p>
+    <div class="section-eyebrow" data-cms="highlightsEyebrow">Watch the fights</div>
+    <h2 class="section-title" data-cms="highlightsTitle">Highlights</h2>
+    <p class="section-sub" data-cms="highlightsSub">Clips from recent content — ZvZs, ganks, and the odd disaster.</p>
   </div>
   <div class="highlights-grid" id="highlights-grid"><!-- filled by js/home.js --></div>
   <div class="admin-only" id="highlight-add-row" style="margin-top:14px; display:flex; gap:8px; flex-wrap:wrap;">
@@ -154,7 +134,7 @@
 <section class="wrap section about">
   <div class="about-copy">
     <div class="section-eyebrow">Who we are</div>
-    <h2 class="section-title" style="margin-bottom:18px">Built for the fights that matter</h2>
+    <h2 class="section-title" style="margin-bottom:18px" data-cms="aboutTitle">Built for the fights that matter</h2>
     <div id="about-paragraphs">
       <p data-cms="aboutParagraphs.0">Rise of Dahalo formed around a simple frustration: showing up to a fight without knowing what your five teammates were wearing. We fixed that by writing it down — every comp, every swap — so the only thing left to figure out in voice chat is the call, not the kit.</p>
       <p data-cms="aboutParagraphs.1">We run black-zone PvP at every scale: five-man brawls, gank squads, kiting comps for sieges, and the slow grind of tracking parties between fights. The Ledger covers what's live today and keeps growing as we document the rest.</p>
@@ -169,6 +149,7 @@
 <!-- ADMIN EDIT BAR (hidden unless in edit mode) -->
 <div class="edit-bar" id="edit-bar" style="display:none">
   <span>Editing home page — click any highlighted text to change it.</span>
+  <input type="text" id="discord-url-input" placeholder="Discord invite URL (https://discord.gg/…)" style="flex:1; min-width:200px; max-width:320px; padding:9px 12px; border-radius:8px; border:1px solid var(--line-2); background:var(--surface-2); color:var(--ink); font:inherit;">
   <button class="btn" id="save-home-btn"><span class="btn-label">Save changes</span></button>
   <button class="btn" id="cancel-edit-btn"><span class="btn-label">Cancel</span></button>
 </div>
@@ -185,7 +166,7 @@
     <div class="footer-links">
       <a href="index.html">Home</a>
       <a href="builds.html">Builds</a>
-      <a href="#" target="_blank" rel="noopener">Discord</a>
+      <a href="#" target="_blank" rel="noopener" id="footer-discord-link">Discord</a>
     </div>
     <div class="footer-copy">© 2026 Rise of Dahalo. Albion Online is a trademark of Sandbox Interactive GmbH — this is an unofficial guild site.</div>
   </div>
