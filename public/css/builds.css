@@ -237,29 +237,41 @@ body.app-shell .site-header { flex-shrink: 0; }
   .card-meta { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
   .role-pill-btn { border: none; cursor: pointer; font-family: inherit; transition: filter 0.12s; }
   .role-pill-btn:hover { filter: brightness(1.25); }
-  .card-prio, .card-note-wrap {
+  .card-prio {
     font-family: 'JetBrains Mono', monospace;
     font-size: 11.5px; font-weight: 600;
     background: var(--surface-2); border: 1px solid var(--line-2);
     padding: 4px 10px; border-radius: 999px; color: var(--ink-dim);
     cursor: pointer; transition: border-color 0.12s, color 0.12s;
   }
-  .card-prio:hover, .card-note-wrap:hover { border-color: var(--accent); color: var(--ink); }
-  .card-prio-input, .card-note-input {
+  .card-prio:hover { border-color: var(--accent); color: var(--ink); }
+  .card-prio-input {
     font-family: 'JetBrains Mono', monospace; font-size: 11.5px; font-weight: 600;
     background: var(--surface-3); border: 1px solid var(--accent); border-radius: 999px;
-    padding: 4px 10px; color: var(--ink); outline: none;
+    padding: 4px 10px; color: var(--ink); outline: none; width: 64px;
   }
-  .card-prio-input { width: 64px; }
-  .card-note-input { width: 220px; max-width: 60vw; font-family: inherit; font-weight: 500; }
-  .card-note-wrap {
-    display: inline-flex; align-items: center; gap: 6px;
-    font-family: inherit; font-weight: 500;
-    color: var(--support); background: var(--support-bg); border: 1px solid rgba(207,157,63,0.3);
-    padding: 4px 10px 4px 8px;
+
+  /* ── NOTE — full-width, highlighted, right below the build's slots grid ── */
+  .card-note-block {
+    display: flex; align-items: flex-start; gap: 9px;
+    font-family: inherit; font-weight: 600; font-size: 13px; line-height: 1.45;
+    color: var(--support); background: var(--support-bg);
+    border: 1px solid rgba(207,157,63,0.4);
+    border-radius: 10px; padding: 12px 14px;
+    cursor: pointer; transition: border-color 0.12s, background 0.12s;
   }
-  .card-note-wrap.empty { color: var(--ink-faint); background: var(--surface-2); border: 1px dashed var(--line-2); font-style: italic; }
-  .card-note-wrap svg { width: 12px; height: 12px; flex-shrink: 0; }
+  .card-note-block:hover { border-color: var(--support); }
+  .card-note-block.empty {
+    color: var(--ink-faint); background: var(--surface-2);
+    border: 1px dashed var(--line-2); font-style: italic; font-weight: 500;
+  }
+  .card-note-block svg { width: 15px; height: 15px; flex-shrink: 0; margin-top: 2px; stroke: currentColor; }
+  .card-note-text { flex: 1; word-break: break-word; }
+  .card-note-input {
+    font: inherit; font-weight: 600; font-size: 13px;
+    background: var(--surface-3); border: 1px solid var(--accent); border-radius: 10px;
+    padding: 12px 14px; color: var(--ink); outline: none; width: 100%;
+  }
 
   .section-label { font-size: 10px; font-weight: 600; color: var(--ink-faint); text-transform: uppercase; letter-spacing: 0.12em; margin-bottom: 12px; display: flex; align-items: baseline; gap: 8px; }
   .section-hint { font-size: 10px; font-weight: 500; text-transform: none; letter-spacing: normal; color: var(--ink-faint); opacity: 0.7; }
@@ -388,6 +400,19 @@ body.app-shell .site-header { flex-shrink: 0; }
   .tab-panel.active { display: flex; }
   .tab-panel > .controls { flex-shrink: 0; }
   .tab-panel > .main { flex: 1; overflow: hidden; min-height: 0; }
+
+  /* ── GENERIC FULL-HEIGHT APP CONTAINER ──
+     Any page built on body.app-shell needs its main content wrapper to fill
+     the remaining viewport height (flex:1 in a flex column) — otherwise the
+     wrapper just grows to fit its content, `.main`'s own flex:1 becomes a
+     no-op (no flex-context parent), and anything past the fold gets clipped
+     by body's overflow:hidden with no way to scroll to it. `.tab-panel`
+     above solves this for builds.html's tab panels; use `.app-main` for any
+     other page's single top-level wrapper (comps.html's #comps-app, a
+     future #events-app, etc.) so it gets the same treatment. */
+  .app-main { flex: 1; display: flex; flex-direction: column; overflow: hidden; min-height: 0; }
+  .app-main > .controls { flex-shrink: 0; }
+  .app-main > .main { flex: 1; overflow: hidden; min-height: 0; }
 
   .tab-empty { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; color: var(--ink-dim); }
   .tab-empty svg { width: 38px; height: 38px; stroke: var(--line-2); fill: none; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
