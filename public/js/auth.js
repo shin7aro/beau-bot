@@ -42,10 +42,33 @@ function renderAuthControl() {
   }
 
   mount.innerHTML = `
-    <span class="auth-badge" title="${escapeAttr(username)} — ${role}">
-      <span class="auth-role-dot auth-role-${role}"></span>${escapeAttr(username)}
-    </span>
-    <a class="btn" href="/auth/logout"><span class="btn-label">Log out</span></a>`;
+    <div class="auth-menu" id="auth-menu">
+      <button class="auth-menu-trigger" id="auth-menu-trigger" type="button" aria-haspopup="true" aria-expanded="false" title="${escapeAttr(username)} — ${role}">
+        <span class="auth-role-dot auth-role-${role}"></span>
+        <span class="auth-menu-name">${escapeAttr(username)}</span>
+        <svg class="auth-menu-caret" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+      </button>
+      <div class="auth-menu-dropdown" id="auth-menu-dropdown">
+        <a class="auth-menu-item" href="builds.html">War Ledger</a>
+        ${(role === 'officer' || role === 'admin') ? '<a class="auth-menu-item" href="comps.html">Compositions</a>' : ''}
+        ${role === 'admin' ? '<a class="auth-menu-item" href="history.html">History</a>' : ''}
+        <div class="auth-menu-divider"></div>
+        <a class="auth-menu-item auth-menu-danger" href="/auth/logout">Log out</a>
+      </div>
+    </div>`;
+
+  const trigger = document.getElementById('auth-menu-trigger');
+  const dropdown = document.getElementById('auth-menu-dropdown');
+  const closeMenu = () => { dropdown.classList.remove('open'); trigger.setAttribute('aria-expanded', 'false'); };
+  trigger.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const isOpen = dropdown.classList.toggle('open');
+    trigger.setAttribute('aria-expanded', String(isOpen));
+  });
+  document.addEventListener('click', (e) => {
+    if (!mount.contains(e.target)) closeMenu();
+  });
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeMenu(); });
 }
 
 function escapeAttr(s) {
