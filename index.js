@@ -1433,14 +1433,19 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
       if (linkedRows.length === 1) {
         const row = linkedRows[0];
+        // Loading the build + compositing its icon grid can take longer
+        // than Discord's 3-second interaction window, so acknowledge first
+        // and fill in the real content once it's ready.
+        await interaction.deferReply({ ephemeral: true });
+
         const allBuilds = await buildsStore.loadAllBuilds();
         const build = (allBuilds[row.buildTab] || [])[row.buildId];
         if (!build) {
-          await interaction.reply({ content: 'That build could not be found — it may have been removed from the war ledger.', ephemeral: true });
+          await interaction.editReply({ content: 'That build could not be found — it may have been removed from the war ledger.' });
           return;
         }
         const payload = await buildAskBuildEmbed(build);
-        await interaction.reply({ ...payload, ephemeral: true });
+        await interaction.editReply(payload);
         return;
       }
 
@@ -1465,18 +1470,24 @@ client.on(Events.InteractionCreate, async (interaction) => {
     // ----- follow-up select for "Ask a build" when more than one role has a
     // linked build -----
     if (interaction.isStringSelectMenu() && interaction.customId.startsWith('event_askbuild_select:')) {
+      // Same reasoning as above — defer immediately, since loading the
+      // build + compositing its icon grid can exceed Discord's 3-second
+      // window. deferUpdate (not deferReply) because this edits the
+      // existing ephemeral message in place rather than sending a new one.
+      await interaction.deferUpdate();
+
       const [buildTab, buildIdRaw] = interaction.values[0].split(':');
       const buildId = Number(buildIdRaw);
 
       const allBuilds = await buildsStore.loadAllBuilds();
       const build = (allBuilds[buildTab] || [])[buildId];
       if (!build) {
-        await interaction.update({ content: 'That build could not be found — it may have been removed from the war ledger.', embeds: [], components: [] });
+        await interaction.editReply({ content: 'That build could not be found — it may have been removed from the war ledger.', embeds: [], components: [] });
         return;
       }
 
       const payload = await buildAskBuildEmbed(build);
-      await interaction.update({ content: null, components: [], ...payload });
+      await interaction.editReply({ content: null, components: [], ...payload });
       return;
     }
   } catch (err) {
