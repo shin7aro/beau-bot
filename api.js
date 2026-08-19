@@ -144,6 +144,38 @@ router.get('/api/comps-build-options', auth.requireOfficer, async (req, res) => 
   res.json(await buildsStore.listAllForLinking());
 });
 
+// ── SERVER EMOJIS (for the comp editor's emoji picker) ────────────────────
+// Uses the BOT token, same pattern as web-auth.js's guild member lookup —
+// no dependency on the live discord.js Client, so this works regardless of
+// bot process timing and can't affect the bot's own connection.
+let emojiCache = { data: null, fetchedAt: 0 };
+const EMOJI_CACHE_TTL_MS = 5 * 60 * 1000; // 5 min - avoids hammering Discord on every page load
+
+router.get('/api/discord-emojis', auth.requireOfficer, async (req, res) => {
+  try {
+    if (emojiCache.data && Date.now() - emojiCache.fetchedAt < EMOJI_CACHE_TTL_MS) {
+      return res.json(emojiCache.data);
+    }
+    const discordRes = await fetch(`https://discord.com/api/v10/guilds/${process.env.GUILD_ID}/emojis`, {
+      headers: { Authorization: `Bot ${process.env.DISCORD_TOKEN}` },
+    });
+    if (!discordRes.ok) throw new Error(`Discord emoji lookup failed: ${discordRes.status}`);
+    const raw = await discordRes.json();
+    const emojis = raw.map((e) => ({
+      id: e.id,
+      name: e.name,
+      animated: !!e.animated,
+      tag: `<${e.animated ? 'a' : ''}:${e.name}:${e.id}>`,
+      url: `https://cdn.discordapp.com/emojis/${e.id}.${e.animated ? 'gif' : 'png'}?size=32`,
+    }));
+    emojiCache = { data: emojis, fetchedAt: Date.now() };
+    res.json(emojis);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to load server emojis.' });
+  }
+});
+
 // ── HOME PAGE CONTENT ─────────────────────────────────────────────────────
 
 router.get('/api/home', async (req, res) => {
