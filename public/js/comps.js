@@ -8,6 +8,7 @@ const TAB_LABELS = { brawl: 'Brawl', gank: 'Gank', kite: 'Kite & Clap', brawlcla
 
 let allComps = [];       // [{ key, label, categories, updatedAt, ... }]
 let buildOptions = [];   // [{ tab, index, role, weapon }]
+let serverEmojis = [];   // [{ id, name, animated, tag, url }] from /api/discord-emojis
 let searchStr = '';
 let editingKey = null;   // null = viewing/creating, otherwise the comp being edited
 let draft = null;        // working copy of the comp currently shown in the detail pane
@@ -37,9 +38,10 @@ async function api(path, opts) {
 }
 
 async function loadAll() {
-  [allComps, buildOptions] = await Promise.all([
+  [allComps, buildOptions, serverEmojis] = await Promise.all([
     api('/api/comps'),
     api('/api/comps-build-options'),
+    api('/api/discord-emojis').catch(() => []),
   ]);
   renderTable();
 }
@@ -91,6 +93,69 @@ function startNewComp() {
   renderDetail();
 }
 
+function emojiPreviewHtml(value) {
+  if (!value) return '<span class="emoji-preview-empty">+</span>';
+  const m = value.match(/^<a?:(\w+):(\d+)>$/);
+  if (m) {
+    const known = serverEmojis.find(e => e.id === m[2]);
+    const url = known ? known.url : `https://cdn.discordapp.com/emojis/${m[2]}.${value.startsWith('<a:') ? 'gif' : 'png'}?size=32`;
+    return `<img class="emoji-preview-img" src="${url}" alt="${escapeHtml(m[1])}">`;
+  }
+  return `<span class="emoji-preview-char">${escapeHtml(value)}</span>`;
+}
+
+function closeEmojiPopover() {
+  const pop = document.getElementById('emoji-popover');
+  if (pop) pop.remove();
+  document.removeEventListener('mousedown', handleEmojiPopoverOutsideClick, true);
+}
+
+function handleEmojiPopoverOutsideClick(e) {
+  const pop = document.getElementById('emoji-popover');
+  if (pop && !pop.contains(e.target)) closeEmojiPopover();
+}
+
+function openEmojiPopover(anchorBtn, cat, i) {
+  closeEmojiPopover();
+  if (!serverEmojis.length) {
+    alert('No custom server emojis found (or GUILD_ID/DISCORD_TOKEN not set on the server). You can still type a shortcode or paste a unicode emoji directly into the box.');
+    return;
+  }
+  const pop = document.createElement('div');
+  pop.id = 'emoji-popover';
+  pop.className = 'emoji-popover';
+  pop.innerHTML = `
+    <input type="text" class="emoji-popover-search" placeholder="Search emoji…" autocomplete="off">
+    <div class="emoji-popover-grid"></div>`;
+  document.body.appendChild(pop);
+
+  const rect = anchorBtn.getBoundingClientRect();
+  pop.style.top = `${window.scrollY + rect.bottom + 6}px`;
+  pop.style.left = `${window.scrollX + rect.left}px`;
+
+  const grid = pop.querySelector('.emoji-popover-grid');
+  const renderGrid = (filter = '') => {
+    const q = filter.toLowerCase();
+    const list = serverEmojis.filter(e => !q || e.name.toLowerCase().includes(q));
+    grid.innerHTML = list.map(e =>
+      `<button type="button" class="emoji-popover-item" data-tag="${escapeHtml(e.tag)}" title="${escapeHtml(e.name)}">
+         <img src="${e.url}" alt="${escapeHtml(e.name)}">
+       </button>`
+    ).join('') || '<p class="section-sub" style="padding:8px">No matches.</p>';
+
+    grid.querySelectorAll('.emoji-popover-item').forEach(btn => btn.addEventListener('click', () => {
+      draft.categories[cat].items[i].emoji = btn.dataset.tag;
+      closeEmojiPopover();
+      renderDetail();
+    }));
+  };
+  renderGrid();
+  pop.querySelector('.emoji-popover-search').addEventListener('input', e => renderGrid(e.target.value));
+  pop.querySelector('.emoji-popover-search').focus();
+
+  setTimeout(() => document.addEventListener('mousedown', handleEmojiPopoverOutsideClick, true), 0);
+}
+
 function renderDetail() {
   const placeholder = document.getElementById('comp-detail-placeholder');
   const card = document.getElementById('comp-detail-card');
@@ -118,6 +183,8 @@ function renderDetail() {
     const items = draft.categories[cat].items;
     const rows = items.map((item, i) => `
       <div class="comp-item-row" data-cat="${cat}" data-i="${i}">
+        <button type="button" class="comp-item-emoji-pick" title="Pick a server emoji">${emojiPreviewHtml(item.emoji)}</button>
+        <input type="text" class="comp-item-emoji" value="${escapeHtml(item.emoji || '')}" placeholder=":perma:">
         <input type="text" class="comp-item-name" value="${escapeHtml(item.name)}" placeholder="Weapon / role name">
         <input type="number" class="comp-item-party" value="${item.party || 0}" min="0" title="Party # (0 = party 1)">
         <select class="comp-item-build">${buildOptionsHtml(item.buildTab, item.buildId)}</select>
@@ -145,6 +212,16 @@ function renderDetail() {
       <button class="btn" id="comp-save-btn"><span class="btn-label">${editingKey ? 'Save changes' : 'Create composition'}</span></button>
     </div>`;
 
+  card.querySelectorAll('.comp-item-emoji').forEach(inp => inp.addEventListener('input', e => {
+    const row = e.target.closest('.comp-item-row');
+    const item = draft.categories[row.dataset.cat].items[+row.dataset.i];
+    item.emoji = e.target.value.trim() || null;
+    row.querySelector('.comp-item-emoji-pick').innerHTML = emojiPreviewHtml(item.emoji);
+  }));
+  card.querySelectorAll('.comp-item-emoji-pick').forEach(btn => btn.addEventListener('click', e => {
+    const row = e.target.closest('.comp-item-row');
+    openEmojiPopover(btn, row.dataset.cat, +row.dataset.i);
+  }));
   card.querySelectorAll('.comp-item-name').forEach(inp => inp.addEventListener('input', e => {
     const row = e.target.closest('.comp-item-row');
     draft.categories[row.dataset.cat].items[+row.dataset.i].name = e.target.value;
