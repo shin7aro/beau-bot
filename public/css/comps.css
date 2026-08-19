@@ -18,7 +18,7 @@
 
 .comp-item-row {
   display: grid;
-  grid-template-columns: 1.4fr 70px 1.6fr auto;
+  grid-template-columns: 34px 62px 1.4fr 70px 1.6fr auto;
   gap: 8px; align-items: center;
 }
 .comp-item-row input, .comp-item-row select {
@@ -33,6 +33,35 @@
 }
 .comp-item-remove:hover { color: var(--dps); border-color: var(--dps); }
 
+.comp-item-emoji-pick {
+  background: var(--surface-2); border: 1px solid var(--line-2); border-radius: 7px;
+  width: 34px; height: 32px; display: flex; align-items: center; justify-content: center;
+  cursor: pointer; padding: 0; flex-shrink: 0;
+}
+.comp-item-emoji-pick:hover { border-color: var(--accent); }
+.emoji-preview-img { width: 18px; height: 18px; object-fit: contain; }
+.emoji-preview-char { font-size: 15px; line-height: 1; }
+.emoji-preview-empty { color: var(--ink-faint); font-size: 14px; }
+
+.emoji-popover {
+  position: absolute; z-index: 50; width: 220px; max-height: 260px;
+  background: var(--surface-2); border: 1px solid var(--line-2); border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(0,0,0,.35); padding: 8px; display: flex; flex-direction: column; gap: 6px;
+}
+.emoji-popover-search {
+  background: var(--surface); border: 1px solid var(--line-2); border-radius: 6px;
+  color: var(--ink); font: inherit; font-size: 12px; padding: 6px 8px;
+}
+.emoji-popover-grid {
+  display: grid; grid-template-columns: repeat(6, 1fr); gap: 4px; overflow-y: auto; max-height: 200px;
+}
+.emoji-popover-item {
+  background: transparent; border: 1px solid transparent; border-radius: 6px;
+  width: 30px; height: 30px; display: flex; align-items: center; justify-content: center; cursor: pointer;
+}
+.emoji-popover-item:hover { border-color: var(--accent); background: var(--surface); }
+.emoji-popover-item img { width: 20px; height: 20px; object-fit: contain; }
+
 .comp-add-item-btn {
   background: transparent; border: 1px dashed var(--line-2); border-radius: 7px;
   color: var(--ink-dim); font: inherit; font-size: 12px; padding: 6px 10px; cursor: pointer;
@@ -42,5 +71,8 @@
 .comp-save-row { padding: 16px 20px; border-top: 1px solid var(--line); display: flex; justify-content: flex-end; }
 
 @media (max-width: 700px) {
-  .comp-item-row { grid-template-columns: 1fr; }
+  .comp-item-row { grid-template-columns: 34px 1fr; }
+  .comp-item-row .comp-item-name,
+  .comp-item-row .comp-item-party,
+  .comp-item-row .comp-item-build { grid-column: 2; }
 }
