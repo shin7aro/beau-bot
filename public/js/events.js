@@ -242,13 +242,30 @@ function renderRosterCol(e) {
   return quotaHtml + partiesHtml;
 }
 
+// Discord custom emoji tags (e.g. <:perma:950504612046111823>) only mean
+// anything inside Discord's own client — it swaps them for the real image.
+// Everywhere else (including here) they're just literal text, so we detect
+// the tag and render an actual <img> from Discord's CDN instead, same as
+// the comp editor's emoji picker already does. Anything else (a plain
+// unicode emoji, or nothing) falls back to showing it as-is.
+function emojiToHtml(value, { size = 16, fallback = '🔹' } = {}) {
+  if (!value) return `<span class="event-emoji-fallback">${fallback}</span>`;
+  const m = String(value).match(/^<a?:(\w+):(\d+)>$/);
+  if (m) {
+    const animated = value.startsWith('<a:');
+    const url = `https://cdn.discordapp.com/emojis/${m[2]}.${animated ? 'gif' : 'png'}?size=32`;
+    return `<img class="event-emoji-img" src="${url}" alt="${escapeHtml(m[1])}" loading="lazy" style="width:${size}px;height:${size}px">`;
+  }
+  return `<span class="event-emoji-fallback">${escapeHtml(value)}</span>`;
+}
+
 function renderRosterRow(e, row) {
   const isMine = row.signedUserId === window.SITE_AUTH.id;
   const isOpen = !row.signedUserId;
   const canSignup = isOpen && !e.closed && window.SITE_AUTH.loggedIn && row.itemIndex !== undefined;
   const icon = row.iconUrl
     ? `<img class="event-row-icon" src="${escapeHtml(row.iconUrl)}" alt="" loading="lazy">`
-    : `<span class="event-row-icon-fallback">${row.emoji || '🔹'}</span>`;
+    : `<span class="event-row-icon-fallback">${emojiToHtml(row.emoji, { size: 16 })}</span>`;
   const roleColors = { Tank: 'var(--tank)', DPS: 'var(--dps)', Healer: 'var(--healer)', Support: 'var(--support)', Battlemount: 'var(--cosmic)' };
 
   return `
@@ -269,7 +286,7 @@ function renderSignupsCol(e) {
       <div class="event-signup-entry">
         <span class="role-pill role-${r.category.toLowerCase()}" style="font-size:10px">${escapeHtml(r.category)}</span>
         <span class="event-signup-name">${escapeHtml(r.signedUsername)}</span>
-        <span class="event-signup-weapon">${r.emoji ? r.emoji + ' ' : ''}${escapeHtml(r.name || '')}</span>
+        <span class="event-signup-weapon">${r.emoji ? emojiToHtml(r.emoji, { size: 14 }) + ' ' : ''}${escapeHtml(r.name || '')}</span>
       </div>`).join('')}
   `;
 }
