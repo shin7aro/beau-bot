@@ -12,14 +12,12 @@ const commands = [
         .addStringOption((opt) =>
           opt
             .setName('type')
-            .setDescription('Type of activity (used for the title/emoji only)')
+            .setDescription('Type of activity — PVP, PVE, or Economy')
             .setRequired(true)
             .addChoices(
-              { name: 'CTA', value: 'CTA' },
-              { name: 'Group Dungeon', value: 'Group Dungeon' },
-              { name: 'Tracking', value: 'Tracking' },
-              { name: 'Ava Dungeon', value: 'Ava Dungeon' },
-              { name: 'Other', value: 'Other' }
+              { name: 'PVP', value: 'PVP' },
+              { name: 'PVE', value: 'PVE' },
+              { name: 'Economy', value: 'Economy' }
             )
         )
         .addStringOption((opt) =>
@@ -34,6 +32,12 @@ const commands = [
         )
         .addStringOption((opt) =>
           opt.setName('title').setDescription('Optional custom title (defaults to the activity type)')
+        )
+        .addStringOption((opt) =>
+          opt.setName('mass').setDescription('Optional meeting point / portal, e.g. "Lymhurst Portal"')
+        )
+        .addStringOption((opt) =>
+          opt.setName('sets').setDescription('Optional gear reminder, e.g. "1+0"')
         )
     )
     .addSubcommand((sub) =>
@@ -50,6 +54,34 @@ const commands = [
         .setDescription('Re-apply the current saved comp onto an already-posted event, keeping existing sign-ups')
         .addStringOption((opt) =>
           opt.setName('event_id').setDescription('The event ID shown in the embed footer').setRequired(true)
+        )
+    )
+    .addSubcommand((sub) =>
+      sub
+        .setName('edit')
+        .setDescription('Edit an already-posted event\'s details (organizer or server manager only)')
+        .addStringOption((opt) =>
+          opt.setName('event_id').setDescription('The event ID shown in the embed footer').setRequired(true)
+        )
+        .addStringOption((opt) => opt.setName('title').setDescription('New title'))
+        .addStringOption((opt) => opt.setName('time').setDescription('New time, e.g. "21h Mada"'))
+        .addStringOption((opt) =>
+          opt
+            .setName('type')
+            .setDescription('New activity type — PVP, PVE, or Economy')
+            .addChoices(
+              { name: 'PVP', value: 'PVP' },
+              { name: 'PVE', value: 'PVE' },
+              { name: 'Economy', value: 'Economy' }
+            )
+        )
+        .addStringOption((opt) => opt.setName('mass').setDescription('New meeting point / portal (leave a single space to clear)'))
+        .addStringOption((opt) => opt.setName('sets').setDescription('New gear reminder (leave a single space to clear)'))
+        .addStringOption((opt) =>
+          opt
+            .setName('comp')
+            .setDescription('Swap in a different saved composition, keeping matching sign-ups')
+            .setAutocomplete(true)
         )
     ),
   new SlashCommandBuilder()

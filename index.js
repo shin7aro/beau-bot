@@ -35,6 +35,8 @@ const {
 } = require('discord.js');
 
 const comps = require('./comps');
+const eventsStore = require('./events-store');
+const eventRender = require('./event-render');
 const { askAI, isOnCooldown, markAsked } = require('./ai-assistant');
 const storage = require('./storage');
 const activityStore = require('./activity-store');
@@ -42,6 +44,14 @@ const buildsStore = require('./builds-store');
 const itemMap = require('./item-map');
 const { weaponEmoji } = require('./live-comps');
 const { renderBuildCard } = require('./build-card-image');
+
+// Discord-facing helpers that used to be defined inline here now live in
+// events-store.js (pure data) and event-render.js (discord.js rendering) —
+// shared with the site's REST API (api.js) so a sign-up, edit, close, or
+// refresh from either side behaves identically. Destructured under their
+// original names so nothing else in this file has to change.
+const { loadEvents, saveEvents, removeUserFromEvent, getSignedUpUserIds, getMissingRolesSummary } = eventsStore;
+const { buildEmbed, buildButtons, updateEventMessage, findDahaloRole } = eventRender;
 
 // Shapes a Discord user into the { id, username, role } shape activity-store
 // expects — "role" here is just a label for the log (Discord doesn't have
@@ -51,17 +61,9 @@ function logUser(discordUser) {
   return { id: discordUser.id, username: discordUser.username, role: 'discord' };
 }
 
-// ---------- storage (Redis-backed via storage.js, keyed by the posted message id) ----------
-const DB_PATH = path.join(__dirname, 'events.json'); // local fallback path only
-const EVENTS_REDIS_KEY = 'events';
-
-async function loadEvents() {
-  return storage.loadJSON(EVENTS_REDIS_KEY, DB_PATH);
-}
-
-async function saveEvents(events) {
-  await storage.saveJSON(EVENTS_REDIS_KEY, DB_PATH, events);
-}
+// ---------- storage ----------
+// loadEvents/saveEvents come from events-store.js (see the requires block
+// above) — same Redis key/local file as before, just shared with the site.
 
 // Populated by the bootstrap at the bottom of this file, before login.
 let events = {};
@@ -72,155 +74,12 @@ const pendingCompActions = new Map(); // /comp create and /comp edit
 
 // ---------- category metadata ----------
 const CATEGORY_ORDER = comps.CATEGORY_ORDER; // ['Tank', 'Support', 'DPS', 'Healer', 'Battlemount']
-const CATEGORY_META = {
-  Tank: { emoji: '🔵', style: ButtonStyle.Primary },
-  DPS: { emoji: '🔴', style: ButtonStyle.Danger },
-  Healer: { emoji: '🟢', style: ButtonStyle.Success },
-  Support: { emoji: '🟡', style: ButtonStyle.Secondary },
-  Battlemount: { emoji: '⚪', style: ButtonStyle.Secondary },
-};
 
-const ACTIVITY_EMOJI = {
-  CTA: '🔴',
-  'Group Dungeon': '🟣',
-  Tracking: '🟢',
-  'Ava Dungeon': '🟠',
-  Other: '⚪',
-};
-
-// ---------- custom server emoji support ----------
-// If your server has its own emojis named "tank", "dps", "healer", "support",
-// or "battlemount" (case-insensitive, animated or not), the bot will use those
-// instead of the default circle emojis below. Rename this map if you'd rather
-// use different emoji names on your server.
-const ROLE_EMOJI_NAMES = {
-  Tank: 'tank',
-  DPS: 'dps',
-  Healer: 'healer',
-  Support: 'support',
-  Battlemount: 'battlemount',
-};
-
-function findCustomRoleEmoji(guild, category) {
-  if (!guild) return null;
-  const name = ROLE_EMOJI_NAMES[category];
-  if (!name) return null;
-  try {
-    return guild.emojis.cache.find((e) => e.name && e.name.toLowerCase() === name) || null;
-  } catch {
-    return null;
-  }
-}
-
-// For embed field names / text — returns a unicode circle or a rendered
-// custom-emoji tag like <:tank:123456789012345678>
-function roleEmojiText(guild, category) {
-  const custom = findCustomRoleEmoji(guild, category);
-  return custom ? custom.toString() : CATEGORY_META[category].emoji;
-}
-
-// For ButtonBuilder#setEmoji — returns a unicode string or a {id, name} object
-function roleEmojiForButton(guild, category) {
-  const custom = findCustomRoleEmoji(guild, category);
-  return custom ? { id: custom.id, name: custom.name } : CATEGORY_META[category].emoji;
-}
-
-// ---------- embed + components builders ----------
-function buildEmbed(event, guild) {
-  const activityEmoji = ACTIVITY_EMOJI[event.type] || '🔷';
-  const embed = new EmbedBuilder()
-    .setColor(0xe74c3c)
-    .setTitle(`${activityEmoji} ${event.title}`)
-    .addFields({ name: '🕒 Time', value: event.time });
-
-  let totalSigned = 0;
-
-  // One continuous, numbered roster across every role — no per-role header,
-  // the role emoji on each row is what tells you Tank vs DPS vs Healer, etc.
-  // A "Party N" label is only shown when the comp actually has more than one
-  // party, so single-party comps look exactly as before.
-  const allRows = comps.expandAllCategoryRows(event.categories, CATEGORY_ORDER);
-  const hasMultipleParties = allRows.some((row) => row.party > 0);
-  const rosterLines = [];
-  let lastParty = null;
-  for (const row of allRows) {
-    if (row.signedUserId) totalSigned++;
-    if (hasMultipleParties && row.party !== lastParty) {
-      if (lastParty !== null) rosterLines.push('');
-      rosterLines.push(`**Party ${row.party + 1}**`);
-      lastParty = row.party;
-    }
-    const roleEmoji = roleEmojiText(guild, row.category);
-    const status = row.signedUserId ? `<@${row.signedUserId}>` : '*Open*';
-    const rowWeaponEmoji = row.emoji || '🔹';
-    const label = row.name ? `**${row.name}**` : '*Any*';
-    // Per-row "[build]" links used to live here — removed per the person's
-    // request (see part C hand-off). Use the "Ask a build" button instead.
-    // The comp-level "🔗 Builds" field below (comps.BUILDS_LINK) is a
-    // different mechanism and was intentionally left alone.
-    rosterLines.push(`${roleEmoji} - ${rowWeaponEmoji} - ${label} : ${status}`);
-  }
-
-  if (rosterLines.length > 0) {
-    embed.setDescription(rosterLines.join('\n'));
-  }
-
-  if (event.compLabel) {
-    embed.addFields({
-      name: '🔗 Builds',
-      value: `Composition: **${event.compLabel}** — see exact builds/icons on [the war ledger](${comps.BUILDS_LINK})`,
-    });
-  }
-
-  const flags = [];
-  if (event.closed) flags.push('❌ Closed');
-
-  embed.setFooter({
-    text: `${event.type} • ${totalSigned} signed up • Organized by ${event.organizerTag} • ID: ${event.id}${
-      flags.length ? ' • ' + flags.join(' • ') : ''
-    }`,
-  });
-  embed.setTimestamp(event.createdAt);
-
-  return embed;
-}
-
-function buildButtons(event, guild) {
-  // Row 1: up to 5 role buttons, one per active category (Discord's
-  // 5-buttons-per-row limit means this can't share a row with anything else
-  // once all categories in CATEGORY_ORDER are active).
-  const roleRow = new ActionRowBuilder();
-  const activeCats = CATEGORY_ORDER.filter((c) => event.categories[c]);
-
-  for (const cat of activeCats) {
-    roleRow.addComponents(
-      new ButtonBuilder()
-        .setCustomId(`event_role:${cat}:${event.id}`)
-        .setLabel(cat)
-        .setEmoji(roleEmojiForButton(guild, cat))
-        .setStyle(CATEGORY_META[cat].style)
-        .setDisabled(event.closed)
-    );
-  }
-
-  // Row 2: Leave + Ask a build. "Ask a build" stays enabled even once the
-  // event is closed — people should still be able to check gear afterward.
-  const actionRow = new ActionRowBuilder().addComponents(
-    new ButtonBuilder()
-      .setCustomId(`event_leave:${event.id}`)
-      .setLabel('Leave')
-      .setEmoji('🚪')
-      .setStyle(ButtonStyle.Danger)
-      .setDisabled(event.closed),
-    new ButtonBuilder()
-      .setCustomId(`event_askbuild:${event.id}`)
-      .setLabel('Ask a build')
-      .setEmoji('🧭')
-      .setStyle(ButtonStyle.Secondary)
-  );
-
-  return [roleRow, actionRow];
-}
+// CATEGORY_META, event-type emoji, custom role-emoji lookup, buildEmbed, and
+// buildButtons all now live in event-render.js (see the requires block at
+// the top of this file) — shared with the site's "Ping" and sign-up
+// actions. Nothing below this line changed; it just calls the imported
+// buildEmbed/buildButtons instead of locally-defined ones.
 
 // Colors match the CSS custom properties in public/css/base.css
 // (--tank, --healer, --support, --dps, --gank), hex-ified.
@@ -327,50 +186,9 @@ function buildAskBuildSelectRows(eventId, linkedRows) {
   return { actionRows, truncatedCategories };
 }
 
-function removeUserFromEvent(event, userId) {
-  for (const cat of Object.values(event.categories)) {
-    if (cat.mode === 'quota') {
-      cat.signups = cat.signups.filter((s) => s.userId !== userId);
-    } else {
-      for (const item of cat.items) {
-        const idx = item.signups.indexOf(userId);
-        if (idx !== -1) item.signups.splice(idx, 1);
-      }
-    }
-  }
-}
-
-// All distinct users currently signed up anywhere on the event.
-function getSignedUpUserIds(event) {
-  const ids = new Set();
-  for (const cat of Object.values(event.categories)) {
-    if (cat.mode === 'quota') {
-      for (const s of cat.signups) ids.add(s.userId);
-    } else {
-      for (const item of cat.items) {
-        if (item.signups[0]) ids.add(item.signups[0]);
-      }
-    }
-  }
-  return [...ids];
-}
-
-// Groups open (unsigned) slots by role, for the 30-minute reminder ping —
-// e.g. [{ category: 'Tank', missing: 2 }, { category: 'Healer', missing: 1 }].
-function getMissingRolesSummary(event) {
-  const rows = comps.expandAllCategoryRows(event.categories, CATEGORY_ORDER);
-  const counts = {};
-  for (const row of rows) {
-    if (row.signedUserId) continue;
-    counts[row.category] = (counts[row.category] || 0) + 1;
-  }
-  return CATEGORY_ORDER.filter((cat) => counts[cat] > 0).map((cat) => ({ category: cat, missing: counts[cat] }));
-}
-
-function findDahaloRole(guild) {
-  if (!guild) return null;
-  return guild.roles.cache.find((r) => r.name.toLowerCase() === 'dahalo') || null;
-}
+// removeUserFromEvent, getSignedUpUserIds, getMissingRolesSummary, and
+// findDahaloRole all now live in events-store.js / event-render.js (see the
+// requires block at the top of this file).
 
 // Shared by both the "pick no-shows" select menu and the "no no-shows"
 // button — marks the event closed, records who didn't show, updates the
@@ -403,16 +221,21 @@ async function finalizeEventClose(client, event, noShowIds, closedByUser) {
   }
 }
 
-async function updateEventMessage(client, event) {
-  const channel = await client.channels.fetch(event.channelId);
-  const message = await channel.messages.fetch(event.id);
-  await message.edit({ embeds: [buildEmbed(event, channel.guild)], components: buildButtons(event, channel.guild) });
-}
+// updateEventMessage now lives in event-render.js (see the requires block
+// at the top of this file).
 
 // ---------- client ----------
 const client = new Client({
   intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent],
 });
+
+// Hands the live client to the site's REST API (see api.js's setClient) so
+// site-triggered actions that need to touch Discord — currently just the
+// events page's "Ping" button — can post/edit messages through the same
+// bot connection, without api.js requiring index.js (which would re-run
+// this whole file as a side effect — see the note in api.js).
+require('./api.js').setClient(client);
+
 client.once(Events.ClientReady, (c) => {
   console.log(`Logged in as ${c.user.tag}`);
 
@@ -653,11 +476,15 @@ client.on(Events.InteractionCreate, async (interaction) => {
         const time = interaction.options.getString('time');
         const title = interaction.options.getString('title') || type;
         const compKey = interaction.options.getString('comp');
+        const mass = interaction.options.getString('mass');
+        const sets = interaction.options.getString('sets');
 
         const baseMeta = {
           type,
           title,
           time,
+          mass: mass || null,
+          sets: sets || null,
           organizerId: interaction.user.id,
           organizerTag: interaction.user.username,
           channelId: interaction.channelId,
@@ -838,6 +665,84 @@ client.on(Events.InteractionCreate, async (interaction) => {
         }
 
         await interaction.reply({ content, ephemeral: true });
+        return;
+      }
+
+      if (sub === 'edit') {
+        const eventId = interaction.options.getString('event_id');
+        const event = events[eventId];
+        if (!event) {
+          await interaction.reply({ content: 'No event found with that ID.', ephemeral: true });
+          return;
+        }
+
+        const isOrganizer = event.organizerId === interaction.user.id;
+        const canManage = interaction.memberPermissions?.has(PermissionFlagsBits.ManageGuild);
+        if (!isOrganizer && !canManage) {
+          await interaction.reply({
+            content: 'Only the organizer or a server manager can edit this event.',
+            ephemeral: true,
+          });
+          return;
+        }
+
+        const title = interaction.options.getString('title');
+        const time = interaction.options.getString('time');
+        const type = interaction.options.getString('type');
+        const mass = interaction.options.getString('mass');
+        const sets = interaction.options.getString('sets');
+        const compKey = interaction.options.getString('comp');
+
+        const before = { title: event.title, time: event.time, type: event.type, mass: event.mass, sets: event.sets };
+        const patch = { title, time, type };
+        if (mass !== null) patch.mass = mass;
+        if (sets !== null) patch.sets = sets;
+        eventsStore.applyMetaEdits(event, patch);
+
+        const changes = [];
+        if (event.title !== before.title) changes.push('title');
+        if (event.time !== before.time) changes.push('time');
+        if (event.type !== before.type) changes.push('type');
+        if (event.mass !== before.mass) changes.push('mass');
+        if (event.sets !== before.sets) changes.push('sets');
+
+        let dropped = [];
+        if (compKey) {
+          const result = await eventsStore.relinkComp(event, compKey);
+          if (result.error === 'comp_not_found') {
+            await interaction.reply({
+              content: "I couldn't find that saved composition — it may have been deleted. Try /comp list.",
+              ephemeral: true,
+            });
+            return;
+          }
+          dropped = result.dropped;
+          changes.push('composition');
+        }
+
+        if (changes.length === 0) {
+          await interaction.reply({ content: 'Nothing to change — pass at least one field to edit.', ephemeral: true });
+          return;
+        }
+
+        await saveEvents(events);
+        activityStore.log(logUser(interaction.user), 'event.edit', `Edited event "${event.title}" (${changes.join(', ')})`);
+
+        try {
+          await updateEventMessage(client, event);
+        } catch (e) {
+          console.error('Failed to update event message after edit', e);
+        }
+
+        let editContent = `Event \`${eventId}\` updated: ${changes.join(', ')}.`;
+        if (dropped.length > 0) {
+          const names = dropped.map((d) => `<@${d.userId}> (was **${d.name}**, ${d.category})`).join(', ');
+          editContent += `\n⚠️ ${dropped.length} sign-up${
+            dropped.length === 1 ? '' : 's'
+          } no longer had a matching slot and ${dropped.length === 1 ? 'was' : 'were'} removed: ${names}`;
+        }
+
+        await interaction.reply({ content: editContent, ephemeral: true });
         return;
       }
     }

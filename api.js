@@ -14,11 +14,33 @@ const buildsStore = require('./builds-store');
 const homeStore = require('./home-store');
 const comps = require('./comps');
 const activityStore = require('./activity-store');
+const eventsStore = require('./events-store');
+const eventRender = require('./event-render');
+const itemMap = require('./item-map');
 
 const router = express.Router();
 router.use(cookieParser());
 router.use(express.json());
 router.use(auth.attachUser);
+
+// ── DISCORD CLIENT WIRING ──────────────────────────────────────────────
+// Set once by index.js right after it creates its Client (see the comment
+// there) — this file can't require index.js directly, since index.js is the
+// process entry point and re-running it would double-start the bot/server.
+// Anything here that needs to post/edit a live Discord message (creating a
+// site event, "Ping") goes through this instead, and fails gracefully with
+// a clear error if the bot isn't connected yet rather than throwing.
+let discordClient = null;
+function setClient(client) {
+  discordClient = client;
+}
+function requireDiscordClient(res) {
+  if (!discordClient || !discordClient.isReady || !discordClient.isReady()) {
+    res.status(503).json({ error: 'The bot is still starting up — try again in a few seconds.' });
+    return null;
+  }
+  return discordClient;
+}
 
 // ── AUTH ────────────────────────────────────────────────────────────────
 
@@ -45,7 +67,7 @@ router.get('/auth/callback', async (req, res) => {
     const role = auth.roleForMember(member);
 
     if (!role) {
-      return res.status(403).send('You need an Officer or Admin role in the Discord server to access this.');
+      return res.status(403).send('You need to be a member of the Discord server to access this.');
     }
 
     auth.makeSessionCookie(res, {
@@ -200,4 +222,417 @@ router.get('/api/history', auth.requireAdmin, async (req, res) => {
   }
 });
 
+// ── EVENTS ──────────────────────────────────────────────────────────────
+// Viewing is public, same as builds — anyone with the link can see what's
+// posted. Signing up / leaving needs to be a logged-in Discord member
+// (auth.requireMember) since it records a real Discord user id. Creating,
+// editing, closing, refreshing, and pinging are officer/admin only, mirrors
+// the organizer-or-server-manager check the bot's own /event commands use.
+
+// Resolves signed-up user ids to display names via the live bot client.
+// Falls back to showing the raw id if the bot isn't connected or a lookup
+// fails — never blocks the response on this.
+async function resolveUsernames(ids) {
+  if (!discordClient || ids.length === 0) return Object.fromEntries(ids.map((id) => [id, id]));
+  const entries = await Promise.all(
+    ids.map(async (id) => {
+      try {
+        const u = await discordClient.users.fetch(id);
+        return [id, u.globalName || u.username];
+      } catch {
+        return [id, id];
+      }
+    })
+  );
+  return Object.fromEntries(entries);
+}
+
+function summarizeEvent(event) {
+  const rows = comps.expandAllCategoryRows(event.categories, eventsStore.CATEGORY_ORDER);
+  return {
+    id: event.id,
+    title: event.title,
+    type: event.type,
+    typeEmoji: eventsStore.EVENT_TYPE_EMOJI[event.type] || '🔷',
+    time: event.time,
+    mass: event.mass,
+    sets: event.sets,
+    closed: event.closed,
+    organizerTag: event.organizerTag,
+    compLabel: event.compLabel,
+    signedCount: rows.filter((r) => r.signedUserId).length,
+    totalSlots: rows.length,
+    createdAt: event.createdAt,
+  };
+}
+
+async function detailEvent(event) {
+  const rows = comps.expandAllCategoryRows(event.categories, eventsStore.CATEGORY_ORDER).map((row) => ({
+    ...row,
+    iconUrl: row.name ? itemMap.itemImageUrl(row.name) : null,
+  }));
+  const userIds = [...new Set(rows.map((r) => r.signedUserId).filter(Boolean))];
+  const usernames = await resolveUsernames(userIds);
+  const rowsWithNames = rows.map((r) => ({ ...r, signedUsername: r.signedUserId ? usernames[r.signedUserId] : null }));
+
+  // Per-category summary so the site can render a "sign up" dropdown for
+  // legacy quota-mode categories (most comps are items-mode, where each row
+  // above is already its own pickable slot).
+  const categorySummary = {};
+  for (const cat of eventsStore.CATEGORY_ORDER) {
+    const c = event.categories[cat];
+    if (!c) continue;
+    categorySummary[cat] =
+      c.mode === 'quota'
+        ? { mode: 'quota', capacity: c.capacity, weaponOptions: c.weaponOptions, signedCount: c.signups.length }
+        : { mode: 'items' };
+  }
+
+  return {
+    ...summarizeEvent(event),
+    organizerId: event.organizerId,
+    channelId: event.channelId,
+    compKey: event.compKey,
+    noShows: event.noShows || [],
+    rows: rowsWithNames,
+    categories: categorySummary,
+  };
+}
+
+router.get('/api/events', async (req, res) => {
+  try {
+    const events = await eventsStore.loadEvents();
+    const list = Object.values(events)
+      .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0))
+      .map(summarizeEvent);
+    res.json(list);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to load events.' });
+  }
+});
+
+router.get('/api/events/:id', async (req, res) => {
+  try {
+    const events = await eventsStore.loadEvents();
+    const event = events[req.params.id];
+    if (!event) return res.status(404).json({ error: 'Event not found.' });
+    res.json(await detailEvent(event));
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to load event.' });
+  }
+});
+
+// Comp picker for the create/edit forms — reuses the same officer-gated
+// comp list the compositions page already exposes.
+router.get('/api/events-comp-options', auth.requireOfficer, async (req, res) => {
+  try {
+    res.json(await comps.listComps());
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to load compositions.' });
+  }
+});
+
+// Channel picker for the create form — text-postable channels only.
+// Uses the bot token directly (same pattern as web-auth.js's guild member
+// lookup), so this works even before the live Client has finished connecting.
+router.get('/api/discord-channels', auth.requireOfficer, async (req, res) => {
+  try {
+    const discordRes = await fetch(`https://discord.com/api/v10/guilds/${process.env.GUILD_ID}/channels`, {
+      headers: { Authorization: `Bot ${process.env.DISCORD_TOKEN}` },
+    });
+    if (!discordRes.ok) throw new Error(`Discord channel lookup failed: ${discordRes.status}`);
+    const raw = await discordRes.json();
+    // type 0 = text, 5 = announcement — the only channel types a bot can
+    // post a plain message + buttons into.
+    const channels = raw.filter((c) => c.type === 0 || c.type === 5).map((c) => ({ id: c.id, name: c.name }));
+    res.json(channels);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to load channels.' });
+  }
+});
+
+router.post('/api/events', auth.requireOfficer, async (req, res) => {
+  const client = requireDiscordClient(res);
+  if (!client) return;
+
+  const { type, title, time, mass, sets, channelId, compKey, categories, compositionRaw } = req.body || {};
+  if (!type || !eventsStore.EVENT_TYPES.includes(type)) {
+    return res.status(400).json({ error: 'type must be PVP, PVE, or Economy.' });
+  }
+  if (!time || !String(time).trim()) return res.status(400).json({ error: 'time is required.' });
+  if (!channelId) return res.status(400).json({ error: 'channelId is required.' });
+  if (!compKey && !categories && !compositionRaw) {
+    return res.status(400).json({ error: 'Provide compKey, categories, or compositionRaw.' });
+  }
+
+  const meta = {
+    type,
+    title: title && title.trim() ? title.trim() : type,
+    time: String(time).trim(),
+    mass,
+    sets,
+    organizerId: req.user.id,
+    organizerTag: req.user.username,
+    channelId,
+    guildId: process.env.GUILD_ID,
+  };
+
+  let result;
+  if (compKey) {
+    result = await eventsStore.createEventFromComp({ compKey, ...meta });
+  } else if (compositionRaw) {
+    const guild = client.guilds.cache.get(process.env.GUILD_ID) || null;
+    result = eventsStore.createEventFromRawText({ compositionRaw, guild, ...meta });
+  } else {
+    result = eventsStore.createEventManual({ categories, ...meta });
+  }
+
+  if (result.error === 'comp_not_found') return res.status(400).json({ error: "That saved composition couldn't be found." });
+  if (result.error === 'empty_composition') {
+    return res.status(400).json({
+      error: "Couldn't find any items under a Tank/DPS/Healer/Support/Battlemount header — check the format.",
+    });
+  }
+
+  const event = result.event;
+  let channel;
+  try {
+    channel = await client.channels.fetch(channelId);
+    const message = await channel.send({
+      embeds: [eventRender.buildEmbed(event, channel.guild)],
+      components: eventRender.buildButtons(event, channel.guild),
+    });
+    event.id = message.id;
+  } catch (err) {
+    console.error('Failed to post site-created event to Discord', err);
+    return res.status(400).json({ error: "Couldn't post to that channel — check the bot has access to it." });
+  }
+
+  const events = await eventsStore.loadEvents();
+  events[event.id] = event;
+  await eventsStore.saveEvents(events);
+  activityStore.log(req.user, 'event.create', `Created event "${event.title}" (${event.type}) from the site`);
+  res.status(201).json(await detailEvent(event));
+});
+
+router.put('/api/events/:id', auth.requireOfficer, async (req, res) => {
+  try {
+    const events = await eventsStore.loadEvents();
+    const event = events[req.params.id];
+    if (!event) return res.status(404).json({ error: 'Event not found.' });
+
+    const { title, time, type, mass, sets, compKey, categories, compositionRaw } = req.body || {};
+    if (type && !eventsStore.EVENT_TYPES.includes(type)) {
+      return res.status(400).json({ error: 'type must be PVP, PVE, or Economy.' });
+    }
+
+    const patch = { title, time, type };
+    if (mass !== undefined) patch.mass = mass;
+    if (sets !== undefined) patch.sets = sets;
+    eventsStore.applyMetaEdits(event, patch);
+
+    let dropped = [];
+    if (compKey) {
+      const result = await eventsStore.relinkComp(event, compKey);
+      if (result.error === 'comp_not_found') return res.status(400).json({ error: "That saved composition couldn't be found." });
+      dropped = result.dropped;
+    } else if (compositionRaw) {
+      const guild = discordClient ? discordClient.guilds.cache.get(process.env.GUILD_ID) : null;
+      const result = eventsStore.applyRawTextCategories(event, compositionRaw, guild);
+      if (result.error === 'empty_composition') {
+        return res.status(400).json({ error: "Couldn't find any items under a Tank/DPS/Healer/Support/Battlemount header — check the format." });
+      }
+      dropped = result.dropped;
+    } else if (categories) {
+      const result = eventsStore.applyManualCategories(event, categories);
+      if (result.error === 'empty_composition') return res.status(400).json({ error: 'The composition has no items.' });
+      dropped = result.dropped;
+    }
+
+    await eventsStore.saveEvents(events);
+    activityStore.log(req.user, 'event.edit', `Edited event "${event.title}" from the site`);
+
+    if (discordClient) {
+      try {
+        await eventRender.updateEventMessage(discordClient, event);
+      } catch (e) {
+        console.error('Failed to update Discord message after site edit', e);
+      }
+    }
+
+    res.json({ ...(await detailEvent(event)), dropped });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to edit event.' });
+  }
+});
+
+router.post('/api/events/:id/refresh', auth.requireOfficer, async (req, res) => {
+  try {
+    const events = await eventsStore.loadEvents();
+    const event = events[req.params.id];
+    if (!event) return res.status(404).json({ error: 'Event not found.' });
+
+    const result = await eventsStore.refreshFromLinkedComp(event);
+    if (result.error === 'no_linked_comp') return res.status(400).json({ error: 'This event was not created from a saved comp.' });
+    if (result.error === 'comp_not_found') return res.status(400).json({ error: "The linked composition couldn't be found anymore." });
+
+    await eventsStore.saveEvents(events);
+    activityStore.log(req.user, 'event.refresh', `Refreshed event "${event.title}" from the site`);
+
+    if (discordClient) {
+      try {
+        await eventRender.updateEventMessage(discordClient, event);
+      } catch (e) {
+        console.error('Failed to update Discord message after site refresh', e);
+      }
+    }
+
+    res.json({ ...(await detailEvent(event)), dropped: result.dropped });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to refresh event.' });
+  }
+});
+
+router.post('/api/events/:id/close', auth.requireOfficer, async (req, res) => {
+  try {
+    const events = await eventsStore.loadEvents();
+    const event = events[req.params.id];
+    if (!event) return res.status(404).json({ error: 'Event not found.' });
+    if (event.closed) return res.status(400).json({ error: 'This event is already closed.' });
+
+    const noShowIds = Array.isArray(req.body && req.body.noShowIds) ? req.body.noShowIds : [];
+    event.closed = true;
+    event.noShows = noShowIds;
+    await eventsStore.saveEvents(events);
+    activityStore.log(
+      req.user,
+      'event.close',
+      `Closed event "${event.title}" from the site${noShowIds.length ? ` — ${noShowIds.length} no-show${noShowIds.length === 1 ? '' : 's'}` : ''}`
+    );
+
+    if (discordClient) {
+      try {
+        await eventRender.updateEventMessage(discordClient, event);
+        const channel = await discordClient.channels.fetch(event.channelId);
+        const summary = noShowIds.length > 0 ? noShowIds.map((id) => `<@${id}>`).join(', ') : '*none*';
+        await channel.send(`🔒 Event **${event.title}** closed. No-shows: ${summary}`);
+      } catch (e) {
+        console.error('Failed to update Discord after site close', e);
+      }
+    }
+
+    res.json(await detailEvent(event));
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to close event.' });
+  }
+});
+
+// Manual, immediate version of the bot's 30-minute auto-reminder — same
+// "still missing" summary, posted to the event's linked thread right away.
+router.post('/api/events/:id/ping', auth.requireOfficer, async (req, res) => {
+  const client = requireDiscordClient(res);
+  if (!client) return;
+
+  try {
+    const events = await eventsStore.loadEvents();
+    const event = events[req.params.id];
+    if (!event) return res.status(404).json({ error: 'Event not found.' });
+    if (event.closed) return res.status(400).json({ error: 'This event is closed.' });
+
+    const missing = eventsStore.getMissingRolesSummary(event);
+    if (missing.length === 0) return res.status(400).json({ error: 'Every slot is already filled.' });
+
+    let thread;
+    try {
+      thread = await client.channels.fetch(event.id);
+    } catch {
+      thread = null;
+    }
+    if (!thread || !thread.isThread || !thread.isThread()) {
+      return res.status(400).json({ error: 'No Discord thread exists for this event yet — create one from the event message first.' });
+    }
+
+    const roleMention = eventRender.findDahaloRole(thread.guild);
+    const missingText = missing.map((m) => `**${m.category}** (${m.missing} open)`).join(', ');
+    await thread.send(
+      `⏰ Reminder for **${event.title}** (${event.time}) — still missing: ${missingText}.${
+        roleMention ? ` <@&${roleMention.id}>` : ''
+      } *(pinged from the site by ${req.user.username})*`
+    );
+    res.json({ ok: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to send the reminder.' });
+  }
+});
+
+router.post('/api/events/:id/signup', auth.requireMember, async (req, res) => {
+  try {
+    const events = await eventsStore.loadEvents();
+    const event = events[req.params.id];
+    if (!event) return res.status(404).json({ error: 'Event not found.' });
+    if (event.closed) return res.status(400).json({ error: 'This event is no longer open.' });
+
+    const { category, weapon, itemIndex } = req.body || {};
+    if (!category) return res.status(400).json({ error: 'category is required.' });
+    const choice = weapon !== undefined ? { weapon } : { itemIndex };
+    const result = eventsStore.signUp(event, req.user.id, category, choice);
+    if (result.error) {
+      const messages = {
+        no_category: 'That role does not exist on this event.',
+        full: 'That slot just filled up — try another.',
+        invalid_choice: 'Invalid choice.',
+      };
+      return res.status(400).json({ error: messages[result.error] || 'Could not sign up.' });
+    }
+
+    await eventsStore.saveEvents(events);
+
+    if (discordClient) {
+      try {
+        await eventRender.updateEventMessage(discordClient, event);
+      } catch (e) {
+        console.error('Failed to update Discord message after site sign-up', e);
+      }
+    }
+
+    res.json(await detailEvent(event));
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to sign up.' });
+  }
+});
+
+router.post('/api/events/:id/leave', auth.requireMember, async (req, res) => {
+  try {
+    const events = await eventsStore.loadEvents();
+    const event = events[req.params.id];
+    if (!event) return res.status(404).json({ error: 'Event not found.' });
+
+    eventsStore.leave(event, req.user.id);
+    await eventsStore.saveEvents(events);
+
+    if (discordClient) {
+      try {
+        await eventRender.updateEventMessage(discordClient, event);
+      } catch (e) {
+        console.error('Failed to update Discord message after site leave', e);
+      }
+    }
+
+    res.json(await detailEvent(event));
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to leave event.' });
+  }
+});
+
+router.setClient = setClient;
 module.exports = router;

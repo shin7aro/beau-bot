@@ -123,6 +123,7 @@ img { max-width: 100%; display: block; }
 .auth-role-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
 .auth-role-dot.auth-role-admin { background: var(--dps); }
 .auth-role-dot.auth-role-officer { background: var(--tank); }
+.auth-role-dot.auth-role-member { background: var(--ink-faint); }
 
 /* ── AUTH DROPDOWN MENU ── */
 .auth-menu { position: relative; }

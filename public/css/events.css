@@ -1,0 +1,171 @@
+/* ─────────────────────────────────────────
+   EVENTS — public sign-up page, shared with
+   the Discord bot's /event commands. Layout
+   is loosely inspired by a roster/signup tool
+   another guild uses (info sidebar, party
+   columns, signup list) — recreated here with
+   this site's own theme, not that tool's assets.
+───────────────────────────────────────── */
+
+/* ---------- role pill (adds Battlemount to builds.css's set) ---------- */
+.role-battlemount { color: var(--cosmic); background: rgba(74,78,143,0.18); }
+
+/* ---------- event type badge ---------- */
+.event-type-badge {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 3px 9px; border-radius: 999px; font-size: 11px; font-weight: 700;
+  letter-spacing: 0.02em; text-transform: uppercase; border: 1px solid var(--line-2);
+}
+.event-type-badge.type-PVP { color: var(--dps); background: var(--dps-bg); border-color: var(--dps); }
+.event-type-badge.type-PVE { color: var(--healer); background: var(--healer-bg); border-color: var(--healer); }
+.event-type-badge.type-Economy { color: var(--support); background: var(--support-bg); border-color: var(--support); }
+
+/* ---------- LIST VIEW: event cards ---------- */
+.event-card-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 14px; padding: 4px 24px 24px;
+  overflow-y: auto; flex: 1; min-height: 0;
+}
+.event-card {
+  background: var(--surface); border: 1px solid var(--line); border-radius: 12px;
+  padding: 16px; display: flex; flex-direction: column; gap: 10px; cursor: pointer;
+  transition: border-color 0.15s, transform 0.15s;
+}
+.event-card:hover { border-color: var(--accent); transform: translateY(-1px); }
+.event-card.is-closed { opacity: 0.6; }
+.event-card-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.event-card-title { font-size: 15px; font-weight: 700; color: var(--ink); margin: 0; line-height: 1.3; }
+.event-card-meta { font-size: 12.5px; color: var(--ink-dim); display: flex; flex-direction: column; gap: 3px; }
+.event-card-meta strong { color: var(--ink); font-weight: 600; }
+.event-card-progress-wrap { display: flex; align-items: center; gap: 8px; margin-top: 2px; }
+.event-card-progress-bar { flex: 1; height: 5px; border-radius: 999px; background: var(--surface-2); overflow: hidden; }
+.event-card-progress-fill { height: 100%; background: var(--accent); border-radius: 999px; }
+.event-card-progress-label { font-size: 11px; color: var(--ink-faint); white-space: nowrap; }
+.event-card-closed-flag {
+  font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em;
+  color: var(--ink-faint); background: var(--surface-2); border-radius: 999px; padding: 2px 8px;
+  align-self: flex-start;
+}
+
+/* ---------- DETAIL VIEW ---------- */
+.event-detail-app { padding: 0 24px 24px; overflow-y: auto; }
+.event-detail-back { display: inline-flex; margin: 12px 0; }
+.event-detail-layout {
+  display: grid; grid-template-columns: 260px minmax(0, 1fr) 280px; gap: 16px; align-items: start;
+}
+
+/* -- info column -- */
+.event-info-col { display: flex; flex-direction: column; gap: 12px; position: sticky; top: 12px; }
+.event-info-card {
+  background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 16px;
+  display: flex; flex-direction: column; gap: 12px;
+}
+.event-info-title { font-size: 17px; font-weight: 700; color: var(--ink); margin: 0; line-height: 1.3; }
+.event-info-row { display: flex; flex-direction: column; gap: 2px; }
+.event-info-label { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--ink-faint); }
+.event-info-value { font-size: 13.5px; color: var(--ink-dim); }
+.event-info-value strong { color: var(--ink); }
+.event-info-card .event-type-badge { align-self: flex-start; }
+.event-comp-link { font-size: 12.5px; color: var(--accent); text-decoration: none; }
+.event-comp-link:hover { text-decoration: underline; }
+
+.event-action-row { display: flex; flex-direction: column; gap: 8px; }
+.event-action-btn {
+  display: flex; align-items: center; justify-content: center; gap: 6px;
+  background: var(--surface-2); border: 1px solid var(--line-2); border-radius: 8px;
+  color: var(--ink-dim); font: inherit; font-size: 12.5px; font-weight: 600; padding: 9px 12px; cursor: pointer;
+}
+.event-action-btn:hover { color: var(--ink); border-color: var(--accent); }
+.event-action-btn.danger:hover { color: var(--dps); border-color: var(--dps); }
+.event-action-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+
+.event-your-signup {
+  background: var(--accent-dim); border: 1px solid var(--accent); border-radius: 10px; padding: 12px;
+  display: flex; flex-direction: column; gap: 8px; font-size: 13px; color: var(--ink);
+}
+.event-your-signup button { align-self: flex-start; }
+
+/* -- roster (party columns) -- */
+.event-roster-col { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+.event-quota-section {
+  background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 14px;
+  display: flex; flex-direction: column; gap: 10px;
+}
+.event-quota-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.event-quota-row select {
+  background: var(--surface-2); border: 1px solid var(--line-2); border-radius: 7px; color: var(--ink);
+  font: inherit; font-size: 12.5px; padding: 6px 8px;
+}
+
+.event-party-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; }
+.event-party-card { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+.event-party-head {
+  padding: 10px 14px; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em;
+  color: var(--ink-faint); border-bottom: 1px solid var(--line); background: var(--surface-2);
+}
+.event-row {
+  display: flex; align-items: center; gap: 9px; padding: 9px 14px; border-bottom: 1px solid var(--line);
+  font-size: 13px; cursor: default;
+}
+.event-row:last-child { border-bottom: none; }
+.event-row-role-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.event-row-icon { width: 20px; height: 20px; object-fit: contain; flex-shrink: 0; border-radius: 3px; background: var(--surface-2); }
+.event-row-icon-fallback { width: 20px; height: 20px; display: flex; align-items: center; justify-content: center; font-size: 13px; flex-shrink: 0; }
+.event-row-name { flex: 1; color: var(--ink-dim); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.event-row-status { font-size: 12px; color: var(--ink-faint); white-space: nowrap; }
+.event-row-status.filled { color: var(--ink); font-weight: 600; }
+.event-row.is-mine { background: var(--accent-dim); }
+.event-row.is-open.can-signup { cursor: pointer; }
+.event-row.is-open.can-signup:hover { background: var(--surface-2); }
+.event-row.is-open.can-signup:hover .event-row-status { color: var(--accent); }
+
+/* -- signups column -- */
+.event-signups-col {
+  background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 14px;
+  display: flex; flex-direction: column; gap: 10px; position: sticky; top: 12px; max-height: calc(100vh - 160px); overflow-y: auto;
+}
+.event-signups-head { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em; color: var(--ink-faint); }
+.event-signup-entry { display: flex; align-items: center; gap: 8px; font-size: 12.5px; padding: 6px 0; border-bottom: 1px solid var(--line); }
+.event-signup-entry:last-child { border-bottom: none; }
+.event-signup-name { flex: 1; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.event-signup-weapon { color: var(--ink-faint); font-size: 11.5px; white-space: nowrap; }
+.event-signups-empty { color: var(--ink-faint); font-size: 12.5px; }
+
+/* ---------- CREATE/EDIT MODAL ---------- */
+.modal-overlay {
+  position: fixed; inset: 0; background: rgba(10,8,16,0.65); backdrop-filter: blur(2px);
+  display: flex; align-items: flex-start; justify-content: center; padding: 40px 16px; overflow-y: auto; z-index: 100;
+}
+.modal-card {
+  background: var(--surface); border: 1px solid var(--line-2); border-radius: 14px; padding: 22px;
+  width: 100%; max-width: 560px; display: flex; flex-direction: column; gap: 14px;
+  box-shadow: 0 16px 48px rgba(0,0,0,0.45);
+}
+.modal-card h2 { font-size: 17px; margin: 0; color: var(--ink); }
+.modal-field { display: flex; flex-direction: column; gap: 5px; }
+.modal-field label { font-size: 11.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em; color: var(--ink-faint); }
+.modal-field input, .modal-field select, .modal-field textarea {
+  background: var(--surface-2); border: 1px solid var(--line-2); border-radius: 8px; color: var(--ink);
+  font: inherit; font-size: 13px; padding: 9px 11px;
+}
+.modal-field textarea { min-height: 160px; resize: vertical; font-family: ui-monospace, 'SF Mono', Menlo, monospace; font-size: 12px; }
+.modal-field input:focus, .modal-field select:focus, .modal-field textarea:focus { outline: none; border-color: var(--accent); }
+.modal-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.modal-source-toggle { display: flex; gap: 6px; }
+.modal-source-toggle button {
+  flex: 1; background: var(--surface-2); border: 1px solid var(--line-2); border-radius: 8px;
+  color: var(--ink-dim); font: inherit; font-size: 12.5px; font-weight: 600; padding: 8px; cursor: pointer;
+}
+.modal-source-toggle button.active { border-color: var(--accent); color: var(--accent); background: var(--accent-dim); }
+.modal-hint { font-size: 11.5px; color: var(--ink-faint); line-height: 1.5; }
+.modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 4px; }
+
+@media (max-width: 900px) {
+  .event-detail-layout { grid-template-columns: 1fr; }
+  .event-info-col, .event-signups-col { position: static; max-height: none; }
+}
+@media (max-width: 640px) {
+  .event-card-grid { grid-template-columns: 1fr; padding: 4px 16px 16px; }
+  .event-detail-app { padding: 0 16px 16px; }
+  .modal-row { grid-template-columns: 1fr; }
+}

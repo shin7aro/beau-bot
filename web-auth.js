@@ -79,12 +79,15 @@ async function fetchGuildMember(userId) {
   return res.json();
 }
 
+// 'admin'/'officer' for those roles, 'member' for anyone else who's still
+// actually in the guild (so they can view + sign up for events), null only
+// if they're not a guild member at all.
 function roleForMember(member) {
   if (!member) return null;
   const roles = member.roles || [];
   if (ADMIN_ROLE_ID && roles.includes(ADMIN_ROLE_ID)) return 'admin';
   if (OFFICER_ROLE_ID && roles.includes(OFFICER_ROLE_ID)) return 'officer';
-  return null;
+  return 'member';
 }
 
 function makeSessionCookie(res, payload) {
@@ -114,6 +117,17 @@ function attachUser(req, res, next) {
   next();
 }
 
+// Any logged-in guild member — officer/admin included, since they're also
+// members. Used for actions any Discord member should be able to do on the
+// site (currently: viewing + signing up for events), as opposed to
+// requireOfficer/requireAdmin which gate management actions.
+function requireMember(req, res, next) {
+  if (!req.user) {
+    return res.status(403).json({ error: 'You need to be logged in with Discord to do that.' });
+  }
+  next();
+}
+
 function requireOfficer(req, res, next) {
   if (!req.user || (req.user.role !== 'officer' && req.user.role !== 'admin')) {
     return res.status(403).json({ error: 'Officer or admin access required.' });
@@ -138,6 +152,7 @@ module.exports = {
   makeSessionCookie,
   readSession,
   attachUser,
+  requireMember,
   requireOfficer,
   requireAdmin,
 };
