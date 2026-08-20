@@ -399,14 +399,24 @@ router.post('/api/events', auth.requireOfficer, async (req, res) => {
   }
 
   const event = result.event;
-  let channel;
+  let channel, message;
   try {
     channel = await client.channels.fetch(channelId);
-    const message = await channel.send({
+    // The embed/buttons below still have event.id === null baked into the
+    // footer text and every button's customId — a message's real id only
+    // exists after it's posted. Same two-step dance the Discord-native
+    // /event create flow already does: post once, learn the real id from
+    // the sent message, then edit it in place so the id is finally correct
+    // everywhere it's referenced.
+    message = await channel.send({
       embeds: [eventRender.buildEmbed(event, channel.guild)],
       components: eventRender.buildButtons(event, channel.guild),
     });
     event.id = message.id;
+    await message.edit({
+      embeds: [eventRender.buildEmbed(event, channel.guild)],
+      components: eventRender.buildButtons(event, channel.guild),
+    });
   } catch (err) {
     console.error('Failed to post site-created event to Discord', err);
     return res.status(400).json({ error: "Couldn't post to that channel — check the bot has access to it." });
