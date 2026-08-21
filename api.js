@@ -232,11 +232,23 @@ router.get('/api/history', auth.requireAdmin, async (req, res) => {
 // Resolves signed-up user ids to display names via the live bot client.
 // Falls back to showing the raw id if the bot isn't connected or a lookup
 // fails — never blocks the response on this.
+// Resolves each signed-up user's SERVER display name — their nickname in
+// this guild if they have one, else their global display name, else their
+// bare username — same precedence the site's login already uses for
+// organizerTag (see api.js's /auth/callback). Discord mentions (<@id>) in
+// the bot's own embed already show the server nickname automatically; this
+// is what makes the site's roster/signups match that instead of showing
+// everyone's raw Discord username.
 async function resolveUsernames(ids) {
   if (!discordClient || ids.length === 0) return Object.fromEntries(ids.map((id) => [id, id]));
+  const guild = discordClient.guilds.cache.get(process.env.GUILD_ID);
   const entries = await Promise.all(
     ids.map(async (id) => {
       try {
+        if (guild) {
+          const member = await guild.members.fetch(id);
+          return [id, member.displayName];
+        }
         const u = await discordClient.users.fetch(id);
         return [id, u.globalName || u.username];
       } catch {
@@ -338,6 +350,11 @@ router.get('/api/events-comp-options', auth.requireOfficer, async (req, res) => 
 // Channel picker for the create form — text-postable channels only.
 // Uses the bot token directly (same pattern as web-auth.js's guild member
 // lookup), so this works even before the live Client has finished connecting.
+// Only these channels are offered when creating an event from the site —
+// keeps organizers from accidentally posting an event somewhere it doesn't
+// belong. Update this list if the channel names change or more get added.
+const EVENT_CHANNEL_NAMES = ['chill-activities', 'cta', 'beau-bot-phase-de-test'];
+
 router.get('/api/discord-channels', auth.requireOfficer, async (req, res) => {
   try {
     const discordRes = await fetch(`https://discord.com/api/v10/guilds/${process.env.GUILD_ID}/channels`, {
@@ -346,8 +363,11 @@ router.get('/api/discord-channels', auth.requireOfficer, async (req, res) => {
     if (!discordRes.ok) throw new Error(`Discord channel lookup failed: ${discordRes.status}`);
     const raw = await discordRes.json();
     // type 0 = text, 5 = announcement — the only channel types a bot can
-    // post a plain message + buttons into.
-    const channels = raw.filter((c) => c.type === 0 || c.type === 5).map((c) => ({ id: c.id, name: c.name }));
+    // post a plain message + buttons into — further narrowed to just the
+    // approved event channels.
+    const channels = raw
+      .filter((c) => (c.type === 0 || c.type === 5) && EVENT_CHANNEL_NAMES.includes((c.name || '').toLowerCase()))
+      .map((c) => ({ id: c.id, name: c.name }));
     res.json(channels);
   } catch (err) {
     console.error(err);

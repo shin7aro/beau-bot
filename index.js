@@ -486,7 +486,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
           mass: mass || null,
           sets: sets || null,
           organizerId: interaction.user.id,
-          organizerTag: interaction.user.username,
+          organizerTag: interaction.member?.displayName || interaction.user.username,
           channelId: interaction.channelId,
           guildId: interaction.guildId,
           closed: false,
