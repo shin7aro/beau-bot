@@ -44,13 +44,14 @@ window.SITE_AUTH_READY = fetch('/auth/me', { credentials: 'same-origin' })
   });
 
 function renderAuthControl() {
-  const { role } = window.SITE_AUTH;
+  const { role, loggedIn } = window.SITE_AUTH;
   document.querySelectorAll('.officer-only').forEach(el => el.classList.toggle('visible', role === 'officer' || role === 'admin'));
   document.querySelectorAll('.admin-only').forEach(el => el.classList.toggle('visible', role === 'admin'));
+  document.querySelectorAll('.logged-in-only').forEach(el => el.classList.toggle('visible', loggedIn));
 
   const mount = document.getElementById('auth-control');
   if (!mount) return;
-  const { loggedIn, username, id, avatar } = window.SITE_AUTH;
+  const { username, id, avatar } = window.SITE_AUTH;
 
   if (!loggedIn) {
     mount.innerHTML = `<a class="btn" href="/auth/login?returnTo=${encodeURIComponent(location.pathname)}">

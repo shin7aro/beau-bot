@@ -327,20 +327,29 @@ function renderRosterRow(e, row) {
 // Replaces the old signups sidebar: clicking a role's name shows the build
 // linked to it (with an officer/admin-only option to link one), clicking a
 // signed-up player's name shows a small profile snippet.
-const BUILD_GEAR_FIELDS = [
-  ['weapon', 'Weapon'], ['offhand', 'Offhand'], ['head', 'Head'], ['chest', 'Chest'],
-  ['feet', 'Feet'], ['cape', 'Cape'], ['food', 'Food'], ['potion', 'Potion'],
-];
+// Same role tokens builds.js uses for the card's color bar + role pill,
+// plus battlemount (events-only category, styled in events.css) so every
+// event role has a matching color here too.
+const EVENT_ROLE_COLORS = { healer: 'var(--healer)', support: 'var(--support)', dps: 'var(--dps)', tank: 'var(--tank)', gank: 'var(--gank)', battlemount: 'var(--cosmic)' };
+const EVENT_ROLE_LABELS = { healer: 'Healer', support: 'Support', dps: 'DPS', tank: 'Tank', gank: 'Gank', battlemount: 'Battlemount' };
+// Same flag glyph as the build page's card-note-block (builds.js FLAG_SVG).
+const EVENT_FLAG_SVG = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 22V4a1 1 0 0 1 1.45-.9L19 9.5 5.45 16.4A1 1 0 0 1 4 15.5"/></svg>`;
 
-// Item-card cell for the build gear grid — same look as the build page's
-// slot cards (icon + label + name), built from the item->icon map shared
-// via js/item-map.js (imgUrl()).
+// Item-card cell for the build gear grid — identical markup to the build
+// page's own slotCard() (icon + label + name via js/item-map.js's imgUrl()),
+// just without the editable/pencil bits since this panel is read-only.
 const imgUrl = window.imgUrl;
 function renderGearSlot(label, name) {
+  if (!name && !label) return `<div class="slot-card empty spacer"></div>`;
+  if (!name) return `
+    <div class="slot-card empty">
+      <div class="slot-empty-icon"></div>
+      <div class="slot-info"><span class="slot-label">${escapeHtml(label)}</span><span class="slot-name">—</span></div>
+    </div>`;
   const url = typeof imgUrl === 'function' ? imgUrl(name) : null;
   const icon = url
-    ? `<img src="${escapeHtml(url)}" alt="" loading="lazy" style="width:44px;height:44px;border-radius:7px;border:1px solid var(--line-2);background:var(--surface-2);object-fit:contain;flex-shrink:0" onerror="this.style.opacity='0.15'">`
-    : `<div style="width:44px;height:44px;border-radius:7px;border:1px dashed var(--line-2);background:var(--bg);flex-shrink:0"></div>`;
+    ? `<img src="${escapeHtml(url)}" alt="" loading="lazy" onerror="this.style.opacity='0.15'">`
+    : `<div class="slot-empty-icon"></div>`;
   return `
     <div class="slot-card">
       ${icon}
@@ -406,15 +415,44 @@ async function showBuildPanel(cat, itemIndexStr) {
       </div>`;
   }
 
+  const roleKey = cat.toLowerCase();
+  const color = EVENT_ROLE_COLORS[roleKey] || 'var(--line-2)';
+  const roleLabel = EVENT_ROLE_LABELS[roleKey] || cat;
+
+  // Same card-header / slots-grid / card-note-block markup as the builds
+  // tab's own detail card (see builds.js select()), just read-only and
+  // followed by the event-only build-linker for officers/admins.
   col.innerHTML = `
     <div class="event-details-head">Details</div>
     <div class="event-build-panel">
-      <div class="event-build-role"><span class="role-pill role-${cat.toLowerCase()}">${escapeHtml(cat)}</span> ${escapeHtml(row.name || 'Any')}</div>
       ${build ? `
-        <div class="slots-grid event-build-slots">
-          ${BUILD_GEAR_FIELDS.filter(([key]) => build[key]).map(([key, label]) => renderGearSlot(label, build[key])).join('')}
+        <div class="card-header">
+          <div class="card-role-bar" style="background:${color}"></div>
+          <div class="card-title-row">
+            <div class="card-title">${escapeHtml(build.weapon || 'Unnamed build')}</div>
+          </div>
+          <div class="card-meta">
+            <span class="role-pill role-${roleKey}"><span class="role-pill-dot" style="background:${color}"></span>${escapeHtml(roleLabel)}</span>
+          </div>
         </div>
-        ${build.note ? `<div class="event-build-note">${escapeHtml(build.note)}</div>` : ''}` : `<p class="event-details-empty">No build linked yet.</p>`}
+        <div>
+          <div class="section-label">Build</div>
+          <div class="slots-grid event-build-slots">
+            ${renderGearSlot('', '')}
+            ${renderGearSlot('Head', build.head)}
+            ${renderGearSlot('Cape', build.cape)}
+            ${renderGearSlot('Weapon', build.weapon)}
+            ${renderGearSlot('Chest', build.chest)}
+            ${renderGearSlot('Offhand', build.offhand)}
+            ${renderGearSlot('Potion', build.potion)}
+            ${renderGearSlot('Feet', build.feet)}
+            ${renderGearSlot('Food', build.food)}
+          </div>
+        </div>
+        ${build.note ? `<div class="card-note-block">${EVENT_FLAG_SVG}<span class="card-note-text">${escapeHtml(build.note)}</span></div>` : ''}
+      ` : `
+        <div class="event-build-role"><span class="role-pill role-${roleKey}"><span class="role-pill-dot" style="background:${color}"></span>${escapeHtml(roleLabel)}</span> ${escapeHtml(row.name || 'Any')}</div>
+        <p class="event-details-empty">No build linked yet.</p>`}
       ${linkerHtml}
     </div>`;
 
@@ -426,6 +464,7 @@ async function showBuildPanel(cat, itemIndexStr) {
   // cards would just stay invisible forever. Same double-rAF timing as
   // builds.js uses, so the staggered per-card pop-in still plays here too.
   const grid = col.querySelector('.event-build-slots');
+  const header = col.querySelector('.card-header');
   if (grid) {
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
@@ -433,6 +472,7 @@ async function showBuildPanel(cat, itemIndexStr) {
       });
     });
   }
+  if (header) setTimeout(() => header.classList.add('shimmer'), 750);
 
   const saveBtn = document.getElementById('event-build-link-save');
   if (saveBtn) {
