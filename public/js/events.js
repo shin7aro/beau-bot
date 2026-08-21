@@ -295,13 +295,17 @@ function renderRosterRow(e, row) {
   const isMine = row.signedUserId === window.SITE_AUTH.id;
   const isOpen = !row.signedUserId;
   const canSignup = isOpen && !e.closed && window.SITE_AUTH.loggedIn && row.itemIndex !== undefined;
+  // Weapon icon now renders inside the name pill itself (see
+  // .event-row-name-pill in events.css) instead of as its own column, so
+  // the row is just two even halves: the name pill and the player pill.
   const icon = row.iconUrl
-    ? `<img class="event-row-icon" src="${escapeHtml(row.iconUrl)}" alt="" loading="lazy">`
-    : `<span class="event-row-icon-fallback">${emojiToHtml(row.emoji, { size: 16 })}</span>`;
+    ? `<img class="event-row-pill-icon" src="${escapeHtml(row.iconUrl)}" alt="" loading="lazy">`
+    : `<span class="event-row-pill-icon-fallback">${emojiToHtml(row.emoji, { size: 15 })}</span>`;
+  const nameLabel = `${icon}<span class="event-row-name-text">${escapeHtml(row.name || 'Any')}</span>`;
   const hasItemIndex = row.itemIndex !== undefined;
   const namePill = hasItemIndex
-    ? `<button type="button" class="event-row-name-pill role-${row.category.toLowerCase()}" data-cat="${escapeHtml(row.category)}" data-item-index="${row.itemIndex}" title="View linked build">${escapeHtml(row.name || 'Any')}</button>`
-    : `<span class="event-row-name-pill role-${row.category.toLowerCase()}">${escapeHtml(row.name || 'Any')}</span>`;
+    ? `<button type="button" class="event-row-name-pill role-${row.category.toLowerCase()}" data-cat="${escapeHtml(row.category)}" data-item-index="${row.itemIndex}" title="View linked build">${nameLabel}</button>`
+    : `<span class="event-row-name-pill role-${row.category.toLowerCase()}">${nameLabel}</span>`;
   const status = row.signedUserId
     ? `<button type="button" class="event-row-player-pill" data-user-id="${escapeHtml(row.signedUserId)}" data-cat="${escapeHtml(row.category)}" data-item-index="${row.itemIndex ?? ''}" title="View player">${escapeHtml(row.signedUsername)}</button>`
     : `<span class="event-row-status">${canSignup ? 'Open — click to sign up' : 'Open'}</span>`;
@@ -309,7 +313,6 @@ function renderRosterRow(e, row) {
   return `
     <div class="event-row${isOpen ? ' is-open' : ''}${canSignup ? ' can-signup' : ''}${isMine ? ' is-mine' : ''}"
          ${canSignup ? `data-cat="${escapeHtml(row.category)}" data-item-index="${row.itemIndex}"` : ''}>
-      ${icon}
       ${namePill}
       ${status}
     </div>`;
@@ -323,6 +326,22 @@ const BUILD_GEAR_FIELDS = [
   ['weapon', 'Weapon'], ['offhand', 'Offhand'], ['head', 'Head'], ['chest', 'Chest'],
   ['feet', 'Feet'], ['cape', 'Cape'], ['food', 'Food'], ['potion', 'Potion'],
 ];
+
+// Item-card cell for the build gear grid — same look as the build page's
+// slot cards (icon + label + name), built from the item->icon map shared
+// via js/item-map.js (imgUrl()).
+const imgUrl = window.imgUrl;
+function renderGearSlot(label, name) {
+  const url = typeof imgUrl === 'function' ? imgUrl(name) : null;
+  const icon = url
+    ? `<img src="${escapeHtml(url)}" alt="" loading="lazy" style="width:44px;height:44px;border-radius:7px;border:1px solid var(--line-2);background:var(--surface-2);object-fit:contain;flex-shrink:0" onerror="this.style.opacity='0.15'">`
+    : `<div style="width:44px;height:44px;border-radius:7px;border:1px dashed var(--line-2);background:var(--bg);flex-shrink:0"></div>`;
+  return `
+    <div class="slot-card">
+      ${icon}
+      <div class="slot-info"><span class="slot-label">${escapeHtml(label)}</span><span class="slot-name" title="${escapeHtml(name)}">${escapeHtml(name)}</span></div>
+    </div>`;
+}
 
 async function ensureAllBuildsLoaded() {
   if (allBuildsCache) return allBuildsCache;
@@ -387,11 +406,10 @@ async function showBuildPanel(cat, itemIndexStr) {
     <div class="event-build-panel">
       <div class="event-build-role"><span class="role-pill role-${cat.toLowerCase()}">${escapeHtml(cat)}</span> ${escapeHtml(row.name || 'Any')}</div>
       ${build ? `
-        <div class="event-build-gear">
-          ${BUILD_GEAR_FIELDS.filter(([key]) => build[key]).map(([key, label]) => `
-            <div class="event-build-gear-row"><span class="event-build-gear-label">${label}</span><span class="event-build-gear-value">${escapeHtml(build[key])}</span></div>`).join('')}
-          ${build.note ? `<div class="event-build-note">${escapeHtml(build.note)}</div>` : ''}
-        </div>` : `<p class="event-details-empty">No build linked yet.</p>`}
+        <div class="slots-grid event-build-slots">
+          ${BUILD_GEAR_FIELDS.filter(([key]) => build[key]).map(([key, label]) => renderGearSlot(label, build[key])).join('')}
+        </div>
+        ${build.note ? `<div class="event-build-note">${escapeHtml(build.note)}</div>` : ''}` : `<p class="event-details-empty">No build linked yet.</p>`}
       ${linkerHtml}
     </div>`;
 
