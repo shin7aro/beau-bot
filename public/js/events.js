@@ -168,12 +168,10 @@ function renderDetail() {
 
   layout.innerHTML = `
     <aside class="event-info-col" id="event-info-col"></aside>
-    <div class="event-roster-col" id="event-roster-col"></div>
-    <aside class="event-signups-col" id="event-signups-col"></aside>`;
+    <div class="event-roster-col" id="event-roster-col"></div>`;
 
   document.getElementById('event-info-col').innerHTML = renderInfoCol(e, canManage);
   document.getElementById('event-roster-col').innerHTML = renderRosterCol(e);
-  document.getElementById('event-signups-col').innerHTML = renderSignupsCol(e);
 
   wireDetailActions(canManage);
 }
@@ -193,7 +191,7 @@ function renderInfoCol(e, canManage) {
     </div>
     ${mySignedRow ? `
       <div class="event-your-signup">
-        <div>You're signed up as <strong>${escapeHtml(mySignedRow.category)}</strong> — ${mySignedRow.emoji ? mySignedRow.emoji + ' ' : ''}${escapeHtml(mySignedRow.name || 'Any')}</div>
+        <div>You're signed up as <strong>${escapeHtml(mySignedRow.category)}</strong> — ${emojiToHtml(mySignedRow.emoji, { size: 14 })} ${escapeHtml(mySignedRow.name || 'Any')}</div>
         ${!e.closed ? `<button class="event-action-btn danger" id="event-leave-btn">Leave slot</button>` : ''}
       </div>` : ''}
     ${canManage ? `
@@ -205,6 +203,28 @@ function renderInfoCol(e, canManage) {
         ${isOfficerOrAdmin() ? `<button class="event-action-btn danger" id="event-delete-btn">🗑️ Delete event</button>` : ''}
       </div>` : ''}
   `;
+}
+
+// Per-role "filled/total" counts across every party, shown as colored pills
+// at the top of the roster — replaces the old separate signups sidebar.
+function renderRoleCounterBar(e) {
+  const order = ['Tank', 'DPS', 'Healer', 'Support', 'Battlemount'];
+  const counts = {};
+  for (const row of e.rows) {
+    if (!counts[row.category]) counts[row.category] = { total: 0, filled: 0 };
+    counts[row.category].total++;
+    if (row.signedUserId) counts[row.category].filled++;
+  }
+  const active = order.filter(cat => counts[cat]);
+  if (active.length === 0) return '';
+  return `
+    <div class="event-role-counter">
+      ${active.map(cat => `
+        <span class="role-count-pill role-${cat.toLowerCase()}">
+          <span class="role-count-name">${escapeHtml(cat)}</span>
+          <span class="role-count-num">${counts[cat].filled}/${counts[cat].total}</span>
+        </span>`).join('')}
+    </div>`;
 }
 
 function renderRosterCol(e) {
@@ -240,7 +260,7 @@ function renderRosterCol(e) {
       ${parties[pk].map(row => renderRosterRow(e, row)).join('')}
     </div>`).join('')}</div>`;
 
-  return quotaHtml + partiesHtml;
+  return renderRoleCounterBar(e) + quotaHtml + partiesHtml;
 }
 
 // Discord custom emoji tags (e.g. <:perma:950504612046111823>) only mean
@@ -268,6 +288,9 @@ function renderRosterRow(e, row) {
     ? `<img class="event-row-icon" src="${escapeHtml(row.iconUrl)}" alt="" loading="lazy">`
     : `<span class="event-row-icon-fallback">${emojiToHtml(row.emoji, { size: 16 })}</span>`;
   const roleColors = { Tank: 'var(--tank)', DPS: 'var(--dps)', Healer: 'var(--healer)', Support: 'var(--support)', Battlemount: 'var(--cosmic)' };
+  const status = row.signedUserId
+    ? `<span class="event-row-player-pill">${escapeHtml(row.signedUsername)}</span>`
+    : `<span class="event-row-status">${canSignup ? 'Open — click to sign up' : 'Open'}</span>`;
 
   return `
     <div class="event-row${isOpen ? ' is-open' : ''}${canSignup ? ' can-signup' : ''}${isMine ? ' is-mine' : ''}"
@@ -275,21 +298,8 @@ function renderRosterRow(e, row) {
       <span class="event-row-role-dot" style="background:${roleColors[row.category] || 'var(--ink-faint)'}" title="${escapeHtml(row.category)}"></span>
       ${icon}
       <span class="event-row-name">${escapeHtml(row.name || 'Any')}</span>
-      <span class="event-row-status${row.signedUserId ? ' filled' : ''}">${row.signedUserId ? escapeHtml(row.signedUsername) : (canSignup ? 'Open — click to sign up' : 'Open')}</span>
+      ${status}
     </div>`;
-}
-
-function renderSignupsCol(e) {
-  const signed = e.rows.filter(r => r.signedUserId);
-  return `
-    <div class="event-signups-head">Signups · ${signed.length}</div>
-    ${signed.length === 0 ? `<div class="event-signups-empty">Nobody's signed up yet.</div>` : signed.map(r => `
-      <div class="event-signup-entry">
-        <span class="role-pill role-${r.category.toLowerCase()}" style="font-size:10px">${escapeHtml(r.category)}</span>
-        <span class="event-signup-name">${escapeHtml(r.signedUsername)}</span>
-        <span class="event-signup-weapon">${r.emoji ? emojiToHtml(r.emoji, { size: 14 }) + ' ' : ''}${escapeHtml(r.name || '')}</span>
-      </div>`).join('')}
-  `;
 }
 
 function wireDetailActions(canManage) {
