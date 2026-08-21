@@ -745,6 +745,38 @@ client.on(Events.InteractionCreate, async (interaction) => {
         await interaction.reply({ content: editContent, ephemeral: true });
         return;
       }
+
+      if (sub === 'delete') {
+        const eventId = interaction.options.getString('event_id');
+        const event = events[eventId];
+        if (!event) {
+          await interaction.reply({ content: 'No event found with that ID.', ephemeral: true });
+          return;
+        }
+
+        const isOrganizer = event.organizerId === interaction.user.id;
+        const canManage = interaction.memberPermissions?.has(PermissionFlagsBits.ManageGuild);
+        if (!isOrganizer && !canManage) {
+          await interaction.reply({
+            content: 'Only the organizer or a server manager can delete this event.',
+            ephemeral: true,
+          });
+          return;
+        }
+
+        delete events[eventId];
+        await saveEvents(events);
+        activityStore.log(logUser(interaction.user), 'event.delete', `Deleted event "${event.title}" (${event.type})`);
+
+        try {
+          await eventRender.deleteEventMessage(client, event);
+        } catch (e) {
+          console.error('Failed to delete event message', e);
+        }
+
+        await interaction.reply({ content: `Event \`${eventId}\` ("${event.title}") deleted.`, ephemeral: true });
+        return;
+      }
     }
 
     // ----- /comp create | /comp edit | /comp delete | /comp list -----
