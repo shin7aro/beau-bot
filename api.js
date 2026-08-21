@@ -311,7 +311,7 @@ async function detailEvent(event) {
   };
 }
 
-router.get('/api/events', async (req, res) => {
+router.get('/api/events', auth.requireMember, async (req, res) => {
   try {
     const events = await eventsStore.loadEvents();
     const list = Object.values(events)
@@ -324,7 +324,7 @@ router.get('/api/events', async (req, res) => {
   }
 });
 
-router.get('/api/events/:id', async (req, res) => {
+router.get('/api/events/:id', auth.requireMember, async (req, res) => {
   try {
     const events = await eventsStore.loadEvents();
     const event = events[req.params.id];
@@ -498,6 +498,54 @@ router.put('/api/events/:id', auth.requireOfficer, async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Failed to edit event.' });
+  }
+});
+
+// Links (or unlinks, if buildTab/buildId are omitted) a build to one role
+// line on THIS event only — it doesn't touch the saved composition the
+// event may have come from, same way sign-ups are event-specific. Anyone
+// can already see a linked build (see detailEvent's row.buildTab/buildId,
+// or GET /api/builds, both public); only officers/admins can change the link.
+router.put('/api/events/:id/rows/:category/:itemIndex/build', auth.requireOfficer, async (req, res) => {
+  try {
+    const events = await eventsStore.loadEvents();
+    const event = events[req.params.id];
+    if (!event) return res.status(404).json({ error: 'Event not found.' });
+
+    const catData = event.categories[req.params.category];
+    if (!catData || catData.mode !== 'items') return res.status(400).json({ error: 'Invalid category.' });
+    const idx = Number(req.params.itemIndex);
+    const item = catData.items[idx];
+    if (!item) return res.status(404).json({ error: 'Role line not found.' });
+
+    const { buildTab, buildId } = req.body || {};
+    if (buildTab && buildId !== undefined && buildId !== null) {
+      item.buildTab = buildTab;
+      item.buildId = Number(buildId);
+    } else {
+      item.buildTab = null;
+      item.buildId = null;
+    }
+
+    await eventsStore.saveEvents(events);
+    activityStore.log(
+      req.user,
+      'event.link-build',
+      `${item.buildTab ? 'Linked' : 'Unlinked'} a build for "${item.name}" (${req.params.category}) on event "${event.title}"`
+    );
+
+    if (discordClient) {
+      try {
+        await eventRender.updateEventMessage(discordClient, event);
+      } catch (e) {
+        console.error('Failed to update Discord message after build link change', e);
+      }
+    }
+
+    res.json(await detailEvent(event));
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to update the build link.' });
   }
 });
 
