@@ -83,6 +83,14 @@ const commands = [
             .setDescription('Swap in a different saved composition, keeping matching sign-ups')
             .setAutocomplete(true)
         )
+    )
+    .addSubcommand((sub) =>
+      sub
+        .setName('delete')
+        .setDescription('Delete an event entirely (organizer or server manager only) — also removes it from the site')
+        .addStringOption((opt) =>
+          opt.setName('event_id').setDescription('The event ID shown in the embed footer').setRequired(true)
+        )
     ),
   new SlashCommandBuilder()
     .setName('comp')

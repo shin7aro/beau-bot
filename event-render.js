@@ -173,6 +173,29 @@ function findDahaloRole(guild) {
   return guild.roles.cache.find((r) => r.name.toLowerCase() === 'dahalo') || null;
 }
 
+// Best-effort cleanup of the posted message (and its thread, if one was
+// created) when an event is deleted outright — used by both /event delete
+// and the site's delete button. Never throws: if the message or thread was
+// already removed manually, or the bot no longer has access, deleting the
+// event's data should still succeed regardless.
+async function deleteEventMessage(client, event) {
+  try {
+    const channel = await client.channels.fetch(event.channelId);
+    const message = await channel.messages.fetch(event.id);
+    await message.delete();
+  } catch {
+    // already gone, or the bot can't see it anymore — not fatal
+  }
+  try {
+    const thread = await client.channels.fetch(event.id);
+    if (thread && thread.isThread && thread.isThread()) {
+      await thread.delete();
+    }
+  } catch {
+    // no thread was ever created, or it's already gone
+  }
+}
+
 module.exports = {
   CATEGORY_META,
   ROLE_EMOJI_NAMES,
@@ -182,5 +205,6 @@ module.exports = {
   buildEmbed,
   buildButtons,
   updateEventMessage,
+  deleteEventMessage,
   findDahaloRole,
 };
