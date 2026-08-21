@@ -120,22 +120,25 @@ img { max-width: 100%; display: block; }
 
 .header-actions { margin-left: auto; flex-shrink: 0; display: flex; align-items: center; gap: 10px; }
 #auth-control { display: flex; align-items: center; gap: 10px; }
-.auth-role-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
-.auth-role-dot.auth-role-admin { background: var(--dps); }
-.auth-role-dot.auth-role-officer { background: var(--tank); }
-.auth-role-dot.auth-role-member { background: var(--ink-faint); }
 
 /* ── AUTH DROPDOWN MENU ── */
 .auth-menu { position: relative; }
 .auth-menu-trigger {
   display: inline-flex; align-items: center; gap: 8px;
-  padding: 8px 12px; border-radius: 8px;
+  padding: 6px 12px; border-radius: 8px;
   border: 1px solid var(--line-2); background: var(--surface-2);
   color: var(--ink); font: inherit; font-size: 12.5px; font-weight: 600;
   cursor: pointer; transition: background 0.15s, border-color 0.15s;
   min-height: 44px;
 }
 .auth-menu-trigger:hover { background: var(--surface-3); border-color: var(--accent); }
+/* Discord profile picture — the ring color still carries the role signal
+   the old plain dot used to (admin/officer/member), just around a real
+   avatar instead of next to one. */
+.auth-avatar { width: 24px; height: 24px; border-radius: 50%; object-fit: cover; flex-shrink: 0; border: 2px solid var(--ink-faint); background: var(--surface-3); }
+.auth-avatar.auth-role-admin { border-color: var(--dps); }
+.auth-avatar.auth-role-officer { border-color: var(--tank); }
+.auth-avatar.auth-role-member { border-color: var(--ink-faint); }
 .auth-menu-name { white-space: nowrap; }
 .auth-menu-caret { flex-shrink: 0; transition: transform 0.15s; }
 .auth-menu-dropdown.open + .auth-menu-trigger .auth-menu-caret,

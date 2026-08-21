@@ -127,7 +127,7 @@
   color: var(--ink-faint); border-bottom: 1px solid var(--line); background: var(--surface-2);
 }
 .event-row {
-  display: flex; align-items: center; gap: 9px; padding: 9px 14px; border-bottom: 1px solid var(--line);
+  display: flex; align-items: center; gap: 9px; padding: 5px 14px; border-bottom: 1px solid var(--line);
   font-size: 13px; cursor: default;
 }
 .event-row:last-child { border-bottom: none; }
@@ -149,9 +149,9 @@
    see .event-row-name-text / .event-row-player-pill for the matching half. */
 .event-row-name-pill {
   flex: 1 1 0; min-width: 0; display: inline-flex; align-items: center; gap: 7px;
-  text-align: left; cursor: pointer;
+  height: 28px; text-align: left; cursor: pointer;
   background: transparent; border: 1px solid; border-radius: 6px;
-  padding: 4px 10px; font-size: 12.5px; font-weight: 600;
+  padding: 0 10px; font-size: 12.5px; font-weight: 600;
 }
 span.event-row-name-pill { cursor: default; }
 .event-row-name-pill:hover { filter: brightness(1.2); }
@@ -164,9 +164,17 @@ span.event-row-name-pill { cursor: default; }
 .event-row-name-pill.role-support { background: var(--support-bg); border-color: var(--support); }
 .event-row-name-pill.role-battlemount { background: rgba(74,78,143,0.14); border-color: var(--cosmic); }
 
+/* Plain-text status ("Open — click to sign up") gets the exact same
+   padding+border footprint as the pills either side of it (just with a
+   transparent border/no fill) even though it isn't a pill itself. Without
+   this, flex-basis:0 can't make a true 50/50 split: a border-box flex item
+   can never render smaller than its own border+padding, so the pill-less
+   status always undersized itself relative to .event-row-name-pill by
+   exactly that padding+border amount (~22px), regardless of text length. */
 .event-row-status {
   flex: 1 1 0; min-width: 0; font-size: 12px; color: var(--ink-faint);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  height: 28px; line-height: 26px; padding: 0 10px; border: 1px solid transparent;
 }
 .event-row.is-mine { background: var(--accent-dim); }
 .event-row.is-open.can-signup { cursor: pointer; }
@@ -178,12 +186,13 @@ span.event-row-name-pill { cursor: default; }
    filled slot reads at a glance. flex:1 1 0 (matching .event-row-name-pill)
    keeps both halves an even 50/50 split of the row regardless of name length. */
 .event-row-player-pill {
-  display: inline-flex; align-items: center; flex: 1 1 0; min-width: 0; cursor: pointer;
+  display: inline-flex; align-items: center; gap: 6px; flex: 1 1 0; min-width: 0; height: 28px; cursor: pointer;
   background: rgba(255,255,255,0.07); border: 1px solid rgba(255,255,255,0.16); border-radius: 6px;
-  padding: 4px 10px; font-size: 12px; font-weight: 600; color: var(--ink);
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  padding: 0 10px; font-size: 12px; font-weight: 600; color: var(--ink);
 }
 .event-row-player-pill:hover { background: rgba(255,255,255,0.13); }
+.event-row-player-avatar { width: 18px; height: 18px; border-radius: 50%; object-fit: cover; flex-shrink: 0; background: var(--surface-3); }
+.event-row-player-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* -- details column (build viewer/linker, player snippet) -- */
 .event-details-col {
@@ -195,6 +204,8 @@ span.event-row-name-pill { cursor: default; }
 
 .event-build-panel, .event-player-panel { display: flex; flex-direction: column; gap: 10px; }
 .event-build-role, .event-player-role { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--ink); }
+.event-player-head { display: flex; align-items: center; gap: 12px; }
+.event-player-avatar { width: 48px; height: 48px; border-radius: 50%; object-fit: cover; flex-shrink: 0; border: 2px solid var(--line-2); background: var(--surface-3); }
 .event-player-name { font-size: 15px; font-weight: 700; color: var(--ink); }
 
 /* Gear grid — reuses builds.css's .slots-grid/.slot-card item-card look

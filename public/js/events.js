@@ -307,7 +307,10 @@ function renderRosterRow(e, row) {
     ? `<button type="button" class="event-row-name-pill role-${row.category.toLowerCase()}" data-cat="${escapeHtml(row.category)}" data-item-index="${row.itemIndex}" title="View linked build">${nameLabel}</button>`
     : `<span class="event-row-name-pill role-${row.category.toLowerCase()}">${nameLabel}</span>`;
   const status = row.signedUserId
-    ? `<button type="button" class="event-row-player-pill" data-user-id="${escapeHtml(row.signedUserId)}" data-cat="${escapeHtml(row.category)}" data-item-index="${row.itemIndex ?? ''}" title="View player">${escapeHtml(row.signedUsername)}</button>`
+    ? `<button type="button" class="event-row-player-pill" data-user-id="${escapeHtml(row.signedUserId)}" data-cat="${escapeHtml(row.category)}" data-item-index="${row.itemIndex ?? ''}" title="View player">
+        <img class="event-row-player-avatar" src="${escapeHtml(row.signedAvatarUrl || window.discordAvatarUrl(row.signedUserId, null))}" alt="" loading="lazy">
+        <span class="event-row-player-name">${escapeHtml(row.signedUsername)}</span>
+      </button>`
     : `<span class="event-row-status">${canSignup ? 'Open — click to sign up' : 'Open'}</span>`;
 
   return `
@@ -439,10 +442,14 @@ function showPlayerPanel(cat, itemIndexStr, userId) {
   const col = document.getElementById('event-details-col');
   const itemIndex = itemIndexStr === '' ? undefined : Number(itemIndexStr);
   const row = currentDetail.rows.find(r => r.category === cat && r.itemIndex === itemIndex);
+  const avatarUrl = (row && row.signedAvatarUrl) || window.discordAvatarUrl(userId, null, 128);
   col.innerHTML = `
     <div class="event-details-head">Details</div>
     <div class="event-player-panel">
-      <div class="event-player-name">${escapeHtml(row ? row.signedUsername : userId)}</div>
+      <div class="event-player-head">
+        <img class="event-player-avatar" src="${escapeHtml(avatarUrl)}" alt="" loading="lazy">
+        <div class="event-player-name">${escapeHtml(row ? row.signedUsername : userId)}</div>
+      </div>
       ${row ? `<div class="event-player-role"><span class="role-pill role-${cat.toLowerCase()}">${escapeHtml(cat)}</span> ${escapeHtml(row.name || 'Any')}</div>` : ''}
       <p class="event-details-empty">Full player profiles are coming soon — this is just a placeholder for now.</p>
     </div>`;

@@ -4,7 +4,25 @@
    exposes window.SITE_AUTH, and renders a
    login/logout control into the header.
 ───────────────────────────────────────── */
-window.SITE_AUTH = { loggedIn: false, role: null, username: null, id: null };
+window.SITE_AUTH = { loggedIn: false, role: null, username: null, id: null, avatar: null };
+
+// Builds a Discord CDN avatar URL from a user id + the avatar hash Discord
+// gave us at login (stored in the session). Falls back to Discord's own
+// default avatar (a solid-color circle with a Discord glyph) when there's
+// no hash yet, or when we're rendering an avatar for someone whose hash we
+// don't have (e.g. an events roster row before the server resolved one).
+window.discordAvatarUrl = function discordAvatarUrl(id, avatarHash, size = 64) {
+  if (avatarHash) {
+    const ext = avatarHash.startsWith('a_') ? 'gif' : 'png';
+    return `https://cdn.discordapp.com/avatars/${id}/${avatarHash}.${ext}?size=${size}`;
+  }
+  try {
+    const index = Number((BigInt(id) >> 22n) % 6n);
+    return `https://cdn.discordapp.com/embed/avatars/${index}.png`;
+  } catch {
+    return `https://cdn.discordapp.com/embed/avatars/0.png`;
+  }
+};
 
 // Resolves once /auth/me has answered — pages that need to gate content
 // (builds edit controls, the events page's manage buttons, the whole comps
@@ -13,7 +31,7 @@ window.SITE_AUTH_READY = fetch('/auth/me', { credentials: 'same-origin' })
   .then(r => r.json())
   .then(data => {
     if (data.user) {
-      window.SITE_AUTH = { loggedIn: true, role: data.user.role, username: data.user.username, id: data.user.id };
+      window.SITE_AUTH = { loggedIn: true, role: data.user.role, username: data.user.username, id: data.user.id, avatar: data.user.avatar };
     }
     renderAuthControl();
     document.dispatchEvent(new CustomEvent('site-auth-ready'));
@@ -32,7 +50,7 @@ function renderAuthControl() {
 
   const mount = document.getElementById('auth-control');
   if (!mount) return;
-  const { loggedIn, username } = window.SITE_AUTH;
+  const { loggedIn, username, id, avatar } = window.SITE_AUTH;
 
   if (!loggedIn) {
     mount.innerHTML = `<a class="btn" href="/auth/login?returnTo=${encodeURIComponent(location.pathname)}">
@@ -41,10 +59,11 @@ function renderAuthControl() {
     return;
   }
 
+  const avatarUrl = discordAvatarUrl(id, avatar, 48);
   mount.innerHTML = `
     <div class="auth-menu" id="auth-menu">
       <button class="auth-menu-trigger" id="auth-menu-trigger" type="button" aria-haspopup="true" aria-expanded="false" title="${escapeAttr(username)} — ${role}">
-        <span class="auth-role-dot auth-role-${role}"></span>
+        <img class="auth-avatar auth-role-${role}" src="${avatarUrl}" alt="" loading="lazy">
         <span class="auth-menu-name">${escapeAttr(username)}</span>
         <svg class="auth-menu-caret" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
       </button>

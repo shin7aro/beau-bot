@@ -239,20 +239,23 @@ router.get('/api/history', auth.requireAdmin, async (req, res) => {
 // the bot's own embed already show the server nickname automatically; this
 // is what makes the site's roster/signups match that instead of showing
 // everyone's raw Discord username.
-async function resolveUsernames(ids) {
-  if (!discordClient || ids.length === 0) return Object.fromEntries(ids.map((id) => [id, id]));
+// Resolves both display name and avatar URL for each Discord user ID. Uses
+// discord.js's own displayAvatarURL() (guild avatar > user avatar > Discord's
+// built-in default avatar) so we don't have to hand-roll that fallback logic.
+async function resolveUserInfo(ids) {
+  if (!discordClient || ids.length === 0) return Object.fromEntries(ids.map((id) => [id, { username: id, avatarUrl: null }]));
   const guild = discordClient.guilds.cache.get(process.env.GUILD_ID);
   const entries = await Promise.all(
     ids.map(async (id) => {
       try {
         if (guild) {
           const member = await guild.members.fetch(id);
-          return [id, member.displayName];
+          return [id, { username: member.displayName, avatarUrl: member.displayAvatarURL({ extension: 'png', size: 64 }) }];
         }
         const u = await discordClient.users.fetch(id);
-        return [id, u.globalName || u.username];
+        return [id, { username: u.globalName || u.username, avatarUrl: u.displayAvatarURL({ extension: 'png', size: 64 }) }];
       } catch {
-        return [id, id];
+        return [id, { username: id, avatarUrl: null }];
       }
     })
   );
@@ -284,8 +287,12 @@ async function detailEvent(event) {
     iconUrl: row.name ? itemMap.itemImageUrl(row.name) : null,
   }));
   const userIds = [...new Set(rows.map((r) => r.signedUserId).filter(Boolean))];
-  const usernames = await resolveUsernames(userIds);
-  const rowsWithNames = rows.map((r) => ({ ...r, signedUsername: r.signedUserId ? usernames[r.signedUserId] : null }));
+  const userInfo = await resolveUserInfo(userIds);
+  const rowsWithNames = rows.map((r) => ({
+    ...r,
+    signedUsername: r.signedUserId ? userInfo[r.signedUserId].username : null,
+    signedAvatarUrl: r.signedUserId ? userInfo[r.signedUserId].avatarUrl : null,
+  }));
 
   // Per-category summary so the site can render a "sign up" dropdown for
   // legacy quota-mode categories (most comps are items-mode, where each row
