@@ -32,11 +32,37 @@ const CATEGORY_ORDER = comps.CATEGORY_ORDER;
 const EVENT_TYPES = ['PVP', 'PVE', 'Economy'];
 const EVENT_TYPE_EMOJI = { PVP: '⚔️', PVE: '🐉', Economy: '💰' };
 
+// The bot (index.js) loads events into a long-lived in-memory object ONCE
+// at startup and mutates that same object directly for every interaction
+// afterward — it never re-reads storage on its own. If loadEvents() here
+// just re-fetched from storage on every call (as it used to), an event
+// created/edited through the site would land in storage correctly but the
+// bot's in-memory object would never find out about it — so a Discord
+// member clicking a sign-up button on a site-created event would hit
+// `events[eventId] === undefined` and get "This event is no longer open."
+//
+// The fix: cache the loaded object at the module level. Since Node caches
+// modules, index.js and api.js both get the exact same `cachedEvents`
+// object reference the first time either of them calls loadEvents() — so
+// index.js's `events` variable and every api.js route are mutating the
+// literal same object, in the same process, with no re-sync step needed.
+// saveEvents() keeps the cache and what's persisted to storage in lockstep.
+let cachedEvents = null;
+let loadingPromise = null;
+
 async function loadEvents() {
-  return storage.loadJSON(REDIS_KEY, DB_PATH);
+  if (cachedEvents) return cachedEvents;
+  if (!loadingPromise) {
+    loadingPromise = storage.loadJSON(REDIS_KEY, DB_PATH).then((data) => {
+      cachedEvents = data;
+      return cachedEvents;
+    });
+  }
+  return loadingPromise;
 }
 
 async function saveEvents(events) {
+  cachedEvents = events;
   await storage.saveJSON(REDIS_KEY, DB_PATH, events);
 }
 
