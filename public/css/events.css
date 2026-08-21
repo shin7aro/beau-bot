@@ -51,7 +51,7 @@
 .event-detail-app { padding: 0 24px 24px; overflow-y: auto; }
 .event-detail-back { display: inline-flex; margin: 12px 0; }
 .event-detail-layout {
-  display: grid; grid-template-columns: 260px minmax(0, 1fr) 280px; gap: 16px; align-items: start;
+  display: grid; grid-template-columns: 260px minmax(0, 1fr); gap: 16px; align-items: start;
 }
 
 /* -- info column -- */
@@ -87,10 +87,29 @@
 
 /* -- roster (party columns) -- */
 .event-roster-col { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+
+/* Role counter bar — replaces the old separate signups sidebar with a
+   quick-glance filled/total count per role, styled as a colored transparent
+   pill per role (reuses the same --tank/--dps/etc. tokens role-pill already
+   uses elsewhere, just with an added border for a bit more presence here). */
+.event-role-counter { display: flex; flex-wrap: wrap; gap: 8px; }
+.role-count-pill {
+  display: inline-flex; align-items: center; gap: 7px; padding: 6px 12px; border-radius: 8px;
+  font-size: 12px; font-weight: 700; border: 1px solid; white-space: nowrap;
+}
+.role-count-name { text-transform: uppercase; letter-spacing: 0.03em; }
+.role-count-num { font-weight: 800; opacity: 0.9; }
+.role-count-pill.role-tank { color: var(--tank); background: var(--tank-bg); border-color: var(--tank); }
+.role-count-pill.role-dps { color: var(--dps); background: var(--dps-bg); border-color: var(--dps); }
+.role-count-pill.role-healer { color: var(--healer); background: var(--healer-bg); border-color: var(--healer); }
+.role-count-pill.role-support { color: var(--support); background: var(--support-bg); border-color: var(--support); }
+.role-count-pill.role-battlemount { color: var(--cosmic); background: rgba(74,78,143,0.14); border-color: var(--cosmic); }
+
 .event-quota-section {
   background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 14px;
   display: flex; flex-direction: column; gap: 10px;
 }
+.event-signups-head { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em; color: var(--ink-faint); }
 .event-quota-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .event-quota-row select {
   background: var(--surface-2); border: 1px solid var(--line-2); border-radius: 7px; color: var(--ink);
@@ -119,23 +138,19 @@
 .event-emoji-img { object-fit: contain; vertical-align: middle; flex-shrink: 0; }
 .event-row-name { flex: 1; color: var(--ink-dim); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .event-row-status { font-size: 12px; color: var(--ink-faint); white-space: nowrap; }
-.event-row-status.filled { color: var(--ink); font-weight: 600; }
 .event-row.is-mine { background: var(--accent-dim); }
 .event-row.is-open.can-signup { cursor: pointer; }
 .event-row.is-open.can-signup:hover { background: var(--surface-2); }
 .event-row.is-open.can-signup:hover .event-row-status { color: var(--accent); }
 
-/* -- signups column -- */
-.event-signups-col {
-  background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 14px;
-  display: flex; flex-direction: column; gap: 10px; position: sticky; top: 12px; max-height: calc(100vh - 160px); overflow-y: auto;
+/* Signed player name — a transparent white rectangle on the right side of
+   the row, rather than plain text, so a filled slot reads at a glance. */
+.event-row-player-pill {
+  display: inline-flex; align-items: center; max-width: 160px;
+  background: rgba(255,255,255,0.07); border: 1px solid rgba(255,255,255,0.16); border-radius: 6px;
+  padding: 4px 10px; font-size: 12px; font-weight: 600; color: var(--ink);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
-.event-signups-head { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em; color: var(--ink-faint); }
-.event-signup-entry { display: flex; align-items: center; gap: 8px; font-size: 12.5px; padding: 6px 0; border-bottom: 1px solid var(--line); }
-.event-signup-entry:last-child { border-bottom: none; }
-.event-signup-name { flex: 1; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.event-signup-weapon { color: var(--ink-faint); font-size: 11.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: inline-flex; align-items: center; gap: 3px; }
-.event-signups-empty { color: var(--ink-faint); font-size: 12.5px; }
 
 /* ---------- CREATE/EDIT MODAL ---------- */
 .modal-overlay {
@@ -168,7 +183,7 @@
 
 @media (max-width: 900px) {
   .event-detail-layout { grid-template-columns: 1fr; }
-  .event-info-col, .event-signups-col { position: static; max-height: none; }
+  .event-info-col { position: static; max-height: none; }
 }
 @media (max-width: 640px) {
   .event-card-grid { grid-template-columns: 1fr; padding: 4px 16px 16px; }
