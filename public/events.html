@@ -33,8 +33,18 @@
   </div>
 </header>
 
+<!-- GATE: shown until we know the visitor is at least a logged-in Discord member -->
+<div class="wrap section" id="gate-message" style="display:none">
+  <div class="section-head">
+    <h2 class="section-title">Members only</h2>
+    <p class="section-sub">Events are for guild members — log in with your Discord account to view and sign up.</p>
+  </div>
+  <a class="cta-primary" href="/auth/login?returnTo=/events.html" style="display:inline-flex">Log in with Discord</a>
+</div>
+
 <!-- LIST VIEW -->
-<div class="app-main" id="events-list-view">
+<div class="app-main" id="events-list-view" style="display:none">
+
   <div class="controls">
     <div class="search-wrap">
       <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
