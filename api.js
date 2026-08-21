@@ -544,6 +544,36 @@ router.post('/api/events/:id/close', auth.requireOfficer, async (req, res) => {
   }
 });
 
+// Deletes an event outright — data is gone, and (best-effort) the posted
+// Discord message/thread too. Distinct from close: closing just stops new
+// sign-ups and keeps the event around for the record; delete is for
+// getting rid of it entirely, e.g. test events that shouldn't linger in
+// the events list forever just because they got closed.
+router.delete('/api/events/:id', auth.requireOfficer, async (req, res) => {
+  try {
+    const events = await eventsStore.loadEvents();
+    const event = events[req.params.id];
+    if (!event) return res.status(404).json({ error: 'Event not found.' });
+
+    delete events[req.params.id];
+    await eventsStore.saveEvents(events);
+    activityStore.log(req.user, 'event.delete', `Deleted event "${event.title}" (${event.type}) from the site`);
+
+    if (discordClient) {
+      try {
+        await eventRender.deleteEventMessage(discordClient, event);
+      } catch (e) {
+        console.error('Failed to delete Discord message after site delete', e);
+      }
+    }
+
+    res.status(204).end();
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to delete event.' });
+  }
+});
+
 // Manual, immediate version of the bot's 30-minute auto-reminder — same
 // "still missing" summary, posted to the event's linked thread right away.
 router.post('/api/events/:id/ping', auth.requireOfficer, async (req, res) => {
