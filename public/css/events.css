@@ -91,8 +91,14 @@
 /* Role counter bar — replaces the old separate signups sidebar with a
    quick-glance filled/total count per role, styled as a colored transparent
    pill per role (reuses the same --tank/--dps/etc. tokens role-pill already
-   uses elsewhere, just with an added border for a bit more presence here). */
-.event-role-counter { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+   uses elsewhere, just with an added border for a bit more presence here).
+   Rendered as its own full-width row spanning every column of
+   .event-detail-layout (rather than living inside .event-roster-col) so its
+   left edge lines up with the "Back to events" button/info column above it,
+   and its pills can be centered across the whole page instead of just the
+   middle roster column. */
+.event-role-counter-row { grid-column: 1 / -1; }
+.event-role-counter { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 8px; }
 .role-count-total {
   font-size: 13px; font-weight: 700; color: var(--ink); padding: 6px 10px;
   background: var(--surface-2); border: 1px solid var(--line-2); border-radius: 8px; white-space: nowrap;
@@ -212,7 +218,14 @@ span.event-row-name-pill { cursor: default; }
    (icon + label + name), just scaled down a notch for this narrower
    sidebar column instead of the full build-page detail pane. */
 .event-build-slots.slots-grid { grid-template-columns: repeat(3, 1fr); gap: 8px; }
-.event-build-slots .slot-card { min-height: 92px; padding: 10px 6px; gap: 6px; }
+/* Grid items default to an automatic min-width based on their content's
+   min-content size — here that's .slot-name's un-wrapped text (e.g.
+   "Avalonian Omelette"), which is wider than this sidebar's 1fr columns
+   can offer. The build page's own .slots-grid never hits this because its
+   container is much wider; this narrower sidebar needs the explicit
+   min-width:0 override so cards actually shrink to their column instead of
+   blowing out the grid (and with it the whole details column) sideways. */
+.event-build-slots .slot-card { min-height: 92px; padding: 10px 6px; gap: 6px; min-width: 0; }
 .event-build-note { font-size: 12px; color: var(--ink-dim); font-style: italic; padding-top: 4px; }
 
 .event-build-linker { display: flex; flex-direction: column; gap: 8px; padding-top: 8px; border-top: 1px solid var(--line); }

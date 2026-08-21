@@ -175,10 +175,12 @@ function renderDetail() {
   const canManage = isOfficerOrAdmin() || (window.SITE_AUTH.loggedIn && window.SITE_AUTH.id === e.organizerId);
 
   layout.innerHTML = `
+    <div class="event-role-counter-row" id="event-role-counter-row"></div>
     <aside class="event-info-col" id="event-info-col"></aside>
     <div class="event-roster-col" id="event-roster-col"></div>
     <aside class="event-details-col" id="event-details-col"></aside>`;
 
+  document.getElementById('event-role-counter-row').innerHTML = renderRoleCounterBar(e);
   document.getElementById('event-info-col').innerHTML = renderInfoCol(e, canManage);
   document.getElementById('event-roster-col').innerHTML = renderRosterCol(e);
   renderDetailsPanelPlaceholder();
@@ -271,7 +273,7 @@ function renderRosterCol(e) {
       ${parties[pk].map(row => renderRosterRow(e, row)).join('')}
     </div>`).join('')}</div>`;
 
-  return renderRoleCounterBar(e) + quotaHtml + partiesHtml;
+  return quotaHtml + partiesHtml;
 }
 
 // Discord custom emoji tags (e.g. <:perma:950504612046111823>) only mean
@@ -415,6 +417,22 @@ async function showBuildPanel(cat, itemIndexStr) {
         ${build.note ? `<div class="event-build-note">${escapeHtml(build.note)}</div>` : ''}` : `<p class="event-details-empty">No build linked yet.</p>`}
       ${linkerHtml}
     </div>`;
+
+  // The slot-card entrance animation (see .slots-grid .slot-card / .revealed
+  // in builds.css) starts every card at opacity:0 and only reveals them once
+  // JS adds .revealed to the grid — normally done by the build page's own
+  // reveal step. This panel builds the same markup directly via
+  // renderGearSlot() without going through that step, so without this the
+  // cards would just stay invisible forever. Same double-rAF timing as
+  // builds.js uses, so the staggered per-card pop-in still plays here too.
+  const grid = col.querySelector('.event-build-slots');
+  if (grid) {
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        grid.classList.add('revealed');
+      });
+    });
+  }
 
   const saveBtn = document.getElementById('event-build-link-save');
   if (saveBtn) {
