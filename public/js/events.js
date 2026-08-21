@@ -202,6 +202,7 @@ function renderInfoCol(e, canManage) {
         ${e.compKey ? `<button class="event-action-btn" id="event-refresh-btn">🔄 Refresh from comp</button>` : ''}
         ${!e.closed ? `<button class="event-action-btn" id="event-ping-btn">⏰ Ping thread</button>` : ''}
         ${!e.closed ? `<button class="event-action-btn danger" id="event-close-btn">🔒 Close event</button>` : ''}
+        ${isOfficerOrAdmin() ? `<button class="event-action-btn danger" id="event-delete-btn">🗑️ Delete event</button>` : ''}
       </div>` : ''}
   `;
 }
@@ -317,6 +318,8 @@ function wireDetailActions(canManage) {
   if (pingBtn) pingBtn.addEventListener('click', handlePing);
   const closeBtn = document.getElementById('event-close-btn');
   if (closeBtn) closeBtn.addEventListener('click', openCloseForm);
+  const deleteBtn = document.getElementById('event-delete-btn');
+  if (deleteBtn) deleteBtn.addEventListener('click', handleDelete);
 }
 
 /* ---------- sign-up / leave ---------- */
@@ -385,6 +388,18 @@ async function handlePing() {
     showToast('Reminder sent.');
   } catch (err) {
     showToast('Failed to ping: ' + err.message);
+  }
+}
+
+async function handleDelete() {
+  const e = currentDetail;
+  if (!confirm(`Delete "${e.title}"? This removes it (and its Discord message) entirely and can't be undone.`)) return;
+  try {
+    await api(`/api/events/${encodeURIComponent(e.id)}`, { method: 'DELETE' });
+    showToast('Event deleted.');
+    closeDetail();
+  } catch (err) {
+    showToast('Failed to delete: ' + err.message);
   }
 }
 
