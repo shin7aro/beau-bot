@@ -19,6 +19,8 @@ let searchStr = '';
 let currentDetail = null;  // full detail object from GET /api/events/:id
 let channelsCache = null;  // officer only, lazy-loaded
 let compOptionsCache = null; // officer only, lazy-loaded
+let allBuildsCache = null;      // public, lazy-loaded — full builds by tab, for the details panel
+let buildLinkOptionsCache = null; // officer only, lazy-loaded — flat [{tab,index,role,weapon}] for the "link a build" picker
 let formCompSource = 'comp'; // 'comp' | 'manual', for the create/edit form
 
 function escapeHtml(s) {
@@ -53,6 +55,12 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 async function init() {
+  if (!isLoggedIn()) {
+    document.getElementById('gate-message').style.display = '';
+    return;
+  }
+  document.getElementById('events-list-view').style.display = '';
+
   wireListControls();
   wireModalOverlay();
   document.getElementById('event-back-btn').addEventListener('click', closeDetail);
@@ -168,10 +176,12 @@ function renderDetail() {
 
   layout.innerHTML = `
     <aside class="event-info-col" id="event-info-col"></aside>
-    <div class="event-roster-col" id="event-roster-col"></div>`;
+    <div class="event-roster-col" id="event-roster-col"></div>
+    <aside class="event-details-col" id="event-details-col"></aside>`;
 
   document.getElementById('event-info-col').innerHTML = renderInfoCol(e, canManage);
   document.getElementById('event-roster-col').innerHTML = renderRosterCol(e);
+  renderDetailsPanelPlaceholder();
 
   wireDetailActions(canManage);
 }
@@ -205,24 +215,25 @@ function renderInfoCol(e, canManage) {
   `;
 }
 
-// Per-role "filled/total" counts across every party, shown as colored pills
-// at the top of the roster — replaces the old separate signups sidebar.
+// Total signups plus a per-role filled count, shown as colored pills at the
+// top of the roster — replaces the old separate signups sidebar.
 function renderRoleCounterBar(e) {
   const order = ['Tank', 'DPS', 'Healer', 'Support', 'Battlemount'];
   const counts = {};
+  let totalFilled = 0;
   for (const row of e.rows) {
-    if (!counts[row.category]) counts[row.category] = { total: 0, filled: 0 };
-    counts[row.category].total++;
-    if (row.signedUserId) counts[row.category].filled++;
+    if (!counts[row.category]) counts[row.category] = 0;
+    if (row.signedUserId) { counts[row.category]++; totalFilled++; }
   }
-  const active = order.filter(cat => counts[cat]);
+  const active = order.filter(cat => counts[cat] !== undefined);
   if (active.length === 0) return '';
   return `
     <div class="event-role-counter">
+      <span class="role-count-total">${totalFilled} Signup${totalFilled === 1 ? '' : 's'}</span>
       ${active.map(cat => `
         <span class="role-count-pill role-${cat.toLowerCase()}">
           <span class="role-count-name">${escapeHtml(cat)}</span>
-          <span class="role-count-num">${counts[cat].filled}/${counts[cat].total}</span>
+          <span class="role-count-num">${counts[cat]}</span>
         </span>`).join('')}
     </div>`;
 }
@@ -287,25 +298,142 @@ function renderRosterRow(e, row) {
   const icon = row.iconUrl
     ? `<img class="event-row-icon" src="${escapeHtml(row.iconUrl)}" alt="" loading="lazy">`
     : `<span class="event-row-icon-fallback">${emojiToHtml(row.emoji, { size: 16 })}</span>`;
-  const roleColors = { Tank: 'var(--tank)', DPS: 'var(--dps)', Healer: 'var(--healer)', Support: 'var(--support)', Battlemount: 'var(--cosmic)' };
+  const hasItemIndex = row.itemIndex !== undefined;
+  const namePill = hasItemIndex
+    ? `<button type="button" class="event-row-name-pill role-${row.category.toLowerCase()}" data-cat="${escapeHtml(row.category)}" data-item-index="${row.itemIndex}" title="View linked build">${escapeHtml(row.name || 'Any')}</button>`
+    : `<span class="event-row-name-pill role-${row.category.toLowerCase()}">${escapeHtml(row.name || 'Any')}</span>`;
   const status = row.signedUserId
-    ? `<span class="event-row-player-pill">${escapeHtml(row.signedUsername)}</span>`
+    ? `<button type="button" class="event-row-player-pill" data-user-id="${escapeHtml(row.signedUserId)}" data-cat="${escapeHtml(row.category)}" data-item-index="${row.itemIndex ?? ''}" title="View player">${escapeHtml(row.signedUsername)}</button>`
     : `<span class="event-row-status">${canSignup ? 'Open — click to sign up' : 'Open'}</span>`;
 
   return `
     <div class="event-row${isOpen ? ' is-open' : ''}${canSignup ? ' can-signup' : ''}${isMine ? ' is-mine' : ''}"
          ${canSignup ? `data-cat="${escapeHtml(row.category)}" data-item-index="${row.itemIndex}"` : ''}>
-      <span class="event-row-role-dot" style="background:${roleColors[row.category] || 'var(--ink-faint)'}" title="${escapeHtml(row.category)}"></span>
       ${icon}
-      <span class="event-row-name">${escapeHtml(row.name || 'Any')}</span>
+      ${namePill}
       ${status}
     </div>`;
 }
 
-function wireDetailActions(canManage) {
-  const leaveBtn = document.getElementById('event-leave-btn');
-  if (leaveBtn) leaveBtn.addEventListener('click', handleLeave);
+/* ---------- details panel (build view/link, player snippet) ---------- */
+// Replaces the old signups sidebar: clicking a role's name shows the build
+// linked to it (with an officer/admin-only option to link one), clicking a
+// signed-up player's name shows a small profile snippet.
+const BUILD_GEAR_FIELDS = [
+  ['weapon', 'Weapon'], ['offhand', 'Offhand'], ['head', 'Head'], ['chest', 'Chest'],
+  ['feet', 'Feet'], ['cape', 'Cape'], ['food', 'Food'], ['potion', 'Potion'],
+];
 
+async function ensureAllBuildsLoaded() {
+  if (allBuildsCache) return allBuildsCache;
+  allBuildsCache = await api('/api/builds');
+  return allBuildsCache;
+}
+
+async function ensureBuildLinkOptionsLoaded() {
+  if (buildLinkOptionsCache) return buildLinkOptionsCache;
+  buildLinkOptionsCache = await api('/api/comps-build-options');
+  return buildLinkOptionsCache;
+}
+
+function renderDetailsPanelPlaceholder() {
+  const col = document.getElementById('event-details-col');
+  if (!col) return;
+  col.innerHTML = `
+    <div class="event-details-head">Details</div>
+    <p class="event-details-empty">Click a role to see its linked build, or a player's name to see their profile.</p>`;
+}
+
+async function showBuildPanel(cat, itemIndexStr) {
+  const col = document.getElementById('event-details-col');
+  const itemIndex = itemIndexStr === '' ? undefined : Number(itemIndexStr);
+  const row = currentDetail.rows.find(r => r.category === cat && r.itemIndex === itemIndex);
+  if (!row) return;
+
+  col.innerHTML = `<div class="event-details-head">Details</div><p class="event-details-empty">Loading build…</p>`;
+
+  let build = null;
+  if (row.buildTab && row.buildId != null) {
+    try {
+      const all = await ensureAllBuildsLoaded();
+      build = (all[row.buildTab] || [])[row.buildId] || null;
+    } catch (err) {
+      showToast('Failed to load build: ' + err.message);
+    }
+  }
+
+  const canManage = isOfficerOrAdmin();
+  let linkerHtml = '';
+  if (canManage) {
+    let options = [];
+    try {
+      options = await ensureBuildLinkOptionsLoaded();
+    } catch {
+      options = [];
+    }
+    const roleOptions = options.filter(o => o.role && o.role.toLowerCase() === cat.toLowerCase());
+    linkerHtml = `
+      <div class="event-build-linker">
+        <select class="event-build-link-select">
+          <option value="">No build</option>
+          ${roleOptions.map(o => `<option value="${o.tab}:${o.index}" ${build && row.buildTab === o.tab && row.buildId === o.index ? 'selected' : ''}>${escapeHtml(o.weapon)}</option>`).join('')}
+        </select>
+        <button type="button" class="event-action-btn" id="event-build-link-save">${build ? 'Change' : 'Link build'}</button>
+      </div>`;
+  }
+
+  col.innerHTML = `
+    <div class="event-details-head">Details</div>
+    <div class="event-build-panel">
+      <div class="event-build-role"><span class="role-pill role-${cat.toLowerCase()}">${escapeHtml(cat)}</span> ${escapeHtml(row.name || 'Any')}</div>
+      ${build ? `
+        <div class="event-build-gear">
+          ${BUILD_GEAR_FIELDS.filter(([key]) => build[key]).map(([key, label]) => `
+            <div class="event-build-gear-row"><span class="event-build-gear-label">${label}</span><span class="event-build-gear-value">${escapeHtml(build[key])}</span></div>`).join('')}
+          ${build.note ? `<div class="event-build-note">${escapeHtml(build.note)}</div>` : ''}
+        </div>` : `<p class="event-details-empty">No build linked yet.</p>`}
+      ${linkerHtml}
+    </div>`;
+
+  const saveBtn = document.getElementById('event-build-link-save');
+  if (saveBtn) {
+    saveBtn.addEventListener('click', async () => {
+      const select = col.querySelector('.event-build-link-select');
+      const value = select.value;
+      const body = value ? { buildTab: value.split(':')[0], buildId: Number(value.split(':')[1]) } : {};
+      try {
+        currentDetail = await api(
+          `/api/events/${encodeURIComponent(currentDetail.id)}/rows/${encodeURIComponent(cat)}/${itemIndex}/build`,
+          { method: 'PUT', body: JSON.stringify(body) }
+        );
+        document.getElementById('event-roster-col').innerHTML = renderRosterCol(currentDetail);
+        wireRosterActions();
+        showBuildPanel(cat, itemIndexStr);
+        showToast(value ? 'Build linked.' : 'Build unlinked.');
+      } catch (err) {
+        showToast('Failed to update build link: ' + err.message);
+      }
+    });
+  }
+}
+
+function showPlayerPanel(cat, itemIndexStr, userId) {
+  const col = document.getElementById('event-details-col');
+  const itemIndex = itemIndexStr === '' ? undefined : Number(itemIndexStr);
+  const row = currentDetail.rows.find(r => r.category === cat && r.itemIndex === itemIndex);
+  col.innerHTML = `
+    <div class="event-details-head">Details</div>
+    <div class="event-player-panel">
+      <div class="event-player-name">${escapeHtml(row ? row.signedUsername : userId)}</div>
+      ${row ? `<div class="event-player-role"><span class="role-pill role-${cat.toLowerCase()}">${escapeHtml(cat)}</span> ${escapeHtml(row.name || 'Any')}</div>` : ''}
+      <p class="event-details-empty">Full player profiles are coming soon — this is just a placeholder for now.</p>
+    </div>`;
+}
+
+// Roster-col listeners only — safe to re-run after a partial roster-col
+// refresh (e.g. after linking a build) without touching the info column's
+// buttons, which weren't recreated and would otherwise get double-bound.
+function wireRosterActions() {
   document.querySelectorAll('.event-row.can-signup').forEach(row => {
     row.addEventListener('click', () => handleSignup(row.dataset.cat, Number(row.dataset.itemIndex)));
   });
@@ -319,6 +447,26 @@ function wireDetailActions(canManage) {
     });
   });
 
+  document.querySelectorAll('.event-row-name-pill[data-item-index]').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      showBuildPanel(btn.dataset.cat, btn.dataset.itemIndex);
+    });
+  });
+  document.querySelectorAll('.event-row-player-pill').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      showPlayerPanel(btn.dataset.cat, btn.dataset.itemIndex, btn.dataset.userId);
+    });
+  });
+}
+
+// Info-col listeners — only meaningful right after a full renderDetail(),
+// since these buttons only exist in the info column.
+function wireInfoActions(canManage) {
+  const leaveBtn = document.getElementById('event-leave-btn');
+  if (leaveBtn) leaveBtn.addEventListener('click', handleLeave);
+
   if (!canManage) return;
   const editBtn = document.getElementById('event-edit-btn');
   if (editBtn) editBtn.addEventListener('click', () => openEventForm('edit'));
@@ -330,6 +478,11 @@ function wireDetailActions(canManage) {
   if (closeBtn) closeBtn.addEventListener('click', openCloseForm);
   const deleteBtn = document.getElementById('event-delete-btn');
   if (deleteBtn) deleteBtn.addEventListener('click', handleDelete);
+}
+
+function wireDetailActions(canManage) {
+  wireRosterActions();
+  wireInfoActions(canManage);
 }
 
 /* ---------- sign-up / leave ---------- */
