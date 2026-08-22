@@ -362,6 +362,17 @@ router.get('/api/events-comp-options', auth.requireOfficer, async (req, res) => 
 // belong. Update this list if the channel names change or more get added.
 const EVENT_CHANNEL_NAMES = ['chill-activities', 'cta', 'beau-bot-phase-de-test'];
 
+// Discord's per-channel emoji icon (set via right-click a channel > Edit
+// Channel > pick an emoji) isn't cosmetic-only — it's actually prepended
+// straight into the channel's `name` string the API returns, e.g.
+// "🎙chill-activities" instead of "chill-activities". Strip any leading
+// run of non-alphanumeric characters before comparing so a channel that
+// has one of these icons set still matches its plain name in the list
+// above, instead of silently failing an exact-string match.
+function stripLeadingChannelIcon(name) {
+  return String(name || '').toLowerCase().replace(/^[^a-z0-9]+/, '');
+}
+
 router.get('/api/discord-channels', auth.requireOfficer, async (req, res) => {
   try {
     const discordRes = await fetch(`https://discord.com/api/v10/guilds/${process.env.GUILD_ID}/channels`, {
@@ -373,7 +384,7 @@ router.get('/api/discord-channels', auth.requireOfficer, async (req, res) => {
     // post a plain message + buttons into — further narrowed to just the
     // approved event channels.
     const channels = raw
-      .filter((c) => (c.type === 0 || c.type === 5) && EVENT_CHANNEL_NAMES.includes((c.name || '').toLowerCase()))
+      .filter((c) => (c.type === 0 || c.type === 5) && EVENT_CHANNEL_NAMES.includes(stripLeadingChannelIcon(c.name)))
       .map((c) => ({ id: c.id, name: c.name }));
     res.json(channels);
   } catch (err) {
