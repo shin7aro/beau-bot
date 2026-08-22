@@ -75,7 +75,10 @@ function removeUserFromEvent(event, userId) {
     } else {
       for (const item of cat.items) {
         const idx = item.signups.indexOf(userId);
-        if (idx !== -1) item.signups.splice(idx, 1);
+        if (idx !== -1) {
+          item.signups.splice(idx, 1);
+          if (item.options) item.signedOptionIndex = null;
+        }
       }
     }
   }
@@ -284,6 +287,19 @@ function signUp(event, userId, category, choice) {
   const idx = choice && choice.itemIndex;
   const item = catData.items[idx];
   if (!item || item.signups.length >= 1) return { error: 'full' };
+
+  // Multi-choice line — the caller must say which of the item's options
+  // they're taking (see comps.js's itemLabel/itemSignature for how these
+  // are shaped). Single-choice items ignore optionIndex entirely.
+  if (item.options) {
+    const optionIndex = choice && Number.isInteger(choice.optionIndex) ? choice.optionIndex : null;
+    if (optionIndex === null || !item.options[optionIndex]) return { error: 'invalid_choice' };
+    removeUserFromEvent(event, userId);
+    item.signups.push(userId);
+    item.signedOptionIndex = optionIndex;
+    return { ok: true, label: item.options[optionIndex].name };
+  }
+
   removeUserFromEvent(event, userId);
   item.signups.push(userId);
   return { ok: true, label: item.name };
@@ -291,7 +307,10 @@ function signUp(event, userId, category, choice) {
 
 // Returns what a caller needs to either sign up directly (one option) or
 // present a choice (multiple options) — shared by the Discord button
-// handler and the site's "sign up" click.
+// handler and the site's "sign up" click. This is about which SLOT
+// (row/item) to sign into when more than one is open — a separate concern
+// from which WEAPON to take on a multi-choice item, which the caller
+// finds out about via row.options and handles as its own follow-up step.
 function signUpChoices(event, category) {
   const catData = event.categories[category];
   if (!catData) return { error: 'no_category' };
@@ -306,11 +325,14 @@ function signUpChoices(event, category) {
   if (availableIndexes.length === 0) return { error: 'full' };
   if (availableIndexes.length === 1) return { direct: { itemIndex: availableIndexes[0] } };
   return {
-    options: availableIndexes.map((idx) => ({
-      value: String(idx),
-      label: catData.items[idx].name,
-      emoji: catData.items[idx].emoji || null,
-    })),
+    options: availableIndexes.map((idx) => {
+      const item = catData.items[idx];
+      return {
+        value: String(idx),
+        label: comps.itemLabel(item),
+        emoji: item.options ? item.options[0].emoji || null : item.emoji || null,
+      };
+    }),
   };
 }
 

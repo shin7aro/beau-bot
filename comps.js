@@ -77,6 +77,41 @@ function resolveEmojiToken(token, guild) {
 // backward compatible with comps saved before this feature existed).
 const PARTY_HEADER_RE = /^party\b/i;
 
+// A single roster line can offer more than one acceptable weapon —
+// "⚔️ Carving Sword / ⚔️ Spirithunter" — written as multiple "emoji Name"
+// segments separated by " / ". Stored as item.options (instead of a single
+// name/emoji) so the player (or an officer assigning them) picks exactly
+// one when they take the slot; item.signedOptionIndex records which one
+// the current occupant chose. Per-option build linking isn't supported —
+// only single-choice lines can link a build for now.
+function parseWeaponSegment(segStr, guild) {
+  let seg = segStr.trim();
+  let emoji = null;
+  const m = seg.match(EMOJI_PREFIX_RE);
+  if (m) {
+    emoji = resolveEmojiToken(m[1], guild);
+    seg = m[2].trim();
+  }
+  return { name: seg, emoji };
+}
+
+// Display label for an item regardless of shape — "Carving Sword" for a
+// normal line, "Carving Sword/Spirithunter" for a multi-choice one. Used
+// anywhere a plain item.name reference used to be safe to assume.
+function itemLabel(item) {
+  if (!item) return '';
+  return item.options ? item.options.map((o) => o.name).join('/') : item.name || '';
+}
+
+// A stable signature for matching the "same slot" across a comp edit/
+// refresh — same idea as the old (name, emoji) comparison, just aware
+// multi-choice items have no single name/emoji of their own.
+function itemSignature(item) {
+  return item.options
+    ? 'multi:' + item.options.map((o) => `${o.emoji || ''}\u0000${o.name}`).join('\u0001')
+    : `single:${item.emoji || ''}\u0000${item.name}`;
+}
+
 function parseComposition(raw, guild) {
   const lines = raw
     .split('\n')
@@ -106,6 +141,22 @@ function parseComposition(raw, guild) {
     if (!current) continue; // ignore stray lines before the first category header
     if (!grouped[current]) grouped[current] = [];
 
+    const party = partyIndex === -1 ? 0 : partyIndex;
+
+    // Multi-choice line: "emoji Name / emoji Name / ..." — two or more
+    // slash-separated weapon segments on one line, all filling the same
+    // single slot.
+    if (line.includes('/')) {
+      const segments = line.split('/').map((s) => s.trim()).filter(Boolean);
+      const options = segments.map((seg) => parseWeaponSegment(seg, guild)).filter((o) => o.name);
+      if (options.length >= 2) {
+        grouped[current].push({ options, party, signups: [], signedOptionIndex: null });
+        continue;
+      }
+      // fewer than 2 valid segments somehow — fall through to normal
+      // single-line parsing below instead of dropping the line.
+    }
+
     let emoji = null;
     let rest = line;
     const emojiMatch = line.match(EMOJI_PREFIX_RE);
@@ -122,8 +173,6 @@ function parseComposition(raw, guild) {
       count = Math.max(1, parseInt(match[2], 10));
     }
     if (!name) continue;
-
-    const party = partyIndex === -1 ? 0 : partyIndex;
 
     // Expand "Name: N" into N separate one-slot lines, so duplicates never
     // need a merged counter — the display just repeats the row.
@@ -164,9 +213,16 @@ function stringifyComposition(categories) {
       let i = 0;
       while (i < itemsInParty.length) {
         const item = itemsInParty[i];
+        if (item.options) {
+          const prefix = (o) => (o.emoji ? `${o.emoji} ${o.name}` : o.name);
+          lines.push(item.options.map(prefix).join(' / '));
+          i += 1;
+          continue;
+        }
         let count = 1;
         while (
           i + count < itemsInParty.length &&
+          !itemsInParty[i + count].options &&
           itemsInParty[i + count].name === item.name &&
           itemsInParty[i + count].emoji === item.emoji
         ) {
@@ -206,8 +262,10 @@ function expandCategoryRows(catData, startNumber = 1) {
     rows.push({
       rowNumber: startNumber + rows.length,
       itemIndex,
-      name: item.name,
-      emoji: item.emoji || null,
+      name: item.options ? null : item.name,
+      emoji: item.options ? null : item.emoji || null,
+      options: item.options || null,
+      signedOptionIndex: item.options ? item.signedOptionIndex ?? null : null,
       signedUserId: item.signups[0] || null,
       buildId: item.buildId ?? null,
       buildTab: item.buildTab ?? null,
@@ -268,8 +326,10 @@ function expandAllCategoryRows(categories, categoryOrder = CATEGORY_ORDER) {
           party: p,
           category: cat,
           itemIndex,
-          name: item.name,
-          emoji: item.emoji || null,
+          name: item.options ? null : item.name,
+          emoji: item.options ? null : item.emoji || null,
+          options: item.options || null,
+          signedOptionIndex: item.options ? item.signedOptionIndex ?? null : null,
           signedUserId: item.signups[0] || null,
           buildId: item.buildId ?? null,
           buildTab: item.buildTab ?? null,
@@ -301,7 +361,11 @@ function refreshEventCategories(oldCategories, newCategories) {
       continue;
     }
 
-    const freshItems = newCatData.items.map((item) => ({ ...item, signups: [] }));
+    const freshItems = newCatData.items.map((item) => ({
+      ...item,
+      signups: [],
+      ...(item.options ? { signedOptionIndex: null } : {}),
+    }));
     const used = new Array(freshItems.length).fill(false);
 
     const oldCatData = oldCategories[cat];
@@ -311,18 +375,15 @@ function refreshEventCategories(oldCategories, newCategories) {
         if (!userId) continue;
 
         const matchIdx = freshItems.findIndex(
-          (ni, idx) =>
-            !used[idx] &&
-            (ni.party || 0) === (oldItem.party || 0) &&
-            ni.name === oldItem.name &&
-            ni.emoji === oldItem.emoji
+          (ni, idx) => !used[idx] && (ni.party || 0) === (oldItem.party || 0) && itemSignature(ni) === itemSignature(oldItem)
         );
 
         if (matchIdx !== -1) {
           freshItems[matchIdx].signups.push(userId);
+          if (oldItem.options) freshItems[matchIdx].signedOptionIndex = oldItem.signedOptionIndex ?? null;
           used[matchIdx] = true;
         } else {
-          dropped.push({ userId, category: cat, name: oldItem.name, party: oldItem.party || 0 });
+          dropped.push({ userId, category: cat, name: itemLabel(oldItem), party: oldItem.party || 0 });
         }
       }
     }
@@ -337,7 +398,7 @@ function refreshEventCategories(oldCategories, newCategories) {
     if (!oldCatData || oldCatData.mode === 'quota' || !oldCatData.items) continue;
     for (const item of oldCatData.items) {
       const userId = item.signups && item.signups[0];
-      if (userId) dropped.push({ userId, category: cat, name: item.name, party: item.party || 0 });
+      if (userId) dropped.push({ userId, category: cat, name: itemLabel(item), party: item.party || 0 });
     }
   }
 
@@ -358,9 +419,11 @@ function carryOverBuildLinks(oldCategories, newCategories) {
 
     const used = new Array(oldCatData.items.length).fill(false);
     for (const item of newCatData.items) {
+      if (item.options) continue; // multi-choice lines don't support build links
       const matchIdx = oldCatData.items.findIndex(
         (oi, idx) =>
           !used[idx] &&
+          !oi.options &&
           (oi.party || 0) === (item.party || 0) &&
           oi.name === item.name &&
           oi.emoji === item.emoji
@@ -443,14 +506,33 @@ function normalizeStructuredCategories(categories) {
     if (!catData || !Array.isArray(catData.items) || catData.items.length === 0) continue;
     out[cat] = {
       mode: 'items',
-      items: catData.items.map((it) => ({
-        name: String(it.name || '').trim(),
-        emoji: it.emoji || null,
-        party: Number.isInteger(it.party) ? it.party : 0,
-        signups: [],
-        buildId: it.buildId ?? null,
-        buildTab: it.buildTab ?? null,
-      })).filter((it) => it.name),
+      items: catData.items
+        .map((it) => {
+          // Multi-choice line — two or more weapon options sharing one
+          // slot (see itemLabel/itemSignature above). No build link
+          // support per-option, so buildId/buildTab don't apply here.
+          if (Array.isArray(it.options) && it.options.length >= 2) {
+            const options = it.options
+              .map((o) => ({ name: String((o && o.name) || '').trim(), emoji: (o && o.emoji) || null }))
+              .filter((o) => o.name);
+            if (options.length < 2) return null;
+            return {
+              options,
+              party: Number.isInteger(it.party) ? it.party : 0,
+              signups: [],
+              signedOptionIndex: null,
+            };
+          }
+          return {
+            name: String(it.name || '').trim(),
+            emoji: it.emoji || null,
+            party: Number.isInteger(it.party) ? it.party : 0,
+            signups: [],
+            buildId: it.buildId ?? null,
+            buildTab: it.buildTab ?? null,
+          };
+        })
+        .filter((it) => it && (it.options || it.name)),
     };
   }
   return out;
@@ -537,4 +619,5 @@ module.exports = {
   createCompStructured,
   updateCompStructured,
   buildLinkFor,
+  itemLabel,
 };

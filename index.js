@@ -332,8 +332,9 @@ client.on(Events.MessageCreate, async (message) => {
           } else {
             const idx = catData.items.findIndex((it) => it.signups[0] === targetUser.id);
             if (idx !== -1) {
-              itemName = catData.items[idx].name;
+              itemName = comps.itemLabel(catData.items[idx]);
               catData.items[idx].signups = [];
+              if (catData.items[idx].options) catData.items[idx].signedOptionIndex = null;
               removed = true;
             }
           }
@@ -392,12 +393,30 @@ client.on(Events.MessageCreate, async (message) => {
         }
 
         if (availableIndexes.length === 1) {
+          const onlyIdx = availableIndexes[0];
+          const onlyItem = items[onlyIdx];
+          if (onlyItem.options) {
+            const optSelect = new StringSelectMenuBuilder()
+              .setCustomId(`event_optionselect_for:${roleMatch}:${event.id}:${onlyIdx}:${targetUser.id}`)
+              .setPlaceholder(`Choose ${targetUser.username}'s ${roleMatch} weapon`)
+              .addOptions(onlyItem.options.slice(0, 25).map((opt, i) => {
+                const option = { label: opt.name, value: String(i) };
+                if (opt.emoji) option.emoji = opt.emoji;
+                return option;
+              }));
+            await message.reply({
+              content: `Pick <@${targetUser.id}>'s **${roleMatch}** weapon:`,
+              components: [new ActionRowBuilder().addComponents(optSelect)],
+            });
+            return;
+          }
+
           removeUserFromEvent(event, targetUser.id);
-          items[availableIndexes[0]].signups.push(targetUser.id);
+          items[onlyIdx].signups.push(targetUser.id);
           await saveEvents(events);
           await updateEventMessage(client, event);
           await message.reply(
-            `✅ Added <@${targetUser.id}> to **${roleMatch}** (**${items[availableIndexes[0]].name}**).`
+            `✅ Added <@${targetUser.id}> to **${roleMatch}** (**${onlyItem.name}**).`
           );
           return;
         }
@@ -408,8 +427,9 @@ client.on(Events.MessageCreate, async (message) => {
           .addOptions(
             availableIndexes.slice(0, 25).map((idx) => {
               const item = items[idx];
-              const option = { label: item.name, value: String(idx) };
-              if (item.emoji) option.emoji = item.emoji;
+              const option = { label: comps.itemLabel(item), value: String(idx) };
+              const emoji = item.options ? item.options[0].emoji : item.emoji;
+              if (emoji) option.emoji = emoji;
               return option;
             })
           );
@@ -1178,8 +1198,29 @@ client.on(Events.InteractionCreate, async (interaction) => {
       }
 
       if (availableIndexes.length === 1) {
+        const onlyIdx = availableIndexes[0];
+        const onlyItem = items[onlyIdx];
+        // Multi-choice line — still need to know which weapon before we
+        // can sign them up, even with only one open slot.
+        if (onlyItem.options) {
+          const optSelect = new StringSelectMenuBuilder()
+            .setCustomId(`event_optionselect:${category}:${eventId}:${onlyIdx}`)
+            .setPlaceholder(`Choose your ${category} weapon`)
+            .addOptions(onlyItem.options.slice(0, 25).map((opt, i) => {
+              const option = { label: opt.name, value: String(i) };
+              if (opt.emoji) option.emoji = opt.emoji;
+              return option;
+            }));
+          await interaction.reply({
+            content: `Pick your ${category} weapon:`,
+            components: [new ActionRowBuilder().addComponents(optSelect)],
+            ephemeral: true,
+          });
+          return;
+        }
+
         removeUserFromEvent(event, interaction.user.id);
-        items[availableIndexes[0]].signups.push(interaction.user.id);
+        items[onlyIdx].signups.push(interaction.user.id);
         await saveEvents(events);
         await interaction.update({ embeds: [buildEmbed(event, interaction.guild)], components: buildButtons(event, interaction.guild) });
         return;
@@ -1191,9 +1232,9 @@ client.on(Events.InteractionCreate, async (interaction) => {
         .addOptions(
           availableIndexes.slice(0, 25).map((idx) => {
             const item = items[idx];
-            const row = rows.find((r) => r.itemIndex === idx);
-            const option = { label: item.name, value: String(idx) };
-            if (item.emoji) option.emoji = item.emoji;
+            const option = { label: comps.itemLabel(item), value: String(idx) };
+            const emoji = item.options ? item.options[0].emoji : item.emoji;
+            if (emoji) option.emoji = emoji;
             return option;
           })
         );
@@ -1243,6 +1284,24 @@ client.on(Events.InteractionCreate, async (interaction) => {
         return;
       }
 
+      // Multi-choice line — one more select to say which weapon, instead
+      // of finishing the sign-up right here.
+      if (item.options) {
+        const optSelect = new StringSelectMenuBuilder()
+          .setCustomId(`event_optionselect:${category}:${eventId}:${Number(chosenValue)}`)
+          .setPlaceholder(`Choose your ${category} weapon`)
+          .addOptions(item.options.slice(0, 25).map((opt, i) => {
+            const option = { label: opt.name, value: String(i) };
+            if (opt.emoji) option.emoji = opt.emoji;
+            return option;
+          }));
+        await interaction.update({
+          content: `Pick your ${category} weapon:`,
+          components: [new ActionRowBuilder().addComponents(optSelect)],
+        });
+        return;
+      }
+
       removeUserFromEvent(event, interaction.user.id);
       item.signups.push(interaction.user.id);
       await saveEvents(events);
@@ -1254,6 +1313,44 @@ client.on(Events.InteractionCreate, async (interaction) => {
       }
 
       await interaction.update({ content: `Signed up as **${item.name}** (${category}).`, components: [] });
+      return;
+    }
+
+    // ----- select menu: weapon chosen for a multi-choice line (self sign-up) -----
+    if (interaction.isStringSelectMenu() && interaction.customId.startsWith('event_optionselect:')) {
+      const [, category, eventId, itemIndexStr] = interaction.customId.split(':');
+      const event = events[eventId];
+      if (!event || event.closed) {
+        await interaction.update({ content: 'This event is no longer open.', components: [] });
+        return;
+      }
+
+      const catData = event.categories[category];
+      const item = catData && catData.items[Number(itemIndexStr)];
+      if (!item || item.signups.length >= 1) {
+        await interaction.update({ content: 'That slot just filled up, try another.', components: [] });
+        return;
+      }
+
+      const optionIndex = Number(interaction.values[0]);
+      const option = item.options && item.options[optionIndex];
+      if (!option) {
+        await interaction.update({ content: 'Invalid choice.', components: [] });
+        return;
+      }
+
+      removeUserFromEvent(event, interaction.user.id);
+      item.signups.push(interaction.user.id);
+      item.signedOptionIndex = optionIndex;
+      await saveEvents(events);
+
+      try {
+        await updateEventMessage(client, event);
+      } catch (e) {
+        console.error('Failed to update event message after option select', e);
+      }
+
+      await interaction.update({ content: `Signed up as **${option.name}** (${category}).`, components: [] });
       return;
     }
 
@@ -1307,6 +1404,24 @@ client.on(Events.InteractionCreate, async (interaction) => {
         return;
       }
 
+      // Multi-choice line — one more select to say which weapon
+      // <@targetUserId> is taking.
+      if (item.options) {
+        const optSelect = new StringSelectMenuBuilder()
+          .setCustomId(`event_optionselect_for:${category}:${eventId}:${Number(chosenValue)}:${targetUserId}`)
+          .setPlaceholder(`Choose ${targetUserId}'s ${category} weapon`)
+          .addOptions(item.options.slice(0, 25).map((opt, i) => {
+            const option = { label: opt.name, value: String(i) };
+            if (opt.emoji) option.emoji = opt.emoji;
+            return option;
+          }));
+        await interaction.update({
+          content: `Pick <@${targetUserId}>'s **${category}** weapon:`,
+          components: [new ActionRowBuilder().addComponents(optSelect)],
+        });
+        return;
+      }
+
       removeUserFromEvent(event, targetUserId);
       item.signups.push(targetUserId);
       await saveEvents(events);
@@ -1319,6 +1434,57 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
       await interaction.update({
         content: `✅ Added <@${targetUserId}> as **${item.name}** (${category}).`,
+        components: [],
+      });
+      return;
+    }
+
+    // ----- select menu: weapon chosen for a multi-choice line (assigning someone else) -----
+    if (interaction.isStringSelectMenu() && interaction.customId.startsWith('event_optionselect_for:')) {
+      const [, category, eventId, itemIndexStr, targetUserId] = interaction.customId.split(':');
+      const event = events[eventId];
+      if (!event || event.closed) {
+        await interaction.update({ content: 'This event is no longer open.', components: [] });
+        return;
+      }
+
+      const isOrganizer = event.organizerId === interaction.user.id;
+      const canManage = interaction.memberPermissions?.has(PermissionFlagsBits.ManageGuild);
+      if (!isOrganizer && !canManage) {
+        await interaction.reply({
+          content: 'Only the organizer or a server manager can finish this assignment.',
+          ephemeral: true,
+        });
+        return;
+      }
+
+      const catData = event.categories[category];
+      const item = catData && catData.items[Number(itemIndexStr)];
+      if (!item || item.signups.length >= 1) {
+        await interaction.update({ content: 'That slot just filled up, try another.', components: [] });
+        return;
+      }
+
+      const optionIndex = Number(interaction.values[0]);
+      const option = item.options && item.options[optionIndex];
+      if (!option) {
+        await interaction.update({ content: 'Invalid choice.', components: [] });
+        return;
+      }
+
+      removeUserFromEvent(event, targetUserId);
+      item.signups.push(targetUserId);
+      item.signedOptionIndex = optionIndex;
+      await saveEvents(events);
+
+      try {
+        await updateEventMessage(client, event);
+      } catch (e) {
+        console.error('Failed to update event message after option select', e);
+      }
+
+      await interaction.update({
+        content: `✅ Added <@${targetUserId}> as **${option.name}** (${category}).`,
         components: [],
       });
       return;

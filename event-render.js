@@ -91,9 +91,13 @@ function buildEmbed(event, guild) {
     }
     const roleEmoji = roleEmojiText(guild, row.category);
     const status = row.signedUserId ? `<@${row.signedUserId}>` : '*Open*';
-    const rowWeaponEmoji = row.emoji || '🔹';
-    const label = row.name ? `**${row.name}**` : '*Any*';
-    rosterLines.push(`${roleEmoji} - ${rowWeaponEmoji} - ${label} : ${status}`);
+    // Multi-choice line — each option gets its own weapon emoji, chained
+    // with "/" (no per-option build link, no separate "Any" fallback since
+    // a multi-choice line is never nameless).
+    const label = row.options
+      ? row.options.map((o) => `${o.emoji || '🔹'} **${o.name}**`).join('/')
+      : `${row.emoji || '🔹'} ${row.name ? `**${row.name}**` : '*Any*'}`;
+    rosterLines.push(`${roleEmoji}-${label} : ${status}`);
   }
 
   if (rosterLines.length > 0) {

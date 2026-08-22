@@ -285,6 +285,9 @@ async function detailEvent(event) {
   const rows = comps.expandAllCategoryRows(event.categories, eventsStore.CATEGORY_ORDER).map((row) => ({
     ...row,
     iconUrl: row.name ? itemMap.itemImageUrl(row.name) : null,
+    options: row.options
+      ? row.options.map((o) => ({ ...o, iconUrl: itemMap.itemImageUrl(o.name) }))
+      : null,
   }));
   const userIds = [...new Set(rows.map((r) => r.signedUserId).filter(Boolean))];
   const userInfo = await resolveUserInfo(userIds);
@@ -596,6 +599,8 @@ router.put('/api/events/:id/rows/:category/:itemIndex/build', auth.requireOffice
     const idx = Number(req.params.itemIndex);
     const item = catData.items[idx];
     if (!item) return res.status(404).json({ error: 'Role line not found.' });
+    // Multi-choice lines have no single weapon to attach one build to.
+    if (item.options) return res.status(400).json({ error: "Build links aren't supported on multi-choice lines." });
 
     const { buildTab, buildId } = req.body || {};
     if (buildTab && buildId !== undefined && buildId !== null) {
@@ -648,17 +653,31 @@ router.post('/api/events/:id/rows/:category/:itemIndex/assign', auth.requireOffi
     if (!item) return res.status(404).json({ error: 'Role line not found.' });
     if (item.signups.length > 0) return res.status(400).json({ error: 'That slot is already filled.' });
 
-    const { userId } = req.body || {};
+    const { userId, optionIndex } = req.body || {};
     if (!userId) return res.status(400).json({ error: 'userId is required.' });
 
-    eventsStore.removeUserFromEvent(event, userId);
-    item.signups.push(userId);
+    // Multi-choice line — the officer also has to say which weapon the
+    // player is taking, same as a self-signup would.
+    let label = item.name;
+    if (item.options) {
+      const idxNum = Number(optionIndex);
+      if (!Number.isInteger(idxNum) || !item.options[idxNum]) {
+        return res.status(400).json({ error: 'optionIndex is required for a multi-choice line.' });
+      }
+      eventsStore.removeUserFromEvent(event, userId);
+      item.signups.push(userId);
+      item.signedOptionIndex = idxNum;
+      label = item.options[idxNum].name;
+    } else {
+      eventsStore.removeUserFromEvent(event, userId);
+      item.signups.push(userId);
+    }
 
     await eventsStore.saveEvents(events);
     activityStore.log(
       req.user,
       'event.assign',
-      `Assigned <@${userId}> to "${item.name}" (${req.params.category}) on event "${event.title}"`
+      `Assigned <@${userId}> to "${label}" (${req.params.category}) on event "${event.title}"`
     );
 
     if (discordClient) {
@@ -693,6 +712,7 @@ router.delete('/api/events/:id/rows/:category/:itemIndex/assign', auth.requireOf
 
     const removedUserId = item.signups[0] || null;
     item.signups = [];
+    if (item.options) item.signedOptionIndex = null;
 
     await eventsStore.saveEvents(events);
     activityStore.log(
@@ -855,9 +875,9 @@ router.post('/api/events/:id/signup', auth.requireMember, async (req, res) => {
     if (!event) return res.status(404).json({ error: 'Event not found.' });
     if (event.closed) return res.status(400).json({ error: 'This event is no longer open.' });
 
-    const { category, weapon, itemIndex } = req.body || {};
+    const { category, weapon, itemIndex, optionIndex } = req.body || {};
     if (!category) return res.status(400).json({ error: 'category is required.' });
-    const choice = weapon !== undefined ? { weapon } : { itemIndex };
+    const choice = weapon !== undefined ? { weapon } : { itemIndex, optionIndex };
     const result = eventsStore.signUp(event, req.user.id, category, choice);
     if (result.error) {
       const messages = {
