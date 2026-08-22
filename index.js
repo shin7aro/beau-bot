@@ -1351,6 +1351,54 @@ client.on(Events.InteractionCreate, async (interaction) => {
         });
         return;
       }
+
+      if (sub === 'delete') {
+        const splitId = interaction.options.getString('split_id');
+        const split = await lootStore.findSplit(splitId);
+        if (!split) {
+          await interaction.reply({ content: 'No loot split found with that ID.', ephemeral: true });
+          return;
+        }
+
+        // Stricter than remind/mark-claimed on purpose — no "or the person
+        // who created it" exception. This wipes the split out of the
+        // all-time totals too, so it's officer/admin (the site's actual
+        // Discord roles, not just anyone with Manage Server) only.
+        const memberRoles = interaction.member?.roles?.cache;
+        const isOfficerOrAdmin =
+          memberRoles &&
+          ((process.env.OFFICER_ROLE_ID && memberRoles.has(process.env.OFFICER_ROLE_ID)) ||
+            (process.env.ADMIN_ROLE_ID && memberRoles.has(process.env.ADMIN_ROLE_ID)));
+        if (!isOfficerOrAdmin) {
+          await interaction.reply({ content: 'Only officers/admins can delete a loot split.', ephemeral: true });
+          return;
+        }
+
+        const result = await lootStore.deleteSplit(splitId);
+        if (result.error === 'not_found') {
+          await interaction.reply({ content: 'No loot split found with that ID.', ephemeral: true });
+          return;
+        }
+
+        if (split.channelId && split.messageId) {
+          try {
+            const channel = await client.channels.fetch(split.channelId);
+            const message = await channel.messages.fetch(split.messageId);
+            await message.delete();
+          } catch (e) {
+            console.error('Failed to delete loot split message', e);
+          }
+        }
+
+        activityStore.log(
+          logUser(interaction.user),
+          'loot.delete',
+          `Deleted the loot split for "${split.lootName}" (${lootRender.formatSilver(split.lootValue)})`
+        );
+
+        await interaction.reply({ content: `Deleted the split for **${split.lootName}** — it's out of the all-time totals too.`, ephemeral: true });
+        return;
+      }
     }
 
     // ----- modal submit: create the event (manual path) -----

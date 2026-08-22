@@ -15,7 +15,7 @@ const GOLD = 0xf1c40f;
 // icon off the channel name, then compare" approach api.js's event-channel
 // picker uses, so a "╏💵╏payout"-style icon on the channel doesn't break
 // the match.
-const PAYOUT_CHANNEL_NAME = 'payout';
+const PAYOUT_CHANNEL_NAMES = ['payout', 'beau-bot-phase-de-test'];
 
 function stripLeadingChannelIcon(name) {
   return String(name || '').toLowerCase().replace(/^[^a-z0-9]+/, '');
@@ -25,7 +25,7 @@ function findPayoutChannel(guild) {
   if (!guild) return null;
   return (
     guild.channels.cache.find(
-      (c) => (c.type === 0 || c.type === 5) && stripLeadingChannelIcon(c.name) === PAYOUT_CHANNEL_NAME
+      (c) => (c.type === 0 || c.type === 5) && PAYOUT_CHANNEL_NAMES.includes(stripLeadingChannelIcon(c.name))
     ) || null
   );
 }
@@ -143,7 +143,7 @@ async function celebrateCompletedThread(client, split) {
 
 module.exports = {
   CLAIM_EMOJI,
-  PAYOUT_CHANNEL_NAME,
+  PAYOUT_CHANNEL_NAMES,
   stripLeadingChannelIcon,
   findPayoutChannel,
   formatSilver,

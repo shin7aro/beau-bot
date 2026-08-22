@@ -137,12 +137,27 @@ function renderList() {
   grid.querySelectorAll('.mark-claim-btn').forEach(btn => {
     btn.addEventListener('click', () => markParticipantClaimed(btn.dataset.splitId, btn.dataset.userId, btn.dataset.username));
   });
+  grid.querySelectorAll('[data-delete-id]').forEach(btn => {
+    btn.addEventListener('click', () => deleteSplit(btn.dataset.deleteId, btn.dataset.deleteName));
+  });
+}
+
+async function deleteSplit(id, name) {
+  if (!confirm(`Delete the split for "${name}"? This removes it (and its totals) permanently — mainly for clearing out test splits.`)) return;
+  try {
+    await api(`/api/loot/${encodeURIComponent(id)}`, { method: 'DELETE' });
+    showToast(`Deleted "${name}".`);
+    await loadLoot();
+  } catch (err) {
+    showToast('Failed to delete split: ' + err.message);
+  }
 }
 
 function renderLootCard(s) {
   const unclaimed = s.participants.filter(p => !p.claimed).length;
   const canManageSplit = s.createdBy?.id === window.SITE_AUTH.id || window.SITE_AUTH.role === 'officer' || window.SITE_AUTH.role === 'admin';
   const canRemind = !s.closed && unclaimed > 0 && canManageSplit;
+  const canDelete = window.SITE_AUTH.role === 'officer' || window.SITE_AUTH.role === 'admin';
 
   return `
     <div class="loot-card ${s.closed ? 'closed' : ''}">
@@ -167,7 +182,10 @@ function renderLootCard(s) {
       </div>
       <div class="loot-card-foot">
         <span class="loot-card-date">${new Date(s.createdAt).toLocaleDateString()}</span>
-        ${canRemind ? `<button class="event-action-btn" data-remind-id="${escapeHtml(s.id)}">Send reminder</button>` : ''}
+        <div class="loot-card-foot-actions">
+          ${canRemind ? `<button class="event-action-btn" data-remind-id="${escapeHtml(s.id)}">Send reminder</button>` : ''}
+          ${canDelete ? `<button class="event-action-btn danger" data-delete-id="${escapeHtml(s.id)}" data-delete-name="${escapeHtml(s.lootName)}">Delete</button>` : ''}
+        </div>
       </div>
     </div>`;
 }

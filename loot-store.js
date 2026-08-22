@@ -188,6 +188,34 @@ async function persistSplit(split) {
   await saveSplits(entries);
 }
 
+// Removes a split entirely and un-does its contribution to the all-time
+// totals (loot value, guild tax, member share, and each participant's
+// lifetime received/splitsParticipated) — so a deleted test split leaves no
+// trace in the "all time" numbers, same as if it had never been posted.
+async function deleteSplit(id) {
+  const entries = await loadSplits();
+  const idx = entries.findIndex((s) => s.id === id);
+  if (idx === -1) return { error: 'not_found' };
+  const [split] = entries.splice(idx, 1);
+  await saveSplits(entries);
+
+  const totals = await loadTotals();
+  totals.totalLootValue = round2(totals.totalLootValue - split.lootValue);
+  totals.totalGuildTax = round2(totals.totalGuildTax - split.taxAmount);
+  totals.totalMemberShare = round2(totals.totalMemberShare - split.distributedTotal);
+  totals.splitCount = Math.max(0, totals.splitCount - 1);
+  for (const p of split.participants) {
+    const rec = totals.perMember[p.userId];
+    if (!rec) continue;
+    rec.totalReceived = round2(rec.totalReceived - split.shareAmount);
+    rec.splitsParticipated = Math.max(0, rec.splitsParticipated - 1);
+    if (rec.splitsParticipated === 0) delete totals.perMember[p.userId];
+  }
+  await saveTotals(totals);
+
+  return { split };
+}
+
 function unclaimedParticipants(split) {
   return split.participants.filter((p) => !p.claimed);
 }
@@ -239,6 +267,7 @@ module.exports = {
   findSplit,
   findSplitByMessageId,
   persistSplit,
+  deleteSplit,
   unclaimedParticipants,
   markClaimed,
   listRecent,

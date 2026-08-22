@@ -624,6 +624,37 @@ router.post('/api/loot/:id/remind', auth.requireMember, async (req, res) => {
   }
 });
 
+// Deletes a split entirely — for clearing out test splits. Stricter than
+// remind/mark-claimed on purpose: officer/admin only, no "or whoever
+// created it" exception, since this also wipes the split out of the
+// all-time totals (see lootStore.deleteSplit). Doesn't hard-require a live
+// Discord client — the split data still gets deleted even if the bot isn't
+// connected right now; the Discord message just won't get cleaned up until
+// it reconnects (or someone deletes it by hand).
+router.delete('/api/loot/:id', auth.requireOfficer, async (req, res) => {
+  const result = await lootStore.deleteSplit(req.params.id);
+  if (result.error === 'not_found') return res.status(404).json({ error: 'Loot split not found.' });
+
+  const split = result.split;
+  if (discordClient && discordClient.isReady && discordClient.isReady() && split.channelId && split.messageId) {
+    try {
+      const channel = await discordClient.channels.fetch(split.channelId);
+      const message = await channel.messages.fetch(split.messageId);
+      await message.delete();
+    } catch (err) {
+      console.error('Failed to delete loot split Discord message', err);
+    }
+  }
+
+  activityStore.log(
+    { id: req.user.id, username: req.user.username },
+    'loot.delete',
+    `Deleted the loot split for "${split.lootName}" (${lootRender.formatSilver(split.lootValue)})`
+  );
+
+  res.json({ ok: true });
+});
+
 router.post('/api/events', auth.requireOfficer, async (req, res) => {
   const client = requireDiscordClient(res);
   if (!client) return;
