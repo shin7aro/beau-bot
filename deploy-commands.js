@@ -173,7 +173,7 @@ const commands = [
     .addSubcommand((sub) =>
       sub
         .setName('mark-claimed')
-        .setDescription("Manually mark someone as having taken their share, e.g. if they forgot to react (organizer or server manager only)")
+        .setDescription("Mark someone as having taken their share (e.g. they forgot to react)")
         .addStringOption((opt) => opt.setName('split_id').setDescription('The split ID shown in the embed footer').setRequired(true))
         .addUserOption((opt) => opt.setName('member').setDescription('The participant who already took their share').setRequired(true))
     ),
