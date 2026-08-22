@@ -63,9 +63,10 @@
    the row lives in, and the emoji can only be set via the picker below. */
 .comp-item-row {
   display: grid;
-  grid-template-columns: 34px 1.3fr 1.5fr auto;
+  grid-template-columns: 34px 1.3fr 1.5fr auto auto;
   gap: 8px; align-items: center;
 }
+.comp-item-add-choice-btn { white-space: nowrap; font-size: 11.5px; padding: 0 10px; height: 32px; }
 .comp-item-row input, .comp-item-row select {
   background: var(--surface); border: 1px solid var(--line-2); border-radius: 7px;
   color: var(--ink); font: inherit; font-size: 12.5px; padding: 7px 9px; min-width: 0;
@@ -87,6 +88,24 @@
 .emoji-preview-img { width: 18px; height: 18px; object-fit: contain; }
 .emoji-preview-char { font-size: 15px; line-height: 1; }
 .emoji-preview-empty { color: var(--ink-faint); font-size: 14px; }
+
+/* Multi-choice line — a role line that accepts more than one weapon (see
+   comps.js's item.options). Each option gets its own mini-row (emoji +
+   name + remove-this-choice), stacked under a shared "+ Add choice" link,
+   with the normal "remove whole line" button still on the far right. No
+   build-select here — a multi-choice line can't link a single build. */
+.comp-item-row-multi { display: flex; align-items: flex-start; gap: 8px; }
+.comp-item-options { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+.comp-item-option {
+  display: grid; grid-template-columns: 34px 1fr auto; gap: 8px; align-items: center;
+}
+.comp-item-option-remove {
+  background: transparent; border: 1px solid var(--line-2); border-radius: 7px;
+  color: var(--ink-faint); cursor: pointer; width: 30px; height: 30px;
+  display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+}
+.comp-item-option-remove:hover { color: var(--dps); border-color: var(--dps); }
+.comp-item-add-option-btn { align-self: flex-start; font-size: 11.5px; padding: 0 10px; height: 30px; }
 
 .emoji-popover {
   position: absolute; z-index: 50; width: 220px; max-height: 300px;
