@@ -16,6 +16,7 @@ const EVENT_TYPE_EMOJI = { PVP: '⚔️', PVE: '🐉', Economy: '💰' };
 let allEvents = [];        // list summaries from GET /api/events
 let typeFilter = 'all';
 let searchStr = '';
+let showClosed = false;    // closed events are hidden by default; toggled via #toggle-closed-btn
 let currentDetail = null;  // full detail object from GET /api/events/:id
 let channelsCache = null;  // officer only, lazy-loaded
 let compOptionsCache = null; // officer only, lazy-loaded
@@ -84,6 +85,14 @@ function wireListControls() {
       renderList();
     });
   });
+
+  const toggleClosedBtn = document.getElementById('toggle-closed-btn');
+  toggleClosedBtn.addEventListener('click', () => {
+    showClosed = !showClosed;
+    toggleClosedBtn.textContent = showClosed ? 'Hide closed events' : 'Show closed events';
+    toggleClosedBtn.classList.toggle('active', showClosed);
+    renderList();
+  });
 }
 
 /* ---------- list view ---------- */
@@ -103,6 +112,7 @@ function renderList() {
   const countLabel = document.getElementById('event-count-label');
 
   let list = allEvents;
+  if (!showClosed) list = list.filter(e => !e.closed);
   if (typeFilter !== 'all') list = list.filter(e => e.type === typeFilter);
   if (searchStr) {
     list = list.filter(e =>
@@ -176,7 +186,6 @@ function renderDetail() {
   const canManage = isOfficerOrAdmin() || (window.SITE_AUTH.loggedIn && window.SITE_AUTH.id === e.organizerId);
 
   layout.innerHTML = `
-    <div class="event-role-counter-row" id="event-role-counter-row"></div>
     <aside class="event-info-col" id="event-info-col"></aside>
     <div class="event-roster-col" id="event-roster-col"></div>
     <aside class="event-details-col" id="event-details-col"></aside>`;
