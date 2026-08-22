@@ -200,6 +200,39 @@ span.event-row-name-pill { cursor: default; }
 .event-row-player-avatar { width: 18px; height: 18px; border-radius: 50%; object-fit: cover; flex-shrink: 0; background: var(--surface-3); }
 .event-row-player-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
+/* Officer/admin manual assign button — sits to the left of the name pill
+   (see .event-row in events.js). "+" on an open slot, "−" once filled;
+   toggled purely by the .add/.remove modifier events.js already applies. */
+.event-row-assign-btn {
+  flex-shrink: 0; width: 22px; height: 22px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 15px; font-weight: 700; line-height: 1; cursor: pointer;
+  background: var(--surface-2); border: 1px solid var(--line-2); color: var(--ink-dim);
+}
+.event-row-assign-btn.add:hover { border-color: var(--accent); color: var(--accent); }
+.event-row-assign-btn.remove { color: var(--dps); border-color: var(--dps-bg); }
+.event-row-assign-btn.remove:hover { background: var(--dps-bg); }
+
+/* Assign popover — same floating/search/list pattern as comps.css's
+   .emoji-popover, just listing Discord members instead of emoji. */
+.event-assign-popover {
+  position: absolute; z-index: 50; width: 240px; max-height: 320px;
+  background: var(--surface-2); border: 1px solid var(--line-2); border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(0,0,0,.35); padding: 8px; display: flex; flex-direction: column; gap: 6px;
+}
+.event-assign-popover-search {
+  background: var(--surface); border: 1px solid var(--line-2); border-radius: 6px;
+  color: var(--ink); font: inherit; font-size: 12px; padding: 6px 8px;
+}
+.event-assign-popover-list { display: flex; flex-direction: column; gap: 2px; overflow-y: auto; max-height: 260px; }
+.event-assign-popover-item {
+  display: flex; align-items: center; gap: 8px; background: transparent; border: 1px solid transparent;
+  border-radius: 6px; padding: 6px 8px; cursor: pointer; font-size: 12.5px; font-weight: 600; color: var(--ink); text-align: left;
+}
+.event-assign-popover-item:hover { border-color: var(--accent); background: var(--surface); }
+.event-assign-popover-item img { width: 22px; height: 22px; border-radius: 50%; object-fit: cover; flex-shrink: 0; background: var(--surface-3); }
+.event-assign-popover-empty { color: var(--ink-faint); font-size: 12px; padding: 6px 4px; }
+
 /* -- details column (build viewer/linker, player snippet) -- */
 .event-details-col {
   background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 14px;
