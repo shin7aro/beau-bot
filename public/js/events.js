@@ -21,6 +21,7 @@ let channelsCache = null;  // officer only, lazy-loaded
 let compOptionsCache = null; // officer only, lazy-loaded
 let allBuildsCache = null;      // public, lazy-loaded — full builds by tab, for the details panel
 let buildLinkOptionsCache = null; // officer only, lazy-loaded — flat [{tab,index,role,weapon}] for the "link a build" picker
+let dahaloMembersCache = null; // officer only, lazy-loaded — [{id,username,avatar}] for the "assign a player" picker
 let formCompSource = 'comp'; // 'comp' | 'manual', for the create/edit form
 
 function escapeHtml(s) {
@@ -296,7 +297,12 @@ function emojiToHtml(value, { size = 16, fallback = '🔹' } = {}) {
 function renderRosterRow(e, row) {
   const isMine = row.signedUserId === window.SITE_AUTH.id;
   const isOpen = !row.signedUserId;
-  const canSignup = isOpen && !e.closed && window.SITE_AUTH.loggedIn && row.itemIndex !== undefined;
+  const hasItemIndex = row.itemIndex !== undefined;
+  const canSignup = isOpen && !e.closed && window.SITE_AUTH.loggedIn && hasItemIndex;
+  // Officer/admin manual assign — only makes sense for item-mode rows (a
+  // single named slot); quota-mode categories keep using their own
+  // self-serve "pick a weapon, sign up" section instead.
+  const canManageAssign = isOfficerOrAdmin() && !e.closed && hasItemIndex;
   // Weapon icon now renders inside the name pill itself (see
   // .event-row-name-pill in events.css) instead of as its own column, so
   // the row is just two even halves: the name pill and the player pill.
@@ -304,10 +310,14 @@ function renderRosterRow(e, row) {
     ? `<img class="event-row-pill-icon" src="${escapeHtml(row.iconUrl)}" alt="" loading="lazy">`
     : `<span class="event-row-pill-icon-fallback">${emojiToHtml(row.emoji, { size: 15 })}</span>`;
   const nameLabel = `${icon}<span class="event-row-name-text">${escapeHtml(row.name || 'Any')}</span>`;
-  const hasItemIndex = row.itemIndex !== undefined;
   const namePill = hasItemIndex
     ? `<button type="button" class="event-row-name-pill role-${row.category.toLowerCase()}" data-cat="${escapeHtml(row.category)}" data-item-index="${row.itemIndex}" title="View linked build">${nameLabel}</button>`
     : `<span class="event-row-name-pill role-${row.category.toLowerCase()}">${nameLabel}</span>`;
+  const assignBtn = canManageAssign
+    ? `<button type="button" class="event-row-assign-btn${isOpen ? ' add' : ' remove'}"
+        data-cat="${escapeHtml(row.category)}" data-item-index="${row.itemIndex}"
+        title="${isOpen ? 'Assign a player to this slot' : 'Remove this player from the slot'}">${isOpen ? '+' : '−'}</button>`
+    : '';
   const status = row.signedUserId
     ? `<button type="button" class="event-row-player-pill" data-user-id="${escapeHtml(row.signedUserId)}" data-cat="${escapeHtml(row.category)}" data-item-index="${row.itemIndex ?? ''}" title="View player">
         <img class="event-row-player-avatar" src="${escapeHtml(row.signedAvatarUrl || window.discordAvatarUrl(row.signedUserId, null))}" alt="" loading="lazy">
@@ -316,8 +326,9 @@ function renderRosterRow(e, row) {
     : `<span class="event-row-status">${canSignup ? 'Open — click to sign up' : 'Open'}</span>`;
 
   return `
-    <div class="event-row${isOpen ? ' is-open' : ''}${canSignup ? ' can-signup' : ''}${isMine ? ' is-mine' : ''}"
+    <div class="event-row${isOpen ? ' is-open' : ''}${canSignup ? ' can-signup' : ''}${isMine ? ' is-mine' : ''}${canManageAssign ? ' has-assign-btn' : ''}"
          ${canSignup ? `data-cat="${escapeHtml(row.category)}" data-item-index="${row.itemIndex}"` : ''}>
+      ${assignBtn}
       ${namePill}
       ${status}
     </div>`;
@@ -367,6 +378,108 @@ async function ensureBuildLinkOptionsLoaded() {
   if (buildLinkOptionsCache) return buildLinkOptionsCache;
   buildLinkOptionsCache = await api('/api/comps-build-options');
   return buildLinkOptionsCache;
+}
+
+async function ensureDahaloMembersLoaded() {
+  if (dahaloMembersCache) return dahaloMembersCache;
+  dahaloMembersCache = await api('/api/discord-members');
+  return dahaloMembersCache;
+}
+
+/* ---------- manual assign / remove (officer/admin only) ----------
+   The site equivalent of mentioning a player + role name in an event's
+   Discord thread. "+" on an open slot opens a searchable popover of
+   Dahalo-role members (same open/close/outside-click pattern as comps.js's
+   emoji popover); picking one assigns them. "−" on a filled slot removes
+   whoever's there, after a confirm — same convention as builds.js's
+   card-delete-btn. */
+function closeAssignPopover() {
+  const pop = document.getElementById('event-assign-popover');
+  if (pop) pop.remove();
+  document.removeEventListener('mousedown', handleAssignPopoverOutsideClick, true);
+}
+
+function handleAssignPopoverOutsideClick(e) {
+  const pop = document.getElementById('event-assign-popover');
+  if (pop && !pop.contains(e.target)) closeAssignPopover();
+}
+
+async function openAssignPopover(anchorBtn, cat, itemIndex) {
+  closeAssignPopover();
+  const pop = document.createElement('div');
+  pop.id = 'event-assign-popover';
+  pop.className = 'event-assign-popover';
+  pop.innerHTML = `
+    <input type="text" class="event-assign-popover-search" placeholder="Search Dahalo members…" autocomplete="off">
+    <div class="event-assign-popover-list"><p class="event-assign-popover-empty">Loading…</p></div>`;
+  document.body.appendChild(pop);
+
+  const rect = anchorBtn.getBoundingClientRect();
+  pop.style.top = `${window.scrollY + rect.bottom + 6}px`;
+  pop.style.left = `${window.scrollX + rect.left}px`;
+
+  const list = pop.querySelector('.event-assign-popover-list');
+  let members;
+  try {
+    members = await ensureDahaloMembersLoaded();
+  } catch (err) {
+    list.innerHTML = `<p class="event-assign-popover-empty">Failed to load members: ${escapeHtml(err.message)}</p>`;
+    setTimeout(() => document.addEventListener('mousedown', handleAssignPopoverOutsideClick, true), 0);
+    return;
+  }
+
+  const renderList = (filter = '') => {
+    const q = filter.trim().toLowerCase();
+    const matches = q ? members.filter(m => m.username.toLowerCase().includes(q)) : members;
+    if (matches.length === 0) {
+      list.innerHTML = `<p class="event-assign-popover-empty">${members.length === 0 ? 'No members found with the Dahalo role.' : 'No matches.'}</p>`;
+      return;
+    }
+    list.innerHTML = matches.slice(0, 50).map(m => `
+      <button type="button" class="event-assign-popover-item" data-user-id="${escapeHtml(m.id)}">
+        <img src="${escapeHtml(window.discordAvatarUrl(m.id, m.avatar, 32))}" alt="" loading="lazy">
+        <span>${escapeHtml(m.username)}</span>
+      </button>`).join('');
+    list.querySelectorAll('.event-assign-popover-item').forEach(itemBtn => {
+      itemBtn.addEventListener('click', () => {
+        closeAssignPopover();
+        handleAssignAdd(cat, itemIndex, itemBtn.dataset.userId);
+      });
+    });
+  };
+  renderList();
+
+  pop.querySelector('.event-assign-popover-search').addEventListener('input', e => renderList(e.target.value));
+  pop.querySelector('.event-assign-popover-search').focus();
+
+  setTimeout(() => document.addEventListener('mousedown', handleAssignPopoverOutsideClick, true), 0);
+}
+
+async function handleAssignAdd(cat, itemIndex, userId) {
+  try {
+    currentDetail = await api(
+      `/api/events/${encodeURIComponent(currentDetail.id)}/rows/${encodeURIComponent(cat)}/${itemIndex}/assign`,
+      { method: 'POST', body: JSON.stringify({ userId }) }
+    );
+    renderDetail();
+    showToast('Player assigned.');
+  } catch (err) {
+    showToast('Failed to assign player: ' + err.message);
+  }
+}
+
+async function handleAssignRemove(cat, itemIndex) {
+  if (!confirm('Remove this player from the slot?')) return;
+  try {
+    currentDetail = await api(
+      `/api/events/${encodeURIComponent(currentDetail.id)}/rows/${encodeURIComponent(cat)}/${itemIndex}/assign`,
+      { method: 'DELETE' }
+    );
+    renderDetail();
+    showToast('Player removed.');
+  } catch (err) {
+    showToast('Failed to remove player: ' + err.message);
+  }
 }
 
 function renderDetailsPanelPlaceholder() {
@@ -540,6 +653,20 @@ function wireRosterActions() {
     btn.addEventListener('click', (e) => {
       e.stopPropagation();
       showPlayerPanel(btn.dataset.cat, btn.dataset.itemIndex, btn.dataset.userId);
+    });
+  });
+
+  // Officer/admin manual assign — "+" opens the Dahalo-member picker,
+  // "−" removes whoever's currently in the slot. stopPropagation so this
+  // doesn't also trigger the row's own self-signup click when both apply
+  // (an officer viewing their own open slot).
+  document.querySelectorAll('.event-row-assign-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const cat = btn.dataset.cat;
+      const itemIndex = Number(btn.dataset.itemIndex);
+      if (btn.classList.contains('add')) openAssignPopover(btn, cat, itemIndex);
+      else handleAssignRemove(cat, itemIndex);
     });
   });
 }
