@@ -1,0 +1,73 @@
+/* ─────────────────────────────────────────
+   LOOT MANAGER
+   (builds on tokens + shared classes from
+   base.css / home.css / builds.css / events.css —
+   .stat, .controls, .comp-add-btn, .modal-*,
+   .event-action-btn are all defined there)
+───────────────────────────────────────── */
+
+.loot-stats-grid { grid-template-columns: repeat(4, 1fr); margin-top: 16px; }
+@media (max-width: 700px) { .loot-stats-grid { grid-template-columns: repeat(2, 1fr); } }
+
+/* ---------- split cards ---------- */
+.loot-card-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 14px; padding: 4px 24px 24px;
+}
+.loot-card {
+  background: var(--surface); border: 1px solid var(--line); border-radius: 12px;
+  padding: 16px; display: flex; flex-direction: column; gap: 10px;
+}
+.loot-card.closed { opacity: 0.65; }
+
+.loot-card-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
+.loot-card-head h3 { font-size: 15px; font-weight: 700; color: var(--ink); margin: 0; line-height: 1.3; }
+
+.loot-status-badge {
+  font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em;
+  border-radius: 999px; padding: 2px 8px; white-space: nowrap; flex-shrink: 0;
+}
+.loot-status-badge.pending { color: var(--support); background: var(--support-bg); border: 1px solid var(--support); }
+.loot-status-badge.done { color: var(--ink-faint); background: var(--surface-2); border: 1px solid var(--line-2); }
+
+.loot-location { font-size: 12.5px; color: var(--ink-dim); margin: 0; }
+
+.loot-numbers {
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px;
+  padding: 10px; border-radius: 8px; background: var(--surface-2);
+}
+.loot-numbers > div { display: flex; flex-direction: column; gap: 2px; }
+.loot-num-label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em; color: var(--ink-faint); }
+.loot-num-val { font-family: 'JetBrains Mono', monospace; font-size: 12.5px; color: var(--ink); font-weight: 600; }
+
+.loot-participants { display: flex; flex-wrap: wrap; gap: 6px; }
+.loot-participant-chip {
+  font-size: 11.5px; color: var(--ink-dim); background: var(--surface-2);
+  border: 1px solid var(--line-2); border-radius: 999px; padding: 3px 9px;
+  font-family: inherit;
+}
+.loot-participant-chip.claimed { color: var(--ink); border-color: var(--accent); }
+button.loot-participant-chip {
+  cursor: pointer; transition: border-color 0.15s, color 0.15s;
+}
+button.loot-participant-chip:hover { color: var(--ink); border-color: var(--accent); }
+
+.loot-card-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 2px; }
+.loot-card-date { font-size: 11px; color: var(--ink-faint); font-family: 'JetBrains Mono', monospace; }
+
+/* ---------- member picker (create-split form) ---------- */
+.loot-member-picker {
+  max-height: 220px; overflow-y: auto; border: 1px solid var(--line); border-radius: 8px;
+  padding: 6px; display: flex; flex-direction: column; gap: 2px; margin-top: 6px;
+}
+.loot-member-row {
+  display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 6px;
+  font-size: 13px; color: var(--ink-dim); cursor: pointer;
+}
+.loot-member-row:hover { background: var(--surface-2); color: var(--ink); }
+.loot-member-row input[type="checkbox"] { accent-color: var(--accent); }
+
+@media (max-width: 700px) {
+  .loot-card-grid { grid-template-columns: 1fr; padding: 4px 16px 16px; }
+  .loot-numbers { grid-template-columns: 1fr; }
+}

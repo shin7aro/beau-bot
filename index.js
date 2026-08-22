@@ -32,6 +32,7 @@ const {
   EmbedBuilder,
   PermissionFlagsBits,
   AttachmentBuilder,
+  Partials,
 } = require('discord.js');
 
 const comps = require('./comps');
@@ -44,6 +45,8 @@ const buildsStore = require('./builds-store');
 const itemMap = require('./item-map');
 const { weaponEmoji } = require('./live-comps');
 const { renderBuildCard } = require('./build-card-image');
+const lootStore = require('./loot-store');
+const lootRender = require('./loot-render');
 
 // Discord-facing helpers that used to be defined inline here now live in
 // events-store.js (pure data) and event-render.js (discord.js rendering) —
@@ -226,7 +229,18 @@ async function finalizeEventClose(client, event, noShowIds, closedByUser) {
 
 // ---------- client ----------
 const client = new Client({
-  intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent],
+  intents: [
+    GatewayIntentBits.Guilds,
+    GatewayIntentBits.GuildMessages,
+    GatewayIntentBits.MessageContent,
+    // Needed to see ✅ reactions added to a posted loot split (see the
+    // MessageReactionAdd handler below).
+    GatewayIntentBits.GuildMessageReactions,
+  ],
+  // A loot split message/reaction may not be in the bot's cache after a
+  // restart — these partials mean discord.js still fires the event (with a
+  // .partial flag) instead of silently dropping it, so we can .fetch() it.
+  partials: [Partials.Message, Partials.Reaction, Partials.User, Partials.Channel],
 });
 
 // Hands the live client to the site's REST API (see api.js's setClient) so
@@ -274,6 +288,45 @@ client.once(Events.ClientReady, (c) => {
       }
     }
   }, 30 * 60 * 1000);
+
+  // Every 2 hours, ping (in-thread) anyone who still hasn't reacted ✅ on an
+  // open loot split. Mirrors the event reminder loop above — only fires for
+  // splits that actually have a thread and actually have someone pending.
+  setInterval(async () => {
+    let openSplits;
+    try {
+      openSplits = await lootStore.listOpen();
+    } catch (e) {
+      console.error('Failed to load open loot splits for reminder pass', e);
+      return;
+    }
+
+    for (const split of openSplits) {
+      const unclaimed = lootStore.unclaimedParticipants(split);
+      if (unclaimed.length === 0 || !split.threadId) continue;
+
+      let thread;
+      try {
+        thread = await client.channels.fetch(split.threadId);
+      } catch {
+        continue; // thread missing/deleted
+      }
+      if (!thread || !thread.isThread || !thread.isThread()) continue;
+
+      const mentionText = unclaimed.map((p) => `<@${p.userId}>`).join(' ');
+      try {
+        await thread.send(
+          `⏰ Still waiting on your split from **${split.lootName}** (${lootRender.formatSilver(
+            split.shareAmount
+          )} each): ${mentionText} — react ${lootRender.CLAIM_EMOJI} on the split message above once you've taken it.`
+        );
+        split.lastReminderAt = Date.now();
+        await lootStore.persistSplit(split);
+      } catch (e) {
+        console.error('Failed to send loot reminder for split', split.id, e);
+      }
+    }
+  }, 2 * 60 * 60 * 1000);
 });
 
 client.on(Events.MessageCreate, async (message) => {
@@ -463,6 +516,41 @@ client.on(Events.MessageCreate, async (message) => {
   } catch (err) {
     console.error('AI assistant error:', err);
     await message.reply("Sorry, couldn't reach the AI service just now — try again shortly.");
+  }
+});
+
+// ----- ✅ reaction on a posted loot split = "I've taken my share" -----
+client.on(Events.MessageReactionAdd, async (reaction, user) => {
+  try {
+    if (user.bot) return;
+    if (reaction.emoji.name !== lootRender.CLAIM_EMOJI) return;
+
+    // Partial reactions/messages (e.g. after a bot restart, on a message
+    // that wasn't in cache) need fetching before their data is usable.
+    if (reaction.partial) {
+      try {
+        await reaction.fetch();
+      } catch (e) {
+        console.error('Failed to fetch partial reaction', e);
+        return;
+      }
+    }
+
+    const split = await lootStore.findSplitByMessageId(reaction.message.id);
+    if (!split) return; // not a loot split message — ignore
+
+    const result = lootStore.markClaimed(split, user.id);
+    if (result.error === 'not_participant') return; // silently ignore non-participants
+    if (result.alreadyClaimed) return; // nothing changed, no need to re-render
+
+    await lootStore.persistSplit(split);
+    await lootRender.updateSplitMessage(client, split);
+
+    if (result.allClaimed && split.threadId) {
+      await lootRender.celebrateCompletedThread(client, split);
+    }
+  } catch (err) {
+    console.error('Failed to process loot claim reaction:', err);
   }
 });
 
@@ -1038,6 +1126,231 @@ client.on(Events.InteractionCreate, async (interaction) => {
         `Drew ${drawCount} winner${drawCount === 1 ? '' : 's'} for "${prize}" from event "${event.title}"`
       );
       return;
+    }
+
+    // ----- /loot create | list | stats | remind -----
+    if (interaction.isChatInputCommand() && interaction.commandName === 'loot') {
+      const sub = interaction.options.getSubcommand();
+
+      if (sub === 'create') {
+        await interaction.deferReply({ ephemeral: true });
+
+        const lootName = interaction.options.getString('name');
+        const lootLocation = interaction.options.getString('location');
+        const lootValue = interaction.options.getNumber('value');
+        const participantsRaw = interaction.options.getString('participants');
+
+        const ids = [...new Set([...participantsRaw.matchAll(/<@!?(\d+)>/g)].map((m) => m[1]))];
+        if (ids.length === 0) {
+          await interaction.editReply(
+            'I couldn\'t find any @mentions in `participants` — mention everyone who should get a share, e.g. "@Alice @Bob @Carol".'
+          );
+          return;
+        }
+
+        const participants = [];
+        for (const id of ids) {
+          let member = interaction.guild.members.cache.get(id);
+          if (!member) {
+            try {
+              member = await interaction.guild.members.fetch(id);
+            } catch {
+              continue; // not a member of this guild anymore — skip them
+            }
+          }
+          if (member.user.bot) continue;
+          participants.push({ userId: id, username: member.displayName || member.user.username });
+        }
+
+        if (participants.length === 0) {
+          await interaction.editReply("None of those mentions resolved to guild members — nobody's eligible for a share.");
+          return;
+        }
+
+        const { split, error } = lootStore.createSplit({
+          lootName,
+          lootLocation,
+          lootValue,
+          participants,
+          createdBy: { id: interaction.user.id, username: interaction.member?.displayName || interaction.user.username },
+          guildId: interaction.guildId,
+        });
+
+        if (error === 'invalid_value') {
+          await interaction.editReply('Loot value has to be a positive number.');
+          return;
+        }
+        if (error) {
+          await interaction.editReply('Something about that split was invalid — double check the details and try again.');
+          return;
+        }
+
+        const postResult = await lootRender.postSplit(client, split, interaction.guildId);
+        if (postResult.error === 'no_payout_channel') {
+          await interaction.editReply(
+            'I couldn\'t find a "payout" channel in this server — create one (any name that includes "payout") and try again.'
+          );
+          return;
+        }
+
+        await lootStore.saveNewSplit(split);
+        activityStore.log(
+          logUser(interaction.user),
+          'loot.create',
+          `Posted a loot split for "${split.lootName}" (${lootRender.formatSilver(split.lootValue)}, ${
+            split.participants.length
+          } participants)`
+        );
+
+        await interaction.editReply(
+          `Posted **${split.lootName}** in <#${split.channelId}> — ${lootRender.formatSilver(
+            split.taxAmount
+          )} guild tax, ${lootRender.formatSilver(split.shareAmount)} each for ${split.participants.length} participants.`
+        );
+        return;
+      }
+
+      if (sub === 'list') {
+        const open = await lootStore.listOpen();
+        if (open.length === 0) {
+          await interaction.reply({ content: 'No loot splits are currently waiting on anyone.', ephemeral: true });
+          return;
+        }
+
+        const embed = new EmbedBuilder()
+          .setColor(0xf1c40f)
+          .setTitle('💰 Open loot splits')
+          .setDescription(
+            open
+              .slice(0, 20)
+              .map((s) => {
+                const unclaimed = lootStore.unclaimedParticipants(s);
+                return `**${s.lootName}** — ${lootRender.formatSilver(s.lootValue)} • ${unclaimed.length}/${
+                  s.participants.length
+                } still pending • ID: \`${s.id}\``;
+              })
+              .join('\n')
+          );
+        await interaction.reply({ embeds: [embed], ephemeral: true });
+        return;
+      }
+
+      if (sub === 'stats') {
+        const totals = await lootStore.getTotals();
+        const top = await lootStore.leaderboard(10);
+
+        const embed = new EmbedBuilder()
+          .setColor(0xf1c40f)
+          .setTitle('💰 Loot stats — all time')
+          .addFields(
+            { name: 'Total loot value', value: lootRender.formatSilver(totals.totalLootValue), inline: true },
+            { name: 'Total guild tax', value: lootRender.formatSilver(totals.totalGuildTax), inline: true },
+            { name: 'Total paid to members', value: lootRender.formatSilver(totals.totalMemberShare), inline: true },
+            { name: 'Splits recorded', value: String(totals.splitCount), inline: true }
+          );
+
+        if (top.length > 0) {
+          embed.addFields({
+            name: 'Top earners',
+            value: top.map((m, i) => `${i + 1}. <@${m.userId}> — ${lootRender.formatSilver(m.totalReceived)}`).join('\n'),
+          });
+        }
+
+        await interaction.reply({ embeds: [embed] });
+        return;
+      }
+
+      if (sub === 'remind') {
+        const splitId = interaction.options.getString('split_id');
+        const split = await lootStore.findSplit(splitId);
+        if (!split) {
+          await interaction.reply({ content: 'No loot split found with that ID.', ephemeral: true });
+          return;
+        }
+
+        const isCreator = split.createdBy && split.createdBy.id === interaction.user.id;
+        const canManage = interaction.memberPermissions?.has(PermissionFlagsBits.ManageGuild);
+        if (!isCreator && !canManage) {
+          await interaction.reply({
+            content: 'Only the person who posted this split (or a server manager) can trigger a manual reminder.',
+            ephemeral: true,
+          });
+          return;
+        }
+
+        const unclaimed = lootStore.unclaimedParticipants(split);
+        if (unclaimed.length === 0) {
+          await interaction.reply({ content: 'Everyone has already claimed their split.', ephemeral: true });
+          return;
+        }
+        if (!split.threadId) {
+          await interaction.reply({ content: "This split doesn't have a thread to post the reminder in.", ephemeral: true });
+          return;
+        }
+
+        try {
+          const thread = await client.channels.fetch(split.threadId);
+          const mentionText = unclaimed.map((p) => `<@${p.userId}>`).join(' ');
+          await thread.send(
+            `⏰ Still waiting on your split from **${split.lootName}** (${lootRender.formatSilver(
+              split.shareAmount
+            )} each): ${mentionText}`
+          );
+          split.lastReminderAt = Date.now();
+          await lootStore.persistSplit(split);
+          await interaction.reply({ content: 'Reminder sent.', ephemeral: true });
+        } catch (e) {
+          console.error('Manual loot reminder failed', e);
+          await interaction.reply({ content: 'Failed to send the reminder — try again shortly.', ephemeral: true });
+        }
+        return;
+      }
+
+      if (sub === 'mark-claimed') {
+        const splitId = interaction.options.getString('split_id');
+        const targetUser = interaction.options.getUser('member');
+        const split = await lootStore.findSplit(splitId);
+        if (!split) {
+          await interaction.reply({ content: 'No loot split found with that ID.', ephemeral: true });
+          return;
+        }
+
+        const isCreator = split.createdBy && split.createdBy.id === interaction.user.id;
+        const canManage = interaction.memberPermissions?.has(PermissionFlagsBits.ManageGuild);
+        if (!isCreator && !canManage) {
+          await interaction.reply({
+            content: 'Only the person who posted this split (or a server manager) can mark someone as claimed.',
+            ephemeral: true,
+          });
+          return;
+        }
+
+        const result = lootStore.markClaimed(split, targetUser.id);
+        if (result.error === 'not_participant') {
+          await interaction.reply({ content: `<@${targetUser.id}> isn't a participant on this split.`, ephemeral: true });
+          return;
+        }
+        if (result.alreadyClaimed) {
+          await interaction.reply({ content: `<@${targetUser.id}> was already marked as claimed.`, ephemeral: true });
+          return;
+        }
+
+        await lootStore.persistSplit(split);
+        await lootRender.updateSplitMessage(client, split);
+        if (result.allClaimed) await lootRender.celebrateCompletedThread(client, split);
+
+        activityStore.log(
+          logUser(interaction.user),
+          'loot.mark_claimed',
+          `Marked ${targetUser.username} as having claimed their split of "${split.lootName}"`
+        );
+
+        await interaction.reply({
+          content: `Marked <@${targetUser.id}> as having taken their split of **${split.lootName}**.`,
+          ephemeral: true,
+        });
+        return;
+      }
     }
 
     // ----- modal submit: create the event (manual path) -----

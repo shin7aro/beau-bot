@@ -145,6 +145,38 @@ const commands = [
     .addIntegerOption((opt) =>
       opt.setName('winners').setDescription('How many winners to draw (default 1)').setRequired(false)
     ),
+  new SlashCommandBuilder()
+    .setName('loot')
+    .setDescription('Split loot value between participants, with an automatic 5% guild tax')
+    .addSubcommand((sub) =>
+      sub
+        .setName('create')
+        .setDescription('Post a new loot split — 5% goes to the guild, the rest splits evenly')
+        .addStringOption((opt) => opt.setName('name').setDescription('What was looted, e.g. "Avalonian chest"').setRequired(true))
+        .addStringOption((opt) => opt.setName('location').setDescription('Where it happened, e.g. "5.2 Roads"').setRequired(true))
+        .addNumberOption((opt) => opt.setName('value').setDescription('Total loot value in silver').setRequired(true))
+        .addStringOption((opt) =>
+          opt
+            .setName('participants')
+            .setDescription('Mention everyone who gets a share, e.g. @Alice @Bob @Carol')
+            .setRequired(true)
+        )
+    )
+    .addSubcommand((sub) => sub.setName('list').setDescription('See loot splits still waiting on someone'))
+    .addSubcommand((sub) => sub.setName('stats').setDescription('All-time loot totals and top earners'))
+    .addSubcommand((sub) =>
+      sub
+        .setName('remind')
+        .setDescription("Manually ping whoever hasn't claimed their split yet (organizer or server manager only)")
+        .addStringOption((opt) => opt.setName('split_id').setDescription('The split ID shown in the embed footer').setRequired(true))
+    )
+    .addSubcommand((sub) =>
+      sub
+        .setName('mark-claimed')
+        .setDescription("Manually mark someone as having taken their share, e.g. if they forgot to react (organizer or server manager only)")
+        .addStringOption((opt) => opt.setName('split_id').setDescription('The split ID shown in the embed footer').setRequired(true))
+        .addUserOption((opt) => opt.setName('member').setDescription('The participant who already took their share').setRequired(true))
+    ),
 ].map((c) => c.toJSON());
 
 const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);

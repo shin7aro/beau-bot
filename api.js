@@ -17,6 +17,8 @@ const activityStore = require('./activity-store');
 const eventsStore = require('./events-store');
 const eventRender = require('./event-render');
 const itemMap = require('./item-map');
+const lootStore = require('./loot-store');
+const lootRender = require('./loot-render');
 
 const router = express.Router();
 router.use(cookieParser());
@@ -408,52 +410,217 @@ router.get('/api/discord-channels', auth.requireOfficer, async (req, res) => {
 let dahaloMembersCache = { data: null, ts: 0 };
 const DAHALO_MEMBERS_CACHE_TTL = 60 * 1000;
 
+async function fetchDahaloMembers() {
+  if (dahaloMembersCache.data && Date.now() - dahaloMembersCache.ts < DAHALO_MEMBERS_CACHE_TTL) {
+    return dahaloMembersCache.data;
+  }
+
+  const guildId = process.env.GUILD_ID;
+  const botAuth = { Authorization: `Bot ${process.env.DISCORD_TOKEN}` };
+
+  const rolesRes = await fetch(`https://discord.com/api/v10/guilds/${guildId}/roles`, { headers: botAuth });
+  if (!rolesRes.ok) throw new Error(`Discord role lookup failed: ${rolesRes.status}`);
+  const roles = await rolesRes.json();
+  const dahaloRole = roles.find((r) => (r.name || '').toLowerCase() === 'dahalo');
+  if (!dahaloRole) return [];
+
+  const members = [];
+  let after = '0';
+  for (;;) {
+    const membersRes = await fetch(
+      `https://discord.com/api/v10/guilds/${guildId}/members?limit=1000&after=${after}`,
+      { headers: botAuth }
+    );
+    if (!membersRes.ok) throw new Error(`Discord member list failed: ${membersRes.status}`);
+    const page = await membersRes.json();
+    if (page.length === 0) break;
+
+    for (const m of page) {
+      if (m.user && !m.user.bot && (m.roles || []).includes(dahaloRole.id)) {
+        members.push({
+          id: m.user.id,
+          username: m.nick || m.user.global_name || m.user.username,
+          avatar: m.user.avatar || null,
+        });
+      }
+    }
+
+    if (page.length < 1000) break;
+    after = page[page.length - 1].user.id;
+  }
+
+  members.sort((a, b) => a.username.localeCompare(b.username));
+  dahaloMembersCache = { data: members, ts: Date.now() };
+  return members;
+}
+
 router.get('/api/discord-members', auth.requireOfficer, async (req, res) => {
   try {
-    if (dahaloMembersCache.data && Date.now() - dahaloMembersCache.ts < DAHALO_MEMBERS_CACHE_TTL) {
-      return res.json(dahaloMembersCache.data);
-    }
-
-    const guildId = process.env.GUILD_ID;
-    const botAuth = { Authorization: `Bot ${process.env.DISCORD_TOKEN}` };
-
-    const rolesRes = await fetch(`https://discord.com/api/v10/guilds/${guildId}/roles`, { headers: botAuth });
-    if (!rolesRes.ok) throw new Error(`Discord role lookup failed: ${rolesRes.status}`);
-    const roles = await rolesRes.json();
-    const dahaloRole = roles.find((r) => (r.name || '').toLowerCase() === 'dahalo');
-    if (!dahaloRole) return res.json([]);
-
-    const members = [];
-    let after = '0';
-    for (;;) {
-      const membersRes = await fetch(
-        `https://discord.com/api/v10/guilds/${guildId}/members?limit=1000&after=${after}`,
-        { headers: botAuth }
-      );
-      if (!membersRes.ok) throw new Error(`Discord member list failed: ${membersRes.status}`);
-      const page = await membersRes.json();
-      if (page.length === 0) break;
-
-      for (const m of page) {
-        if (m.user && !m.user.bot && (m.roles || []).includes(dahaloRole.id)) {
-          members.push({
-            id: m.user.id,
-            username: m.nick || m.user.global_name || m.user.username,
-            avatar: m.user.avatar || null,
-          });
-        }
-      }
-
-      if (page.length < 1000) break;
-      after = page[page.length - 1].user.id;
-    }
-
-    members.sort((a, b) => a.username.localeCompare(b.username));
-    dahaloMembersCache = { data: members, ts: Date.now() };
-    res.json(members);
+    res.json(await fetchDahaloMembers());
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Failed to load guild members.' });
+  }
+});
+
+// Same roster as above, but open to any logged-in member (not just
+// officers/admins) — powers the participant picker on the Loot Manager
+// page, which every member can use.
+router.get('/api/loot/members', auth.requireMember, async (req, res) => {
+  try {
+    res.json(await fetchDahaloMembers());
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to load guild members.' });
+  }
+});
+
+// ── LOOT MANAGER ────────────────────────────────────────────────────────
+// Open to any logged-in member, not just officers/admins — anyone in the
+// guild can run a split. Posting still goes through the live Discord bot
+// (loot-render.js), same "site triggers the exact same message the /loot
+// command would" approach the events feature uses above.
+
+router.get('/api/loot', auth.requireMember, async (req, res) => {
+  try {
+    const [recent, totals] = await Promise.all([lootStore.listRecent(50), lootStore.getTotals()]);
+    res.json({ recent, totals });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to load loot splits.' });
+  }
+});
+
+router.get('/api/loot/stats', auth.requireMember, async (req, res) => {
+  try {
+    const [totals, leaderboard] = await Promise.all([lootStore.getTotals(), lootStore.leaderboard(20)]);
+    res.json({ totals, leaderboard });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to load loot stats.' });
+  }
+});
+
+router.post('/api/loot', auth.requireMember, async (req, res) => {
+  const client = requireDiscordClient(res);
+  if (!client) return;
+
+  const { lootName, lootLocation, lootValue, participantIds } = req.body || {};
+  if (!Array.isArray(participantIds) || participantIds.length === 0) {
+    return res.status(400).json({ error: 'Pick at least one participant.' });
+  }
+
+  let participants;
+  try {
+    const roster = await fetchDahaloMembers();
+    const byId = new Map(roster.map((m) => [m.id, m]));
+    participants = participantIds.map((id) => ({ userId: id, username: byId.get(id)?.username || null }));
+  } catch (err) {
+    console.error('Failed to resolve participants for loot split', err);
+    return res.status(500).json({ error: 'Failed to load the member list — try again shortly.' });
+  }
+
+  const { split, error } = lootStore.createSplit({
+    lootName,
+    lootLocation,
+    lootValue,
+    participants,
+    createdBy: { id: req.user.id, username: req.user.username },
+    guildId: process.env.GUILD_ID,
+  });
+
+  if (error === 'loot_name_required') return res.status(400).json({ error: 'Loot name is required.' });
+  if (error === 'invalid_value') return res.status(400).json({ error: 'Loot value has to be a positive number.' });
+  if (error === 'no_participants') return res.status(400).json({ error: 'Pick at least one participant.' });
+  if (error) return res.status(400).json({ error: 'Something about that split was invalid.' });
+
+  const postResult = await lootRender.postSplit(client, split, process.env.GUILD_ID);
+  if (postResult.error === 'no_payout_channel') {
+    return res.status(400).json({ error: 'No "payout" channel found in the server — ask an admin to create one.' });
+  }
+
+  await lootStore.saveNewSplit(split);
+  activityStore.log(
+    { id: req.user.id, username: req.user.username },
+    'loot.create',
+    `Posted a loot split for "${split.lootName}" (${lootRender.formatSilver(split.lootValue)}, ${
+      split.participants.length
+    } participants)`
+  );
+
+  res.json({ split });
+});
+
+// Manual "mark this person claimed" — for when someone actually took their
+// share but forgot to react. Same organizer-or-officer/admin gate as the
+// reminder route above.
+router.post('/api/loot/:id/claim', auth.requireMember, async (req, res) => {
+  const client = requireDiscordClient(res);
+  if (!client) return;
+
+  const split = await lootStore.findSplit(req.params.id);
+  if (!split) return res.status(404).json({ error: 'Loot split not found.' });
+
+  const isCreator = split.createdBy && split.createdBy.id === req.user.id;
+  const isManager = req.user.role === 'officer' || req.user.role === 'admin';
+  if (!isCreator && !isManager) {
+    return res.status(403).json({ error: 'Only the person who posted this split (or an officer/admin) can mark someone as claimed.' });
+  }
+
+  const { userId } = req.body || {};
+  if (!userId) return res.status(400).json({ error: 'userId is required.' });
+
+  const result = lootStore.markClaimed(split, userId);
+  if (result.error === 'not_participant') return res.status(400).json({ error: 'That person is not a participant on this split.' });
+  if (result.alreadyClaimed) return res.json({ split, alreadyClaimed: true });
+
+  await lootStore.persistSplit(split);
+  await lootRender.updateSplitMessage(client, split);
+  if (result.allClaimed) await lootRender.celebrateCompletedThread(client, split);
+
+  const claimedParticipant = split.participants.find((p) => p.userId === userId);
+  activityStore.log(
+    { id: req.user.id, username: req.user.username },
+    'loot.mark_claimed',
+    `Marked ${claimedParticipant?.username || userId} as having claimed their split of "${split.lootName}"`
+  );
+
+  res.json({ split });
+});
+
+// Manual "ping unclaimed now" — same organizer-or-server-manager gate the
+// bot's /loot remind command uses, checked here via the site's officer/admin
+// roles instead of a live Discord permission check (the site doesn't have
+// one to check against for a background HTTP request).
+router.post('/api/loot/:id/remind', auth.requireMember, async (req, res) => {
+  const client = requireDiscordClient(res);
+  if (!client) return;
+
+  const split = await lootStore.findSplit(req.params.id);
+  if (!split) return res.status(404).json({ error: 'Loot split not found.' });
+
+  const isCreator = split.createdBy && split.createdBy.id === req.user.id;
+  const isManager = req.user.role === 'officer' || req.user.role === 'admin';
+  if (!isCreator && !isManager) {
+    return res.status(403).json({ error: 'Only the person who posted this split (or an officer/admin) can send a reminder.' });
+  }
+
+  const unclaimed = lootStore.unclaimedParticipants(split);
+  if (unclaimed.length === 0) return res.status(400).json({ error: 'Everyone has already claimed their split.' });
+  if (!split.threadId) return res.status(400).json({ error: "This split doesn't have a thread to post in." });
+
+  try {
+    const thread = await client.channels.fetch(split.threadId);
+    const mentionText = unclaimed.map((p) => `<@${p.userId}>`).join(' ');
+    await thread.send(
+      `⏰ Still waiting on your split from **${split.lootName}** (${lootRender.formatSilver(split.shareAmount)} each): ${mentionText}`
+    );
+    split.lastReminderAt = Date.now();
+    await lootStore.persistSplit(split);
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('Manual loot reminder failed', err);
+    res.status(500).json({ error: 'Failed to send the reminder — try again shortly.' });
   }
 });
 
