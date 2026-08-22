@@ -119,6 +119,8 @@ img { max-width: 100%; display: block; }
 .site-nav a.logged-in-only.visible { display: inline-flex; }
 .admin-only { display: none !important; }
 .admin-only.visible { display: inline-flex !important; }
+.roster-admin-only { display: none !important; }
+.roster-admin-only.visible { display: inline-flex !important; }
 
 .header-actions { margin-left: auto; flex-shrink: 0; display: flex; align-items: center; gap: 10px; }
 #auth-control { display: flex; align-items: center; gap: 10px; }

@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Roster — Rise of Dahalo</title>
+<meta name="description" content="Rise of Dahalo's chain of command — GM, right hand, officers, and every active member.">
+<link rel="stylesheet" href="css/base.css">
+<link rel="stylesheet" href="css/home.css">
+<link rel="stylesheet" href="css/builds.css">
+<link rel="stylesheet" href="css/events.css">
+<link rel="stylesheet" href="css/roster.css">
+</head>
+<body>
+
+<!-- HEADER -->
+<header class="site-header">
+  <a href="index.html" class="brand">
+    <div class="guild-mark">
+      <svg viewBox="0 0 24 24"><path d="M12 2L4 6v6c0 5.5 3.4 9.7 8 11 4.6-1.3 8-5.5 8-11V6l-8-4z"/><path d="M12 7v9M9 10l3-3 3 3" stroke="#0d0d0f" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>
+    </div>
+    <div class="header-text">
+      <h1>RISE OF DAHALO</h1>
+      <span class="eyebrow">Roster</span>
+    </div>
+  </a>
+  <nav class="site-nav">
+    <a href="index.html">Home</a>
+    <a href="builds.html">Builds</a>
+    <a href="roster.html" class="active">Roster</a>
+    <a href="events.html" class="logged-in-only" id="events-nav-link">Events</a>
+    <a href="loot.html" class="logged-in-only" id="loot-nav-link">Loot Manager</a>
+    <a href="comps.html" class="officer-only" id="comps-nav-link">Compositions</a>
+  </nav>
+  <div class="header-actions">
+    <button class="btn" id="copy-btn" aria-label="Copy page link">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="9" y="9" width="13" height="13" rx="2"/>
+        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+      </svg>
+      <span class="btn-label">Copy link</span>
+    </button>
+    <button class="btn roster-admin-only" id="manage-hierarchy-btn"><span class="btn-label">Manage hierarchy</span></button>
+    <div id="auth-control"></div>
+  </div>
+</header>
+
+<!-- INTRO -->
+<section class="wrap section" style="padding-bottom: 24px;">
+  <div class="section-head">
+    <div class="section-eyebrow">Chain of command</div>
+    <h2 class="section-title">Roster</h2>
+    <p class="section-sub">Who's who — from the top down, left to right. Everyone here is currently carrying the Dahalo role in Discord.</p>
+  </div>
+</section>
+
+<!-- TREE -->
+<section class="wrap roster-tree-section">
+  <div class="roster-tree" id="roster-tree"><!-- filled by js/roster.js --></div>
+</section>
+
+<!-- ALL MEMBERS -->
+<section class="wrap section roster-members-section">
+  <div class="section-head" style="margin-bottom: 18px;">
+    <div class="section-eyebrow">Everyone else</div>
+    <h2 class="section-title" style="font-size: 24px;">All members</h2>
+    <p class="section-sub" id="roster-members-count"></p>
+  </div>
+  <div class="controls" style="padding: 0 0 14px; border: none;">
+    <div class="search-wrap">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+      <input type="text" id="roster-member-search" placeholder="Search members…" autocomplete="off">
+    </div>
+  </div>
+  <div class="roster-member-grid" id="roster-member-grid"></div>
+  <div class="empty-state" id="roster-members-empty" style="display:none">No members found.</div>
+</section>
+
+<!-- HIERARCHY EDITOR MODAL (roster managers only) -->
+<div class="modal-overlay" id="hierarchy-modal-overlay" style="display:none">
+  <div class="modal-card roster-editor-card">
+    <h2>Manage hierarchy</h2>
+    <p class="modal-hint">Set who's GM, Right Hand, and Officer, reorder within a tier, or move someone to inactive so they drop off the roster (and every member picker on the site) entirely. Only you and Erdan Silentread can do this.</p>
+    <div class="controls" style="padding: 0; border: none;">
+      <div class="search-wrap" style="max-width: none; flex: 1;">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+        <input type="text" id="hierarchy-search" placeholder="Search all Dahalo members…" autocomplete="off">
+      </div>
+      <div class="filter-group" id="hierarchy-filter-group">
+        <button type="button" class="filter-btn active" data-filter="all">All</button>
+        <button type="button" class="filter-btn" data-filter="inactive">Inactive</button>
+      </div>
+    </div>
+    <div class="roster-editor-list" id="hierarchy-list"><!-- filled by js/roster.js --></div>
+    <div class="modal-actions">
+      <button class="btn" id="close-hierarchy-modal-btn"><span class="btn-label">Done</span></button>
+    </div>
+  </div>
+</div>
+
+<!-- FOOTER -->
+<footer class="site-footer">
+  <div class="footer-inner">
+    <div class="footer-brand">
+      <div class="guild-mark">
+        <svg viewBox="0 0 24 24"><path d="M12 2L4 6v6c0 5.5 3.4 9.7 8 11 4.6-1.3 8-5.5 8-11V6l-8-4z"/><path d="M12 7v9M9 10l3-3 3 3" stroke="#0d0d0f" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>
+      </div>
+      <span>RISE OF DAHALO</span>
+    </div>
+    <div class="footer-links">
+      <a href="index.html">Home</a>
+      <a href="builds.html">Builds</a>
+      <a href="roster.html">Roster</a>
+    </div>
+    <div class="footer-copy">© 2026 Rise of Dahalo. Albion Online is a trademark of Sandbox Interactive GmbH — this is an unofficial guild site.</div>
+  </div>
+</footer>
+
+<div id="toast"></div>
+<script src="js/auth.js"></script>
+<script src="js/site.js"></script>
+<script src="js/roster.js"></script>
+</body>
+</html>

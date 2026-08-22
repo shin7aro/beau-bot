@@ -142,6 +142,37 @@ function requireAdmin(req, res, next) {
   next();
 }
 
+// ── ROSTER HIERARCHY MANAGERS ───────────────────────────────────────────
+// A small, hand-picked pair of people who can restructure the roster tree
+// (who's GM/Right Hand/Officer) and retire someone from the roster
+// entirely — separate from, and narrower than, the officer/admin Discord
+// roles above. This is intentionally not tied to a Discord role: it's two
+// specific people, full stop.
+//
+// Prefer ROSTER_ADMIN_IDS (comma-separated Discord user IDs) once you have
+// them — right-click each person in Discord > Copy User ID (Developer Mode
+// must be on). IDs survive nickname/username changes; the name fallback
+// below does not, so treat it as a bootstrap default, not a long-term setup.
+const ROSTER_ADMIN_IDS = (process.env.ROSTER_ADMIN_IDS || '')
+  .split(',')
+  .map((s) => s.trim())
+  .filter(Boolean);
+
+const ROSTER_ADMIN_NAMES = ['Shin7aro 👑', 'Erdan Silentread'];
+
+function isRosterAdmin(user) {
+  if (!user) return false;
+  if (ROSTER_ADMIN_IDS.length > 0) return ROSTER_ADMIN_IDS.includes(user.id);
+  return ROSTER_ADMIN_NAMES.includes(user.username);
+}
+
+function requireRosterAdmin(req, res, next) {
+  if (!isRosterAdmin(req.user)) {
+    return res.status(403).json({ error: 'Only the roster managers can do that.' });
+  }
+  next();
+}
+
 module.exports = {
   COOKIE_NAME,
   loginUrl,
@@ -155,4 +186,6 @@ module.exports = {
   requireMember,
   requireOfficer,
   requireAdmin,
+  isRosterAdmin,
+  requireRosterAdmin,
 };

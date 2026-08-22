@@ -19,6 +19,7 @@ const eventRender = require('./event-render');
 const itemMap = require('./item-map');
 const lootStore = require('./loot-store');
 const lootRender = require('./loot-render');
+const rosterStore = require('./roster-store');
 
 const router = express.Router();
 router.use(cookieParser());
@@ -93,7 +94,12 @@ router.get('/auth/logout', (req, res) => {
 });
 
 router.get('/auth/me', (req, res) => {
-  res.json({ user: req.user || null });
+  if (!req.user) return res.json({ user: null });
+  // Computed fresh from the current ROSTER_ADMIN_IDS/name list on every
+  // call rather than baked into the session JWT, so revoking/granting
+  // roster-admin access takes effect immediately without forcing a
+  // re-login.
+  res.json({ user: { ...req.user, rosterAdmin: auth.isRosterAdmin(req.user) } });
 });
 
 // ── BUILDS ──────────────────────────────────────────────────────────────
@@ -407,12 +413,16 @@ router.get('/api/discord-channels', auth.requireOfficer, async (req, res) => {
 // doesn't require it, only the gateway/cache-based discord.js helpers do.
 // Cached briefly since a guild's member list can be large and this pages
 // through it in batches of 1000; no need to re-fetch on every popover open.
-let dahaloMembersCache = { data: null, ts: 0 };
+let dahaloMembersRawCache = { data: null, ts: 0 };
 const DAHALO_MEMBERS_CACHE_TTL = 60 * 1000;
 
-async function fetchDahaloMembers() {
-  if (dahaloMembersCache.data && Date.now() - dahaloMembersCache.ts < DAHALO_MEMBERS_CACHE_TTL) {
-    return dahaloMembersCache.data;
+// The full Dahalo-role member list straight from Discord, no roster-store
+// filtering applied — this is the only place that should ever see someone
+// the roster managers have marked inactive (the hierarchy editor, so they
+// can find and reactivate them again).
+async function fetchDahaloMembersRaw() {
+  if (dahaloMembersRawCache.data && Date.now() - dahaloMembersRawCache.ts < DAHALO_MEMBERS_CACHE_TTL) {
+    return dahaloMembersRawCache.data;
   }
 
   const guildId = process.env.GUILD_ID;
@@ -450,8 +460,19 @@ async function fetchDahaloMembers() {
   }
 
   members.sort((a, b) => a.username.localeCompare(b.username));
-  dahaloMembersCache = { data: members, ts: Date.now() };
+  dahaloMembersRawCache = { data: members, ts: Date.now() };
   return members;
+}
+
+// The roster every picker/dropdown on the site should actually use — same
+// list as above, minus anyone a roster manager has moved to inactive.
+// Positions are loaded fresh (not cached) on every call, so retiring
+// someone takes effect immediately everywhere, without waiting out the
+// raw Discord cache's TTL.
+async function fetchDahaloMembers() {
+  const raw = await fetchDahaloMembersRaw();
+  const positions = await rosterStore.loadPositions();
+  return raw.filter((m) => !rosterStore.getEntry(positions, m.id).inactive);
 }
 
 router.get('/api/discord-members', auth.requireOfficer, async (req, res) => {
@@ -460,6 +481,117 @@ router.get('/api/discord-members', auth.requireOfficer, async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Failed to load guild members.' });
+  }
+});
+
+// ── ROSTER (family-tree hierarchy page) ─────────────────────────────────
+// Public read — anyone can see the guild's chain of command, same as the
+// War Ledger. Never includes anyone marked inactive; that's enforced by
+// building this off fetchDahaloMembers(), the already-filtered list.
+router.get('/api/roster', async (req, res) => {
+  try {
+    const members = await fetchDahaloMembers();
+    const positions = await rosterStore.loadPositions();
+    const enriched = members.map((m) => {
+      const entry = rosterStore.getEntry(positions, m.id);
+      return { id: m.id, username: m.username, avatar: m.avatar, tier: entry.tier, order: entry.order };
+    });
+
+    const byTier = (tier) =>
+      enriched
+        .filter((m) => m.tier === tier)
+        .sort((a, b) => a.order - b.order || a.username.localeCompare(b.username));
+
+    res.json({
+      gm: byTier('gm'),
+      rightHand: byTier('right_hand'),
+      officers: byTier('officer'),
+      members: byTier('member'),
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to load the roster.' });
+  }
+});
+
+// Roster-manager-only view: every Dahalo-role member, including inactive
+// ones (so Shin7aro/Erdan can find and reactivate someone), with their
+// current tier/order/inactive status attached — powers the hierarchy
+// editor on the roster page.
+router.get('/api/roster/admin', auth.requireRosterAdmin, async (req, res) => {
+  try {
+    const raw = await fetchDahaloMembersRaw();
+    const positions = await rosterStore.loadPositions();
+    const enriched = raw
+      .map((m) => {
+        const entry = rosterStore.getEntry(positions, m.id);
+        return { id: m.id, username: m.username, avatar: m.avatar, tier: entry.tier, order: entry.order, inactive: entry.inactive };
+      })
+      .sort((a, b) => a.username.localeCompare(b.username));
+    res.json(enriched);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to load the roster.' });
+  }
+});
+
+// Reassigns the manual ordering within one tier in one shot. Body:
+// { tier, orderedIds: [userId, ...] } — the tier's members in the order
+// they should appear. Defined BEFORE the /:userId route below — Express
+// matches routes in order, and "reorder" would otherwise be swallowed by
+// :userId.
+router.put('/api/roster/admin/reorder', auth.requireRosterAdmin, async (req, res) => {
+  const { tier, orderedIds } = req.body || {};
+  if (!rosterStore.TIERS.includes(tier) || !Array.isArray(orderedIds)) {
+    return res.status(400).json({ error: 'Invalid reorder request.' });
+  }
+  try {
+    await rosterStore.setTierOrder(tier, orderedIds);
+    const tierLabel = { gm: 'GM', right_hand: 'Right Hand', officer: 'Officer', member: 'Member' }[tier] || tier;
+    await activityStore.log(req.user, 'roster.reorder', `Reordered the ${tierLabel} tier`);
+    res.json({ ok: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to reorder the roster.' });
+  }
+});
+
+// Set one member's tier and/or active status. Roster-manager-only —
+// enforced separately from (and more narrowly than) the officer/admin
+// Discord roles, per web-auth.js's requireRosterAdmin.
+router.put('/api/roster/admin/:userId', auth.requireRosterAdmin, async (req, res) => {
+  const { userId } = req.params;
+  const { tier, inactive, username } = req.body || {};
+
+  if (tier !== undefined && !rosterStore.TIERS.includes(tier)) {
+    return res.status(400).json({ error: 'Invalid tier.' });
+  }
+
+  const patch = {};
+  if (tier !== undefined) patch.tier = tier;
+  if (inactive !== undefined) patch.inactive = Boolean(inactive);
+
+  if (Object.keys(patch).length === 0) {
+    return res.status(400).json({ error: 'Nothing to update.' });
+  }
+
+  try {
+    const updated = await rosterStore.setEntry(userId, patch);
+    const who = username || userId;
+    if (inactive !== undefined) {
+      await activityStore.log(
+        req.user,
+        inactive ? 'roster.deactivate' : 'roster.reactivate',
+        inactive ? `Moved ${who} to inactive` : `Reactivated ${who}`
+      );
+    } else {
+      const tierLabel = { gm: 'GM', right_hand: 'Right Hand', officer: 'Officer', member: 'Member' }[tier] || tier;
+      await activityStore.log(req.user, 'roster.tier', `Set ${who}'s roster tier to ${tierLabel}`);
+    }
+    res.json(updated);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to update the roster.' });
   }
 });
 

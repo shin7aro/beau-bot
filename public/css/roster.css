@@ -1,0 +1,143 @@
+/* ─────────────────────────────────────────
+   ROSTER PAGE
+   (builds on tokens + shared classes from
+   base.css / home.css / events.css —
+   .wrap, .section, .cta-*, .modal-*,
+   .search-wrap, .filter-btn, .empty-state
+   are all defined there)
+───────────────────────────────────────── */
+
+/* ---------- the tree (GM > Right Hand > Officers) ---------- */
+.roster-tree-section { padding-bottom: 56px; }
+.roster-tree {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  overflow-x: auto;
+  padding: 12px 4px 28px;
+}
+
+.tree-col { display: flex; flex-direction: column; justify-content: center; flex-shrink: 0; position: relative; }
+.tree-col-gm, .tree-col-rh { padding-right: 46px; }
+/* straight connector: GM -> Right Hand, Right Hand -> Officers column */
+.tree-col-gm::after, .tree-col-rh::after {
+  content: '';
+  position: absolute; top: 50%; right: 0;
+  width: 46px; height: 2px;
+  background: var(--line-2);
+}
+.tree-col-officers { padding-left: 46px; }
+
+.tree-node {
+  --node-h: 128px;
+  width: 168px; height: var(--node-h);
+  background: var(--surface); border: 1px solid var(--line-2); border-radius: 14px;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px;
+  padding: 14px 10px;
+  box-shadow: 0 10px 26px -14px rgba(0,0,0,0.5);
+  flex-shrink: 0;
+}
+.tree-node-avatar {
+  width: 52px; height: 52px; border-radius: 50%; object-fit: cover;
+  border: 2px solid var(--line-2); background: var(--surface-2);
+}
+.tree-node-gm { border-color: var(--accent); }
+.tree-node-gm .tree-node-avatar { border-color: var(--accent); box-shadow: 0 0 0 4px var(--accent-dim); }
+.tree-node-rh .tree-node-avatar { border-color: var(--moss); }
+.tree-node-name {
+  font-family: 'Big Shoulders Display', sans-serif; font-weight: 700; font-size: 15px;
+  color: var(--ink); text-align: center; line-height: 1.2;
+  max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.tree-node-tag {
+  font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em;
+  color: var(--ink-faint);
+}
+.tree-node-gm .tree-node-tag { color: var(--accent); }
+.tree-node-rh .tree-node-tag { color: var(--moss); }
+
+/* fan-out branch: a vertical trunk connecting every officer's mid-height,
+   with each card getting its own short horizontal stub back to the trunk */
+.tree-branch {
+  position: relative;
+  display: flex; flex-direction: column; gap: 16px;
+  padding-left: 26px;
+}
+.tree-branch::before {
+  content: '';
+  position: absolute; left: 0; width: 2px; background: var(--line-2);
+  top: calc(var(--node-h, 128px) / 2);
+  bottom: calc(var(--node-h, 128px) / 2);
+}
+.tree-branch .tree-node { position: relative; width: 148px; height: 96px; }
+.tree-branch .tree-node::before {
+  content: '';
+  position: absolute; left: -26px; top: 50%; width: 26px; height: 2px;
+  background: var(--line-2);
+}
+.tree-node-officer .tree-node-avatar { width: 42px; height: 42px; }
+.tree-node-officer .tree-node-name { font-size: 13.5px; }
+
+@media (max-width: 880px) {
+  .roster-tree { flex-direction: column; align-items: stretch; overflow-x: visible; gap: 18px; }
+  .tree-col-gm, .tree-col-rh, .tree-col-officers { padding: 0; display: flex; justify-content: center; }
+  .tree-col-gm::after, .tree-col-rh::after { display: none; }
+  .tree-branch { padding-left: 0; align-items: center; }
+  .tree-branch::before, .tree-branch .tree-node::before { display: none; }
+}
+
+/* ---------- all-members grid ---------- */
+.roster-member-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 8px;
+}
+.roster-member-chip {
+  display: flex; align-items: center; gap: 9px;
+  padding: 8px 12px; border-radius: 10px;
+  background: var(--surface); border: 1px solid var(--line);
+  font-size: 13px; color: var(--ink-dim);
+}
+.roster-member-chip img { width: 30px; height: 30px; border-radius: 50%; object-fit: cover; background: var(--surface-2); flex-shrink: 0; }
+.roster-member-chip span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* ---------- hierarchy editor modal ---------- */
+.roster-editor-card { max-width: 720px; }
+.roster-editor-list {
+  display: flex; flex-direction: column; gap: 6px;
+  max-height: 50vh; overflow-y: auto; padding-right: 4px;
+}
+.roster-editor-row {
+  display: grid; grid-template-columns: 40px 1fr 128px auto auto;
+  align-items: center; gap: 10px;
+  padding: 8px; border-radius: 8px; border: 1px solid var(--line);
+}
+.roster-editor-row.inactive { opacity: 0.55; }
+.roster-editor-row img { width: 36px; height: 36px; border-radius: 50%; object-fit: cover; background: var(--surface-2); }
+.roster-editor-row-name { font-size: 13px; color: var(--ink); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: flex; align-items: center; gap: 6px; }
+.roster-editor-inactive-tag {
+  font-size: 9.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em;
+  color: var(--dps); background: var(--dps-bg); border: 1px solid var(--dps);
+  border-radius: 999px; padding: 1px 7px; flex-shrink: 0;
+}
+.roster-editor-tier-select {
+  background: var(--surface-2); border: 1px solid var(--line-2); border-radius: 7px;
+  color: var(--ink); font: inherit; font-size: 12px; padding: 6px 8px;
+}
+.roster-editor-order-btns { display: flex; gap: 2px; }
+.roster-editor-order-btn {
+  background: transparent; border: 1px solid var(--line-2); border-radius: 6px;
+  color: var(--ink-faint); cursor: pointer; width: 26px; height: 26px;
+  display: flex; align-items: center; justify-content: center;
+}
+.roster-editor-order-btn:hover:not(:disabled) { color: var(--accent); border-color: var(--accent); }
+.roster-editor-order-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+.roster-editor-inactive-btn { font-size: 11px; padding: 6px 10px; min-height: 0; white-space: nowrap; }
+
+@media (max-width: 640px) {
+  .roster-editor-row { grid-template-columns: 32px 1fr; grid-template-areas: "avatar name" "tier tier" "order inactive"; }
+  .roster-editor-row img { grid-area: avatar; width: 28px; height: 28px; }
+  .roster-editor-row-name { grid-area: name; }
+  .roster-editor-tier-select { grid-area: tier; }
+  .roster-editor-order-btns { grid-area: order; }
+  .roster-editor-inactive-btn { grid-area: inactive; justify-self: end; }
+}

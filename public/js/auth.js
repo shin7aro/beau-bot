@@ -4,7 +4,7 @@
    exposes window.SITE_AUTH, and renders a
    login/logout control into the header.
 ───────────────────────────────────────── */
-window.SITE_AUTH = { loggedIn: false, role: null, username: null, id: null, avatar: null };
+window.SITE_AUTH = { loggedIn: false, role: null, username: null, id: null, avatar: null, rosterAdmin: false };
 
 // Builds a Discord CDN avatar URL from a user id + the avatar hash Discord
 // gave us at login (stored in the session). Falls back to Discord's own
@@ -31,7 +31,14 @@ window.SITE_AUTH_READY = fetch('/auth/me', { credentials: 'same-origin' })
   .then(r => r.json())
   .then(data => {
     if (data.user) {
-      window.SITE_AUTH = { loggedIn: true, role: data.user.role, username: data.user.username, id: data.user.id, avatar: data.user.avatar };
+      window.SITE_AUTH = {
+        loggedIn: true,
+        role: data.user.role,
+        username: data.user.username,
+        id: data.user.id,
+        avatar: data.user.avatar,
+        rosterAdmin: Boolean(data.user.rosterAdmin),
+      };
     }
     renderAuthControl();
     document.dispatchEvent(new CustomEvent('site-auth-ready'));
@@ -48,6 +55,7 @@ function renderAuthControl() {
   document.querySelectorAll('.officer-only').forEach(el => el.classList.toggle('visible', role === 'officer' || role === 'admin'));
   document.querySelectorAll('.admin-only').forEach(el => el.classList.toggle('visible', role === 'admin'));
   document.querySelectorAll('.logged-in-only').forEach(el => el.classList.toggle('visible', loggedIn));
+  document.querySelectorAll('.roster-admin-only').forEach(el => el.classList.toggle('visible', window.SITE_AUTH.rosterAdmin));
 
   const mount = document.getElementById('auth-control');
   if (!mount) return;
@@ -70,6 +78,7 @@ function renderAuthControl() {
       </button>
       <div class="auth-menu-dropdown" id="auth-menu-dropdown">
         <a class="auth-menu-item" href="builds.html">War Ledger</a>
+        <a class="auth-menu-item" href="roster.html">Roster</a>
         <a class="auth-menu-item" href="events.html">Events</a>
         ${(role === 'officer' || role === 'admin') ? '<a class="auth-menu-item" href="comps.html">Compositions</a>' : ''}
         ${role === 'admin' ? '<a class="auth-menu-item" href="history.html">History</a>' : ''}
