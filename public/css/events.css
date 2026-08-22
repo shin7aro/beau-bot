@@ -137,7 +137,7 @@
   color: var(--ink-faint); border-bottom: 1px solid var(--line); background: var(--surface-2);
 }
 .event-row {
-  display: flex; align-items: center; gap: 9px; padding: 5px 14px; border-bottom: 1px solid var(--line);
+  display: flex; align-items: center; gap: 9px; padding: 3px 14px; border-bottom: 1px solid var(--line);
   font-size: 13px; cursor: default;
 }
 .event-row:last-child { border-bottom: none; }
