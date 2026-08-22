@@ -1,349 +1,623 @@
-/* ─────────────────────────────────────────
-   COMPOSITIONS — officer/admin editor
-   Reads/writes the same `comps` data the
-   Discord bot's /comp commands use.
-───────────────────────────────────────── */
+// comps.js
+// Storage + helpers for reusable team compositions, created with /comp create
+// and edited with /comp edit. This replaces the old live-website build pull —
+// the site is still useful for looking up exact builds/icons, so a link to it
+// gets attached to any event that was posted from a saved comp.
+
+const path = require('path');
+const storage = require('./storage');
+
+const DB_PATH = path.join(__dirname, 'comps.json'); // local fallback path only
+const REDIS_KEY = 'comps';
+const BUILDS_LINK = process.env.PUBLIC_URL || 'https://shin7aro.github.io/Rise-of-Dahalo';
+
+// Keep this in sync with CATEGORY_ORDER in index.js.
 const CATEGORY_ORDER = ['Tank', 'Support', 'DPS', 'Healer', 'Battlemount'];
-const TAB_LABELS = { brawl: 'Brawl', gank: 'Gank', kite: 'Kite & Clap', brawlclap: 'Brawl & Clap', tracking: 'Tracking', groupdungeon: 'Group Dungeon', avadungeon: 'Ava Dungeon' };
 
-let allComps = [];       // [{ key, label, categories, updatedAt, ... }]
-let buildOptions = [];   // [{ tab, index, role, weapon }]
-let serverEmojis = [];   // [{ id, name, animated, tag, url }] from /api/discord-emojis
-let editingKey = null;   // null = viewing/creating, otherwise the comp being edited
-let draft = null;        // working copy of the comp currently shown in the editor
-
-function escapeHtml(s) {
-  return String(s || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+async function loadComps() {
+  return storage.loadJSON(REDIS_KEY, DB_PATH);
 }
 
-function buildOptionValue(o) { return `${o.tab}:${o.index}`; }
-
-async function api(path, opts) {
-  const res = await fetch(path, {
-    credentials: 'same-origin',
-    headers: { 'Content-Type': 'application/json' },
-    ...opts,
-  });
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    throw new Error(body.error || `Request failed (${res.status})`);
-  }
-  return res.status === 204 ? null : res.json();
+async function saveComps(comps) {
+  await storage.saveJSON(REDIS_KEY, DB_PATH, comps);
 }
 
-async function loadAll() {
-  [allComps, buildOptions, serverEmojis] = await Promise.all([
-    api('/api/comps'),
-    api('/api/comps-build-options'),
-    api('/api/discord-emojis').catch(() => []),
-  ]);
-  renderCompSelect();
+function keyFor(label) {
+  return label.trim().toLowerCase();
 }
 
-/* ---------- comp picker (dropdown) ---------- */
-function renderCompSelect() {
-  const select = document.getElementById('comp-select');
-  const countLabel = document.getElementById('comp-count-label');
-  countLabel.textContent = `${allComps.length} composition${allComps.length === 1 ? '' : 's'}`;
+// An optional leading emoji on an item line — a custom Discord emoji tag
+// (<:name:id> / <a:name:id>), a typed-out ":name:" shortcode, or a single
+// unicode emoji character.
+const EMOJI_PREFIX_RE = /^(<a?:\w+:\d+>|:\w+:|\p{Extended_Pictographic}\uFE0F?)\s+(.*)$/u;
 
-  const sorted = [...allComps].sort((a, b) => a.label.localeCompare(b.label));
-  const currentValue = select.value;
-  select.innerHTML = `<option value="">Select a composition…</option>` +
-    sorted.map(c => `<option value="${escapeHtml(c.key)}">${escapeHtml(c.label)}</option>`).join('');
-  if (currentValue && sorted.some(c => c.key === currentValue)) select.value = currentValue;
-}
+// Resolves a raw emoji token from the start of an item line into something
+// Discord will actually render:
+//  - a full custom emoji tag is used as-is
+//  - a plain unicode emoji character is used as-is
+//  - a typed ":name:" shortcode gets looked up by name against the server's
+//    own custom emoji list — Discord's modal text fields don't auto-convert
+//    shortcodes into real emoji the way the normal chat box does, so without
+//    this the literal text ":name:" would otherwise get treated as part of
+//    the item name. If no match is found, it's dropped (falls back to the
+//    default icon) rather than leaking ":name:" into the display.
+function resolveEmojiToken(token, guild) {
+  if (!token) return null;
+  if (/^<a?:\w+:\d+>$/.test(token)) return token;
 
-function newDraftCategories() {
-  const cats = {};
-  for (const cat of CATEGORY_ORDER) cats[cat] = { mode: 'items', items: [] };
-  return cats;
-}
-
-// How many party columns to show, derived from the highest party index any
-// item currently uses (so opening an existing comp shows exactly as many
-// columns as it actually has). Always at least 1 — Party 1 is the default
-// and can't be removed.
-function computePartyCount(categories) {
-  let max = 0;
-  for (const cat of CATEGORY_ORDER) {
-    for (const item of categories[cat].items) {
-      if (typeof item.party === 'number' && item.party > max) max = item.party;
+  const shortcode = token.match(/^:(\w+):$/);
+  if (shortcode) {
+    if (!guild) return null;
+    const name = shortcode[1].toLowerCase();
+    try {
+      const found = guild.emojis.cache.find((e) => e.name && e.name.toLowerCase() === name);
+      return found ? found.toString() : null;
+    } catch {
+      return null;
     }
   }
-  return max + 1;
+
+  return token;
 }
 
-function selectComp(key) {
-  const comp = allComps.find(c => c.key === key);
-  if (!comp) return;
-  editingKey = key;
-  draft = { label: comp.label, categories: JSON.parse(JSON.stringify(comp.categories)) };
-  for (const cat of CATEGORY_ORDER) if (!draft.categories[cat]) draft.categories[cat] = { mode: 'items', items: [] };
-  draft.partyCount = computePartyCount(draft.categories);
-  document.getElementById('comp-select').value = key;
-  renderDetail();
-}
+// Parses the "Tank / DPS / Healer / Support / Battlemount" text format used by
+// both the /comp create and /comp edit modals:
+//   Tank
+//   🛡️ 1H Mace
+//   🔨 Polehammer
+//   DPS
+//   ⚔️ Carving Sword
+//   ⚔️ Carving Sword
+// A weapon can appear on more than one line on purpose — each line is its own
+// slot, so two identical lines just means two open slots for that weapon,
+// no "(1/2)" counter needed. "Name: N" still works as shorthand for N
+// duplicate lines.
+// A "Party N" line marks the start of a new 20-player party. Composition text
+// with no Party headers at all is treated as one single implicit party (fully
+// backward compatible with comps saved before this feature existed).
+const PARTY_HEADER_RE = /^party\b/i;
 
-function startNewComp() {
-  editingKey = null;
-  draft = { label: '', categories: newDraftCategories(), partyCount: 1 };
-  document.getElementById('comp-select').value = '';
-  renderDetail();
-}
-
-/* ---------- emoji picker (picker only — no typed shortcode) ---------- */
-function emojiPreviewHtml(value) {
-  if (!value) return '<span class="emoji-preview-empty">+</span>';
-  const m = value.match(/^<a?:(\w+):(\d+)>$/);
+// A single roster line can offer more than one acceptable weapon —
+// "⚔️ Carving Sword / ⚔️ Spirithunter" — written as multiple "emoji Name"
+// segments separated by " / ". Stored as item.options (instead of a single
+// name/emoji) so the player (or an officer assigning them) picks exactly
+// one when they take the slot; item.signedOptionIndex records which one
+// the current occupant chose. Per-option build linking isn't supported —
+// only single-choice lines can link a build for now.
+function parseWeaponSegment(segStr, guild) {
+  let seg = segStr.trim();
+  let emoji = null;
+  const m = seg.match(EMOJI_PREFIX_RE);
   if (m) {
-    const known = serverEmojis.find(e => e.id === m[2]);
-    const url = known ? known.url : `https://cdn.discordapp.com/emojis/${m[2]}.${value.startsWith('<a:') ? 'gif' : 'png'}?size=32`;
-    return `<img class="emoji-preview-img" src="${url}" alt="${escapeHtml(m[1])}">`;
+    emoji = resolveEmojiToken(m[1], guild);
+    seg = m[2].trim();
   }
-  return `<span class="emoji-preview-char">${escapeHtml(value)}</span>`;
+  return { name: seg, emoji };
 }
 
-function closeEmojiPopover() {
-  const pop = document.getElementById('emoji-popover');
-  if (pop) pop.remove();
-  document.removeEventListener('mousedown', handleEmojiPopoverOutsideClick, true);
+// Display label for an item regardless of shape — "Carving Sword" for a
+// normal line, "Carving Sword/Spirithunter" for a multi-choice one. Used
+// anywhere a plain item.name reference used to be safe to assume.
+function itemLabel(item) {
+  if (!item) return '';
+  return item.options ? item.options.map((o) => o.name).join('/') : item.name || '';
 }
 
-function handleEmojiPopoverOutsideClick(e) {
-  const pop = document.getElementById('emoji-popover');
-  if (pop && !pop.contains(e.target)) closeEmojiPopover();
+// A stable signature for matching the "same slot" across a comp edit/
+// refresh — same idea as the old (name, emoji) comparison, just aware
+// multi-choice items have no single name/emoji of their own.
+function itemSignature(item) {
+  return item.options
+    ? 'multi:' + item.options.map((o) => `${o.emoji || ''}\u0000${o.name}`).join('\u0001')
+    : `single:${item.emoji || ''}\u0000${item.name}`;
 }
 
-function openEmojiPopover(anchorBtn, cat, i) {
-  closeEmojiPopover();
-  const pop = document.createElement('div');
-  pop.id = 'emoji-popover';
-  pop.className = 'emoji-popover';
-  pop.innerHTML = `
-    <input type="text" class="emoji-popover-search" placeholder="Search emoji…" autocomplete="off">
-    <div class="emoji-popover-grid"></div>
-    ${serverEmojis.length === 0 ? '<p class="section-sub" style="padding:0 2px">No custom server emojis found — check the bot has emoji permissions and GUILD_ID is set.</p>' : ''}`;
-  document.body.appendChild(pop);
+function parseComposition(raw, guild) {
+  const lines = raw
+    .split('\n')
+    .map((l) => l.trim())
+    .filter((l) => l.length > 0);
 
-  const rect = anchorBtn.getBoundingClientRect();
-  pop.style.top = `${window.scrollY + rect.bottom + 6}px`;
-  pop.style.left = `${window.scrollX + rect.left}px`;
+  const grouped = {};
+  let current = null;
+  let partyIndex = -1; // -1 = no Party header seen yet; items default to party 0
 
-  const grid = pop.querySelector('.emoji-popover-grid');
-  const renderGrid = (filter = '') => {
-    const q = filter.toLowerCase();
-    const list = serverEmojis.filter(e => !q || e.name.toLowerCase().includes(q));
-    const clearTile = `<button type="button" class="emoji-popover-item emoji-popover-clear" data-tag="" title="No emoji">✕</button>`;
-    grid.innerHTML = clearTile + list.map(e =>
-      `<button type="button" class="emoji-popover-item" data-tag="${escapeHtml(e.tag)}" title="${escapeHtml(e.name)}">
-         <img src="${e.url}" alt="${escapeHtml(e.name)}">
-       </button>`
-    ).join('');
+  for (const line of lines) {
+    if (PARTY_HEADER_RE.test(line)) {
+      partyIndex += 1;
+      current = null;
+      continue;
+    }
 
-    grid.querySelectorAll('.emoji-popover-item').forEach(btn => btn.addEventListener('click', () => {
-      draft.categories[cat].items[i].emoji = btn.dataset.tag || null;
-      closeEmojiPopover();
-      renderDetail();
-    }));
-  };
-  renderGrid();
-  pop.querySelector('.emoji-popover-search').addEventListener('input', e => renderGrid(e.target.value));
-  pop.querySelector('.emoji-popover-search').focus();
+    const asCategory = CATEGORY_ORDER.find(
+      (c) => c.toLowerCase() === line.toLowerCase().replace(/[:：]$/, '')
+    );
+    if (asCategory) {
+      current = asCategory;
+      if (!grouped[current]) grouped[current] = [];
+      continue;
+    }
 
-  setTimeout(() => document.addEventListener('mousedown', handleEmojiPopoverOutsideClick, true), 0);
-}
+    if (!current) continue; // ignore stray lines before the first category header
+    if (!grouped[current]) grouped[current] = [];
 
-/* ---------- build dropdown, filtered to the row's own role ---------- */
-function buildOptionsHtml(selectedTab, selectedIndex, cat) {
-  let html = `<option value=""${selectedTab == null ? ' selected' : ''}>No build yet</option>`;
-  const roleFiltered = buildOptions.filter(o => o.role && o.role.toLowerCase() === cat.toLowerCase());
-  const byTab = {};
-  roleFiltered.forEach(o => { (byTab[o.tab] = byTab[o.tab] || []).push(o); });
-  for (const tab of Object.keys(byTab)) {
-    html += `<optgroup label="${TAB_LABELS[tab] || tab}">`;
-    html += byTab[tab].map(o => {
-      const sel = (o.tab === selectedTab && o.index === selectedIndex) ? ' selected' : '';
-      return `<option value="${buildOptionValue(o)}"${sel}>${escapeHtml(o.weapon)}</option>`;
-    }).join('');
-    html += `</optgroup>`;
+    const party = partyIndex === -1 ? 0 : partyIndex;
+
+    // Multi-choice line: "emoji Name / emoji Name / ..." — two or more
+    // slash-separated weapon segments on one line, all filling the same
+    // single slot.
+    if (line.includes('/')) {
+      const segments = line.split('/').map((s) => s.trim()).filter(Boolean);
+      const options = segments.map((seg) => parseWeaponSegment(seg, guild)).filter((o) => o.name);
+      if (options.length >= 2) {
+        grouped[current].push({ options, party, signups: [], signedOptionIndex: null });
+        continue;
+      }
+      // fewer than 2 valid segments somehow — fall through to normal
+      // single-line parsing below instead of dropping the line.
+    }
+
+    let emoji = null;
+    let rest = line;
+    const emojiMatch = line.match(EMOJI_PREFIX_RE);
+    if (emojiMatch) {
+      emoji = resolveEmojiToken(emojiMatch[1], guild);
+      rest = emojiMatch[2].trim();
+    }
+
+    const match = rest.match(/^(.*?)[\s]*[:\-][\s]*(\d+)\s*$/);
+    let name = rest;
+    let count = 1;
+    if (match) {
+      name = match[1].trim();
+      count = Math.max(1, parseInt(match[2], 10));
+    }
+    if (!name) continue;
+
+    // Expand "Name: N" into N separate one-slot lines, so duplicates never
+    // need a merged counter — the display just repeats the row.
+    for (let i = 0; i < count; i++) {
+      grouped[current].push({ name, emoji, party, signups: [], buildId: null, buildTab: null });
+    }
   }
-  // Defensive: if the currently linked build's role doesn't match this row's
-  // category anymore (role data changed, or the row's category changed after
-  // linking), still show it selected instead of silently unlinking it.
-  const stillLinkedButFiltered = selectedTab != null && !roleFiltered.some(o => o.tab === selectedTab && o.index === selectedIndex);
-  if (stillLinkedButFiltered) {
-    const linked = buildOptions.find(o => o.tab === selectedTab && o.index === selectedIndex);
-    if (linked) html += `<option value="${buildOptionValue(linked)}" selected>${escapeHtml(linked.weapon)} — different role</option>`;
+
+  const categories = {};
+  for (const cat of Object.keys(grouped)) {
+    categories[cat] = { mode: 'items', items: grouped[cat] };
   }
-  return html;
+  return categories;
 }
 
-/* ---------- party columns ---------- */
-function renderPartyColumn(p) {
-  const categoriesHtml = CATEGORY_ORDER.map(cat => {
-    const items = draft.categories[cat].items;
-    const rows = items
-      .map((item, i) => ({ item, i }))
-      .filter(({ item }) => (item.party || 0) === p)
-      .map(({ item, i }) => `
-        <div class="comp-item-row" data-cat="${cat}" data-i="${i}">
-          <button type="button" class="comp-item-emoji-pick" title="Pick a server emoji">${emojiPreviewHtml(item.emoji)}</button>
-          <input type="text" class="comp-item-name" value="${escapeHtml(item.name)}" placeholder="Weapon / role name">
-          <select class="comp-item-build">${buildOptionsHtml(item.buildTab, item.buildId, cat)}</select>
-          <button type="button" class="comp-item-remove" title="Remove">${TRASH_ICON}</button>
-        </div>`)
-      .join('');
-    return `
-      <div class="comp-category" data-cat="${cat}">
-        <div class="comp-category-head">
-          <span class="role-pill role-${cat.toLowerCase()}">${cat}</span>
-          <button type="button" class="btn comp-add-item-btn" data-cat="${cat}" data-party="${p}">+ Add line</button>
-        </div>
-        <div class="comp-items-list">${rows || '<p class="section-sub">No lines yet.</p>'}</div>
-      </div>`;
-  }).join('');
-
-  const isLast = p === draft.partyCount - 1;
-  const canRemove = isLast && p > 0;
-  return `
-    <div class="comp-party-col" data-party="${p}">
-      <div class="comp-party-head">
-        <span>Party ${p + 1}</span>
-        ${canRemove ? `<button type="button" class="comp-party-remove-btn" id="comp-party-remove-btn" title="Remove this party">${TRASH_ICON}</button>` : ''}
-      </div>
-      ${categoriesHtml}
-    </div>`;
-}
-
-function removeLastParty() {
-  const lastIdx = draft.partyCount - 1;
-  if (lastIdx === 0) return;
-  const hasItems = CATEGORY_ORDER.some(cat => draft.categories[cat].items.some(it => (it.party || 0) === lastIdx));
-  if (hasItems) {
-    alert(`Party ${lastIdx + 1} still has role lines — remove or move them to another party first.`);
-    return;
+// Inverse of parseComposition — turns stored categories back into editable
+// text, used to prefill the /comp edit modal. Collapses consecutive
+// duplicate (name + emoji) rows back into the "Name: N" shorthand.
+function stringifyComposition(categories) {
+  let maxParty = 0;
+  for (const cat of CATEGORY_ORDER) {
+    const catData = categories[cat];
+    if (!catData || !catData.items) continue;
+    for (const item of catData.items) maxParty = Math.max(maxParty, item.party || 0);
   }
-  draft.partyCount--;
-  renderDetail();
+
+  const lines = [];
+  for (let p = 0; p <= maxParty; p++) {
+    if (maxParty > 0) lines.push(`Party ${p + 1}`);
+
+    for (const cat of CATEGORY_ORDER) {
+      const catData = categories[cat];
+      if (!catData || !catData.items) continue;
+      const itemsInParty = catData.items.filter((it) => (it.party || 0) === p);
+      if (itemsInParty.length === 0) continue;
+      lines.push(cat);
+
+      let i = 0;
+      while (i < itemsInParty.length) {
+        const item = itemsInParty[i];
+        if (item.options) {
+          const prefix = (o) => (o.emoji ? `${o.emoji} ${o.name}` : o.name);
+          lines.push(item.options.map(prefix).join(' / '));
+          i += 1;
+          continue;
+        }
+        let count = 1;
+        while (
+          i + count < itemsInParty.length &&
+          !itemsInParty[i + count].options &&
+          itemsInParty[i + count].name === item.name &&
+          itemsInParty[i + count].emoji === item.emoji
+        ) {
+          count++;
+        }
+        const prefix = item.emoji ? `${item.emoji} ` : '';
+        lines.push(count > 1 ? `${prefix}${item.name}: ${count}` : `${prefix}${item.name}`);
+        i += count;
+      }
+    }
+  }
+  return lines.join('\n');
 }
 
-/* ---------- main render ---------- */
-function renderDetail() {
-  const placeholder = document.getElementById('comp-detail-placeholder');
-  const card = document.getElementById('comp-detail-card');
-  placeholder.style.display = 'none';
-  card.classList.add('visible');
+// Expands stored categories into flat, numbered slot rows for display —
+// e.g. row 1 and row 2 for two "Carving Sword" lines, instead of a single
+// merged "(1/2)" row. Each row carries its parent item's array index (for
+// quota mode, itemIndex is not used) so callers can map a dropdown choice
+// back to the exact item unambiguously, even when names repeat.
+function expandCategoryRows(catData, startNumber = 1) {
+  const rows = [];
 
-  const partyColumnsHtml = Array.from({ length: draft.partyCount }, (_, p) => renderPartyColumn(p)).join('');
-
-  card.innerHTML = `
-    <div class="card-header">
-      <div class="card-title-row">
-        <input type="text" id="comp-label-input" class="comp-label-input" value="${escapeHtml(draft.label)}" placeholder="Composition name">
-        ${editingKey ? `<button class="card-delete-btn" type="button" id="comp-delete-btn" title="Delete this composition">${TRASH_ICON}</button>` : ''}
-      </div>
-    </div>
-    <div class="comp-parties-toolbar">
-      <button type="button" class="btn" id="comp-add-party-btn">+ Add party</button>
-    </div>
-    <div class="comp-parties-row">${partyColumnsHtml}</div>
-    <div class="comp-save-row">
-      <button class="btn" id="comp-save-btn"><span class="btn-label">${editingKey ? 'Save changes' : 'Create composition'}</span></button>
-    </div>`;
-
-  card.querySelectorAll('.comp-item-emoji-pick').forEach(btn => btn.addEventListener('click', e => {
-    const row = e.target.closest('.comp-item-row');
-    openEmojiPopover(btn, row.dataset.cat, +row.dataset.i);
-  }));
-  card.querySelectorAll('.comp-item-name').forEach(inp => inp.addEventListener('input', e => {
-    const row = e.target.closest('.comp-item-row');
-    draft.categories[row.dataset.cat].items[+row.dataset.i].name = e.target.value;
-  }));
-  card.querySelectorAll('.comp-item-build').forEach(sel => sel.addEventListener('change', e => {
-    const row = e.target.closest('.comp-item-row');
-    const item = draft.categories[row.dataset.cat].items[+row.dataset.i];
-    if (!e.target.value) { item.buildTab = null; item.buildId = null; }
-    else { const [tab, idx] = e.target.value.split(':'); item.buildTab = tab; item.buildId = parseInt(idx, 10); }
-  }));
-  card.querySelectorAll('.comp-item-remove').forEach(btn => btn.addEventListener('click', e => {
-    const row = e.target.closest('.comp-item-row');
-    draft.categories[row.dataset.cat].items.splice(+row.dataset.i, 1);
-    renderDetail();
-  }));
-  card.querySelectorAll('.comp-add-item-btn').forEach(btn => btn.addEventListener('click', () => {
-    draft.categories[btn.dataset.cat].items.push({ name: '', emoji: null, party: +btn.dataset.party, signups: [], buildId: null, buildTab: null });
-    renderDetail();
-  }));
-  document.getElementById('comp-label-input').addEventListener('input', e => { draft.label = e.target.value; });
-  document.getElementById('comp-add-party-btn').addEventListener('click', () => { draft.partyCount++; renderDetail(); });
-  const removePartyBtn = document.getElementById('comp-party-remove-btn');
-  if (removePartyBtn) removePartyBtn.addEventListener('click', removeLastParty);
-
-  const deleteBtn = document.getElementById('comp-delete-btn');
-  if (deleteBtn) deleteBtn.addEventListener('click', async () => {
-    if (!confirm(`Delete "${draft.label}"? This can't be undone.`)) return;
-    await api(`/api/comps/${editingKey}`, { method: 'DELETE' });
-    closeDetail();
-    await loadAll();
-  });
-
-  document.getElementById('comp-save-btn').addEventListener('click', saveDraft);
-}
-
-async function saveDraft() {
-  const label = draft.label.trim();
-  if (!label) { alert('Give the composition a name first.'); return; }
-  const hasAnyItem = CATEGORY_ORDER.some(cat => draft.categories[cat].items.some(it => it.name.trim()));
-  if (!hasAnyItem) { alert('Add at least one role line first.'); return; }
-
-  try {
-    if (editingKey) {
-      await api(`/api/comps/${editingKey}`, {
-        method: 'PUT',
-        body: JSON.stringify({ newLabel: label, categories: draft.categories }),
-      });
-    } else {
-      await api('/api/comps', {
-        method: 'POST',
-        body: JSON.stringify({ label, categories: draft.categories }),
+  if (catData.mode === 'quota') {
+    for (let i = 0; i < catData.capacity; i++) {
+      const s = catData.signups[i];
+      rows.push({
+        rowNumber: startNumber + rows.length,
+        name: s ? s.weapon : null,
+        emoji: null,
+        signedUserId: s ? s.userId : null,
       });
     }
-    closeDetail();
-    await loadAll();
-  } catch (err) {
-    alert(err.message);
+    return rows;
   }
-}
 
-function closeDetail() {
-  editingKey = null;
-  draft = null;
-  document.getElementById('comp-select').value = '';
-  document.getElementById('comp-detail-card').classList.remove('visible');
-  document.getElementById('comp-detail-placeholder').style.display = '';
-}
-
-const TRASH_ICON = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0-1 14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2L4 6h16Z"/></svg>`;
-
-async function init() {
-  await window.SITE_AUTH_READY;
-  if (!isOfficerOrAdmin()) {
-    document.getElementById('gate-message').style.display = '';
-    return;
-  }
-  document.getElementById('comps-app').style.display = '';
-
-  document.getElementById('comp-select').addEventListener('change', e => {
-    if (e.target.value) selectComp(e.target.value);
-    else closeDetail();
+  catData.items.forEach((item, itemIndex) => {
+    rows.push({
+      rowNumber: startNumber + rows.length,
+      itemIndex,
+      name: item.options ? null : item.name,
+      emoji: item.options ? null : item.emoji || null,
+      options: item.options || null,
+      signedOptionIndex: item.options ? item.signedOptionIndex ?? null : null,
+      signedUserId: item.signups[0] || null,
+      buildId: item.buildId ?? null,
+      buildTab: item.buildTab ?? null,
+    });
   });
-  document.getElementById('new-comp-btn').addEventListener('click', startNewComp);
 
-  try {
-    await loadAll();
-  } catch (err) {
-    alert('Failed to load compositions: ' + err.message);
-  }
+  return rows;
 }
 
-init();
+// Fixed party size used only for numbering offsets — Party 2 always starts
+// at 21 even if Party 1 only has a handful of slots filled in, matching how
+// Albion's own party system reserves 20 slots per party regardless of size.
+const PARTY_SIZE = 20;
+
+// Expands every category in CATEGORY_ORDER into one flat list, numbered
+// per-party: Party 1 gets rows 1-20, Party 2 gets 21-40, etc. — the offset is
+// fixed to the party's position, not to how many rows the previous party
+// actually used. Comps with no party structure behave exactly as before
+// (everything is "party 0", offset 0).
+function expandAllCategoryRows(categories, categoryOrder = CATEGORY_ORDER) {
+  let maxParty = 0;
+  for (const cat of categoryOrder) {
+    const catData = categories[cat];
+    if (!catData || catData.mode === 'quota' || !catData.items) continue;
+    for (const item of catData.items) maxParty = Math.max(maxParty, item.party || 0);
+  }
+
+  const allRows = [];
+  for (let p = 0; p <= maxParty; p++) {
+    let counter = p * PARTY_SIZE;
+
+    for (const cat of categoryOrder) {
+      const catData = categories[cat];
+      if (!catData) continue;
+
+      if (catData.mode === 'quota') {
+        if (p !== 0) continue; // legacy quota categories only ever occupy party 1
+        for (let i = 0; i < catData.capacity; i++) {
+          counter++;
+          const s = catData.signups[i];
+          allRows.push({
+            rowNumber: counter,
+            party: 0,
+            category: cat,
+            name: s ? s.weapon : null,
+            emoji: null,
+            signedUserId: s ? s.userId : null,
+          });
+        }
+        continue;
+      }
+
+      catData.items.forEach((item, itemIndex) => {
+        if ((item.party || 0) !== p) return;
+        counter++;
+        allRows.push({
+          rowNumber: counter,
+          party: p,
+          category: cat,
+          itemIndex,
+          name: item.options ? null : item.name,
+          emoji: item.options ? null : item.emoji || null,
+          options: item.options || null,
+          signedOptionIndex: item.options ? item.signedOptionIndex ?? null : null,
+          signedUserId: item.signups[0] || null,
+          buildId: item.buildId ?? null,
+          buildTab: item.buildTab ?? null,
+        });
+      });
+    }
+  }
+  return allRows;
+}
+
+// Re-applies a (possibly edited) saved comp onto an already-posted event's
+// categories. Tries to keep every existing sign-up attached to the same
+// logical slot — matched by (party, weapon name, emoji) — so a routine edit
+// (fixing a typo, swapping one weapon) doesn't bump people who are already
+// signed up. Any sign-up that no longer has a matching slot (its weapon/party
+// was removed or reduced) is dropped and reported back to the caller so the
+// organizer can follow up with that person.
+function refreshEventCategories(oldCategories, newCategories) {
+  const categories = {};
+  const dropped = [];
+
+  for (const cat of CATEGORY_ORDER) {
+    const newCatData = newCategories[cat];
+    if (!newCatData) continue; // category no longer exists in the comp
+
+    if (newCatData.mode === 'quota') {
+      // legacy quota categories aren't affected by refresh; keep as-is
+      categories[cat] = JSON.parse(JSON.stringify(newCatData));
+      continue;
+    }
+
+    const freshItems = newCatData.items.map((item) => ({
+      ...item,
+      signups: [],
+      ...(item.options ? { signedOptionIndex: null } : {}),
+    }));
+    const used = new Array(freshItems.length).fill(false);
+
+    const oldCatData = oldCategories[cat];
+    if (oldCatData && oldCatData.mode !== 'quota' && oldCatData.items) {
+      for (const oldItem of oldCatData.items) {
+        const userId = oldItem.signups && oldItem.signups[0];
+        if (!userId) continue;
+
+        const matchIdx = freshItems.findIndex(
+          (ni, idx) => !used[idx] && (ni.party || 0) === (oldItem.party || 0) && itemSignature(ni) === itemSignature(oldItem)
+        );
+
+        if (matchIdx !== -1) {
+          freshItems[matchIdx].signups.push(userId);
+          if (oldItem.options) freshItems[matchIdx].signedOptionIndex = oldItem.signedOptionIndex ?? null;
+          used[matchIdx] = true;
+        } else {
+          dropped.push({ userId, category: cat, name: itemLabel(oldItem), party: oldItem.party || 0 });
+        }
+      }
+    }
+
+    categories[cat] = { mode: 'items', items: freshItems };
+  }
+
+  // categories that existed before but were removed entirely from the comp
+  for (const cat of Object.keys(oldCategories)) {
+    if (categories[cat]) continue;
+    const oldCatData = oldCategories[cat];
+    if (!oldCatData || oldCatData.mode === 'quota' || !oldCatData.items) continue;
+    for (const item of oldCatData.items) {
+      const userId = item.signups && item.signups[0];
+      if (userId) dropped.push({ userId, category: cat, name: itemLabel(item), party: item.party || 0 });
+    }
+  }
+
+  return { categories, dropped };
+}
+
+// A raw-text /comp edit on Discord has no way to express a build link, so
+// parseComposition() always comes back with buildId/buildTab set to null.
+// Without this, editing a comp's text on Discord would silently wipe out
+// every link the site editor had set up. We carry links forward by matching
+// old vs new items on (party, name, emoji) — the same identity key used
+// elsewhere in this file — same as refreshEventCategories does for signups.
+function carryOverBuildLinks(oldCategories, newCategories) {
+  for (const cat of Object.keys(newCategories)) {
+    const newCatData = newCategories[cat];
+    const oldCatData = oldCategories[cat];
+    if (!newCatData || !newCatData.items || !oldCatData || !oldCatData.items) continue;
+
+    const used = new Array(oldCatData.items.length).fill(false);
+    for (const item of newCatData.items) {
+      if (item.options) continue; // multi-choice lines don't support build links
+      const matchIdx = oldCatData.items.findIndex(
+        (oi, idx) =>
+          !used[idx] &&
+          !oi.options &&
+          (oi.party || 0) === (item.party || 0) &&
+          oi.name === item.name &&
+          oi.emoji === item.emoji
+      );
+      if (matchIdx !== -1) {
+        item.buildId = oldCatData.items[matchIdx].buildId ?? null;
+        item.buildTab = oldCatData.items[matchIdx].buildTab ?? null;
+        used[matchIdx] = true;
+      }
+    }
+  }
+  return newCategories;
+}
+
+async function createComp({ label, compositionRaw, userId, guild }) {
+  const categories = parseComposition(compositionRaw, guild);
+  if (Object.keys(categories).length === 0) return null;
+
+  const comps = await loadComps();
+  const key = keyFor(label);
+  comps[key] = {
+    label: label.trim(),
+    categories,
+    createdBy: userId,
+    updatedBy: userId,
+    updatedAt: Date.now(),
+  };
+  await saveComps(comps);
+  return comps[key];
+}
+
+// newLabel may be the same as the old one (rename support is just "free" here).
+async function updateComp({ key, newLabel, compositionRaw, userId, guild }) {
+  const categories = parseComposition(compositionRaw, guild);
+  if (Object.keys(categories).length === 0) return null;
+
+  const comps = await loadComps();
+  const existing = comps[key];
+  if (!existing) return null;
+
+  carryOverBuildLinks(existing.categories, categories);
+
+  const newKey = keyFor(newLabel);
+  delete comps[key];
+  comps[newKey] = {
+    label: newLabel.trim(),
+    categories,
+    createdBy: existing.createdBy,
+    updatedBy: userId,
+    updatedAt: Date.now(),
+  };
+  await saveComps(comps);
+  return comps[newKey];
+}
+
+async function deleteComp(key) {
+  const comps = await loadComps();
+  if (!comps[key]) return false;
+  delete comps[key];
+  await saveComps(comps);
+  return true;
+}
+
+// Deep clone so multiple events built from the same saved comp don't end up
+// sharing (and corrupting) the same signups arrays.
+function cloneCategories(categories) {
+  return JSON.parse(JSON.stringify(categories));
+}
+
+// ── Structured (site) API ──────────────────────────────────────────────
+// The Discord /comp create|edit flow works from a single block of raw text
+// (parseComposition/stringifyComposition above). The site's comp editor
+// instead sends already-structured categories straight from its form state,
+// including each item's buildId/buildTab — so no text round-trip needed.
+
+function normalizeStructuredCategories(categories) {
+  const out = {};
+  for (const cat of CATEGORY_ORDER) {
+    const catData = categories[cat];
+    if (!catData || !Array.isArray(catData.items) || catData.items.length === 0) continue;
+    out[cat] = {
+      mode: 'items',
+      items: catData.items
+        .map((it) => {
+          // Multi-choice line — two or more weapon options sharing one
+          // slot (see itemLabel/itemSignature above). No build link
+          // support per-option, so buildId/buildTab don't apply here.
+          if (Array.isArray(it.options) && it.options.length >= 2) {
+            const options = it.options
+              .map((o) => ({ name: String((o && o.name) || '').trim(), emoji: (o && o.emoji) || null }))
+              .filter((o) => o.name);
+            if (options.length < 2) return null;
+            return {
+              options,
+              party: Number.isInteger(it.party) ? it.party : 0,
+              signups: [],
+              signedOptionIndex: null,
+            };
+          }
+          return {
+            name: String(it.name || '').trim(),
+            emoji: it.emoji || null,
+            party: Number.isInteger(it.party) ? it.party : 0,
+            signups: [],
+            buildId: it.buildId ?? null,
+            buildTab: it.buildTab ?? null,
+          };
+        })
+        .filter((it) => it && (it.options || it.name)),
+    };
+  }
+  return out;
+}
+
+async function listComps() {
+  const comps = await loadComps();
+  return Object.entries(comps).map(([key, c]) => ({ key, ...c }));
+}
+
+async function getCompByKey(key) {
+  const comps = await loadComps();
+  return comps[key] || null;
+}
+
+async function createCompStructured({ label, categories, userId }) {
+  const clean = normalizeStructuredCategories(categories);
+  if (Object.keys(clean).length === 0) return null;
+
+  const comps = await loadComps();
+  const key = keyFor(label);
+  if (comps[key]) return null; // caller should use update instead
+
+  comps[key] = {
+    label: label.trim(),
+    categories: clean,
+    createdBy: userId,
+    updatedBy: userId,
+    updatedAt: Date.now(),
+  };
+  await saveComps(comps);
+  return { key, ...comps[key] };
+}
+
+async function updateCompStructured({ key, newLabel, categories, userId }) {
+  const clean = normalizeStructuredCategories(categories);
+  if (Object.keys(clean).length === 0) return null;
+
+  const comps = await loadComps();
+  const existing = comps[key];
+  if (!existing) return null;
+
+  const newKey = keyFor(newLabel);
+  if (newKey !== key && comps[newKey]) return null; // name collision
+
+  delete comps[key];
+  comps[newKey] = {
+    label: newLabel.trim(),
+    categories: clean,
+    createdBy: existing.createdBy,
+    updatedBy: userId,
+    updatedAt: Date.now(),
+  };
+  await saveComps(comps);
+  return { key: newKey, ...comps[newKey] };
+}
+
+// Deep-links straight to a specific build on the War Ledger — e.g. so a
+// posted event's roster can point at the exact gear for a role, not just
+// the ledger's homepage. Returns null if this row has no linked build.
+function buildLinkFor(row) {
+  if (row.buildId == null || !row.buildTab) return null;
+  return `${BUILDS_LINK}/builds.html?tab=${encodeURIComponent(row.buildTab)}&build=${encodeURIComponent(row.buildId)}`;
+}
+
+module.exports = {
+  CATEGORY_ORDER,
+  BUILDS_LINK,
+  loadComps,
+  saveComps,
+  keyFor,
+  parseComposition,
+  stringifyComposition,
+  createComp,
+  updateComp,
+  deleteComp,
+  cloneCategories,
+  expandCategoryRows,
+  expandAllCategoryRows,
+  refreshEventCategories,
+  carryOverBuildLinks,
+  listComps,
+  getCompByKey,
+  createCompStructured,
+  updateCompStructured,
+  buildLinkFor,
+  itemLabel,
+};

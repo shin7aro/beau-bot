@@ -307,22 +307,38 @@ function renderRosterRow(e, row) {
   const isMine = row.signedUserId === window.SITE_AUTH.id;
   const isOpen = !row.signedUserId;
   const hasItemIndex = row.itemIndex !== undefined;
+  const isMultiChoice = !!row.options;
   const canSignup = isOpen && !e.closed && window.SITE_AUTH.loggedIn && hasItemIndex;
   // Officer/admin manual assign — button sits at the right end of the row.
   // Only makes sense for item-mode rows (a single named slot); quota-mode
   // categories keep using their own self-serve "pick a weapon, sign up"
   // section instead.
   const canManageAssign = isOfficerOrAdmin() && !e.closed && hasItemIndex;
-  // Weapon icon now renders inside the name pill itself (see
-  // .event-row-name-pill in events.css) instead of as its own column, so
-  // the row is just two even halves: the name pill and the player pill.
-  const icon = row.iconUrl
-    ? `<img class="event-row-pill-icon" src="${escapeHtml(row.iconUrl)}" alt="" loading="lazy">`
-    : `<span class="event-row-pill-icon-fallback">${emojiToHtml(row.emoji, { size: 15 })}</span>`;
-  const nameLabel = `${icon}<span class="event-row-name-text">${escapeHtml(row.name || 'Any')}</span>`;
-  const namePill = hasItemIndex
+
+  let nameLabel;
+  if (isMultiChoice) {
+    // Multi-choice line — every option gets its own icon + name, chained
+    // with "/" (mirrors the Discord embed's "⚔️ **A**/⚔️ **B**" format).
+    // No build to link here (which option's build would it even be?), so
+    // this never becomes a clickable button, unlike the single-choice case.
+    nameLabel = row.options.map((o) => {
+      const optIcon = o.iconUrl
+        ? `<img class="event-row-pill-icon" src="${escapeHtml(o.iconUrl)}" alt="" loading="lazy">`
+        : `<span class="event-row-pill-icon-fallback">${emojiToHtml(o.emoji, { size: 15 })}</span>`;
+      return `${optIcon}<span class="event-row-name-text">${escapeHtml(o.name)}</span>`;
+    }).join('<span class="event-row-name-sep">/</span>');
+  } else {
+    // Weapon icon renders inside the name pill itself (see
+    // .event-row-name-pill in events.css) instead of as its own column, so
+    // the row is just two even halves: the name pill and the player pill.
+    const icon = row.iconUrl
+      ? `<img class="event-row-pill-icon" src="${escapeHtml(row.iconUrl)}" alt="" loading="lazy">`
+      : `<span class="event-row-pill-icon-fallback">${emojiToHtml(row.emoji, { size: 15 })}</span>`;
+    nameLabel = `${icon}<span class="event-row-name-text">${escapeHtml(row.name || 'Any')}</span>`;
+  }
+  const namePill = (hasItemIndex && !isMultiChoice)
     ? `<button type="button" class="event-row-name-pill role-${row.category.toLowerCase()}" data-cat="${escapeHtml(row.category)}" data-item-index="${row.itemIndex}" title="View linked build">${nameLabel}</button>`
-    : `<span class="event-row-name-pill role-${row.category.toLowerCase()}">${nameLabel}</span>`;
+    : `<span class="event-row-name-pill role-${row.category.toLowerCase()}${isMultiChoice ? ' is-multi-choice' : ''}">${nameLabel}</span>`;
   const assignBtn = canManageAssign
     ? `<button type="button" class="event-row-assign-btn${isOpen ? ' add' : ' remove'}"
         data-cat="${escapeHtml(row.category)}" data-item-index="${row.itemIndex}"
@@ -337,7 +353,8 @@ function renderRosterRow(e, row) {
 
   return `
     <div class="event-row${isOpen ? ' is-open' : ''}${canSignup ? ' can-signup' : ''}${isMine ? ' is-mine' : ''}${canManageAssign ? ' has-assign-btn' : ''}"
-         ${canSignup ? `data-cat="${escapeHtml(row.category)}" data-item-index="${row.itemIndex}"` : ''}>
+         ${canSignup ? `data-cat="${escapeHtml(row.category)}" data-item-index="${row.itemIndex}"` : ''}
+         ${isMultiChoice ? 'data-options="1"' : ''}>
       ${namePill}
       ${status}
       ${assignBtn}
@@ -396,13 +413,71 @@ async function ensureDahaloMembersLoaded() {
   return dahaloMembersCache;
 }
 
+/* ---------- shared "pick a weapon" popover (multi-choice lines) ----------
+   Used both for a self sign-up on an open multi-choice row and for an
+   officer's manual assign (after they've picked the player) — same
+   floating-popover chrome as the assign popover above, just listing the
+   row's own options instead of Dahalo members. */
+function closeOptionPopover() {
+  const pop = document.getElementById('event-option-popover');
+  if (pop) pop.remove();
+  document.removeEventListener('mousedown', handleOptionPopoverOutsideClick, true);
+}
+
+function handleOptionPopoverOutsideClick(e) {
+  const pop = document.getElementById('event-option-popover');
+  if (pop && !pop.contains(e.target)) closeOptionPopover();
+}
+
+function openOptionPopover(anchorEl, options, onPick) {
+  closeOptionPopover();
+  const pop = document.createElement('div');
+  pop.id = 'event-option-popover';
+  pop.className = 'event-assign-popover';
+  pop.innerHTML = `<div class="event-assign-popover-list">${options.map((o, i) => `
+    <button type="button" class="event-assign-popover-item" data-i="${i}">
+      ${o.iconUrl ? `<img src="${escapeHtml(o.iconUrl)}" alt="" loading="lazy">` : ''}
+      <span>${escapeHtml(o.name)}</span>
+    </button>`).join('')}</div>`;
+  document.body.appendChild(pop);
+
+  const rect = anchorEl.getBoundingClientRect();
+  pop.style.top = `${window.scrollY + rect.bottom + 6}px`;
+  pop.style.left = `${window.scrollX + rect.left}px`;
+
+  pop.querySelectorAll('.event-assign-popover-item').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      closeOptionPopover();
+      onPick(Number(btn.dataset.i));
+    });
+  });
+
+  setTimeout(() => document.addEventListener('mousedown', handleOptionPopoverOutsideClick, true), 0);
+}
+
+function findRosterRow(cat, itemIndex) {
+  return (currentDetail.rows || []).find(r => r.category === cat && r.itemIndex === itemIndex);
+}
+
+function openSelfOptionPopover(anchorEl, cat, itemIndex) {
+  if (!window.SITE_AUTH.loggedIn) {
+    showToast('Log in with Discord to sign up.');
+    return;
+  }
+  const row = findRosterRow(cat, itemIndex);
+  if (!row || !row.options) return;
+  openOptionPopover(anchorEl, row.options, (optionIndex) => handleSignup(cat, itemIndex, optionIndex));
+}
+
 /* ---------- manual assign / remove (officer/admin only) ----------
    The site equivalent of mentioning a player + role name in an event's
    Discord thread. "+" on an open slot opens a searchable popover of
    Dahalo-role members (same open/close/outside-click pattern as comps.js's
-   emoji popover); picking one assigns them. "−" on a filled slot removes
-   whoever's there, after a confirm — same convention as builds.js's
-   card-delete-btn. */
+   emoji popover); picking one assigns them — and for a multi-choice line,
+   immediately follows up with the weapon-choice popover above before the
+   assignment is actually sent. "−" on a filled slot removes whoever's
+   there, after a confirm — same convention as builds.js's card-delete-btn. */
 function closeAssignPopover() {
   const pop = document.getElementById('event-assign-popover');
   if (pop) pop.remove();
@@ -438,6 +513,8 @@ async function openAssignPopover(anchorBtn, cat, itemIndex) {
     return;
   }
 
+  const row = findRosterRow(cat, itemIndex);
+
   const renderList = (filter = '') => {
     const q = filter.trim().toLowerCase();
     const matches = q ? members.filter(m => m.username.toLowerCase().includes(q)) : members;
@@ -453,7 +530,13 @@ async function openAssignPopover(anchorBtn, cat, itemIndex) {
     list.querySelectorAll('.event-assign-popover-item').forEach(itemBtn => {
       itemBtn.addEventListener('click', () => {
         closeAssignPopover();
-        handleAssignAdd(cat, itemIndex, itemBtn.dataset.userId);
+        // Multi-choice line — one more popover to say which weapon, right
+        // where the member popover just was.
+        if (row && row.options) {
+          openOptionPopover(anchorBtn, row.options, (optionIndex) => handleAssignAdd(cat, itemIndex, itemBtn.dataset.userId, optionIndex));
+        } else {
+          handleAssignAdd(cat, itemIndex, itemBtn.dataset.userId);
+        }
       });
     });
   };
@@ -465,11 +548,13 @@ async function openAssignPopover(anchorBtn, cat, itemIndex) {
   setTimeout(() => document.addEventListener('mousedown', handleAssignPopoverOutsideClick, true), 0);
 }
 
-async function handleAssignAdd(cat, itemIndex, userId) {
+async function handleAssignAdd(cat, itemIndex, userId, optionIndex) {
   try {
+    const body = { userId };
+    if (optionIndex !== undefined) body.optionIndex = optionIndex;
     currentDetail = await api(
       `/api/events/${encodeURIComponent(currentDetail.id)}/rows/${encodeURIComponent(cat)}/${itemIndex}/assign`,
-      { method: 'POST', body: JSON.stringify({ userId }) }
+      { method: 'POST', body: JSON.stringify(body) }
     );
     renderDetail();
     showToast('Player assigned.');
@@ -641,7 +726,14 @@ function showPlayerPanel(cat, itemIndexStr, userId) {
 // buttons, which weren't recreated and would otherwise get double-bound.
 function wireRosterActions() {
   document.querySelectorAll('.event-row.can-signup').forEach(row => {
-    row.addEventListener('click', () => handleSignup(row.dataset.cat, Number(row.dataset.itemIndex)));
+    row.addEventListener('click', () => {
+      const cat = row.dataset.cat;
+      const itemIndex = Number(row.dataset.itemIndex);
+      // Multi-choice line — ask which weapon before signing up, instead
+      // of assuming one.
+      if (row.dataset.options) openSelfOptionPopover(row, cat, itemIndex);
+      else handleSignup(cat, itemIndex);
+    });
   });
 
   document.querySelectorAll('.event-quota-signup-btn').forEach(btn => {
@@ -706,15 +798,17 @@ function wireDetailActions(canManage) {
 }
 
 /* ---------- sign-up / leave ---------- */
-async function handleSignup(category, itemIndex) {
+async function handleSignup(category, itemIndex, optionIndex) {
   if (!window.SITE_AUTH.loggedIn) {
     showToast('Log in with Discord to sign up.');
     return;
   }
   try {
+    const body = { category, itemIndex };
+    if (optionIndex !== undefined) body.optionIndex = optionIndex;
     currentDetail = await api(`/api/events/${encodeURIComponent(currentDetail.id)}/signup`, {
       method: 'POST',
-      body: JSON.stringify({ category, itemIndex }),
+      body: JSON.stringify(body),
     });
     renderDetail();
   } catch (err) {
