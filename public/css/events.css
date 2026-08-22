@@ -200,7 +200,7 @@ span.event-row-name-pill { cursor: default; }
 .event-row-player-avatar { width: 18px; height: 18px; border-radius: 50%; object-fit: cover; flex-shrink: 0; background: var(--surface-3); }
 .event-row-player-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-/* Officer/admin manual assign button — sits to the left of the name pill
+/* Officer/admin manual assign button — sits at the right edge of the row
    (see .event-row in events.js). "+" on an open slot, "−" once filled;
    toggled purely by the .add/.remove modifier events.js already applies. */
 .event-row-assign-btn {
