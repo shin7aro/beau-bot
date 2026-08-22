@@ -49,7 +49,13 @@
 
 /* ---------- DETAIL VIEW ---------- */
 .event-detail-app { padding: 0 24px 24px; overflow-y: auto; }
-.event-detail-back { display: inline-flex; margin: 12px 0; }
+/* Back button + role counter share one row instead of the counter getting
+   its own full-width strip above the columns — that reclaims a full row
+   of vertical space so a 20-man party's roster fits without scrolling,
+   using the horizontal space next to the back button that would
+   otherwise just sit empty. */
+.event-detail-head-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin: 12px 0; }
+.event-detail-back { display: inline-flex; margin: 0; flex-shrink: 0; }
 .event-detail-layout {
   display: grid; grid-template-columns: 260px minmax(0, 1fr) 280px; gap: 16px; align-items: start;
 }
@@ -92,12 +98,10 @@
    quick-glance filled/total count per role, styled as a colored transparent
    pill per role (reuses the same --tank/--dps/etc. tokens role-pill already
    uses elsewhere, just with an added border for a bit more presence here).
-   Rendered as its own full-width row spanning every column of
-   .event-detail-layout (rather than living inside .event-roster-col) so its
-   left edge lines up with the "Back to events" button/info column above it,
-   and its pills can be centered across the whole page instead of just the
-   middle roster column. */
-.event-role-counter-row { grid-column: 1 / -1; }
+   Lives in .event-detail-head-row next to the back button (see above)
+   rather than its own row, so its pills share space with the button
+   instead of pushing the roster down a whole extra row. */
+.event-role-counter-row { flex: 1; min-width: 0; }
 .event-role-counter { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 8px; }
 .role-count-total {
   font-size: 13px; font-weight: 700; color: var(--ink); padding: 6px 10px;
@@ -212,6 +216,10 @@ span.event-row-name-pill { cursor: default; }
 .event-row-assign-btn.add:hover { border-color: var(--accent); color: var(--accent); }
 .event-row-assign-btn.remove { color: var(--dps); border-color: var(--dps-bg); }
 .event-row-assign-btn.remove:hover { background: var(--dps-bg); }
+
+/* "Show/hide closed events" toggle next to the count label — lit up like
+   an active filter-btn while closed events are shown. */
+#toggle-closed-btn.active { color: var(--accent); border-color: var(--accent); background: var(--accent-dim); }
 
 /* Assign popover — same floating/search/list pattern as comps.css's
    .emoji-popover, just listing Discord members instead of emoji. */
