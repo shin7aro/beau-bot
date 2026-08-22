@@ -299,9 +299,10 @@ function renderRosterRow(e, row) {
   const isOpen = !row.signedUserId;
   const hasItemIndex = row.itemIndex !== undefined;
   const canSignup = isOpen && !e.closed && window.SITE_AUTH.loggedIn && hasItemIndex;
-  // Officer/admin manual assign — only makes sense for item-mode rows (a
-  // single named slot); quota-mode categories keep using their own
-  // self-serve "pick a weapon, sign up" section instead.
+  // Officer/admin manual assign — button sits at the right end of the row.
+  // Only makes sense for item-mode rows (a single named slot); quota-mode
+  // categories keep using their own self-serve "pick a weapon, sign up"
+  // section instead.
   const canManageAssign = isOfficerOrAdmin() && !e.closed && hasItemIndex;
   // Weapon icon now renders inside the name pill itself (see
   // .event-row-name-pill in events.css) instead of as its own column, so
@@ -328,9 +329,9 @@ function renderRosterRow(e, row) {
   return `
     <div class="event-row${isOpen ? ' is-open' : ''}${canSignup ? ' can-signup' : ''}${isMine ? ' is-mine' : ''}${canManageAssign ? ' has-assign-btn' : ''}"
          ${canSignup ? `data-cat="${escapeHtml(row.category)}" data-item-index="${row.itemIndex}"` : ''}>
-      ${assignBtn}
       ${namePill}
       ${status}
+      ${assignBtn}
     </div>`;
 }
 
