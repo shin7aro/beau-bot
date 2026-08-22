@@ -382,6 +382,67 @@ router.get('/api/discord-channels', auth.requireOfficer, async (req, res) => {
   }
 });
 
+// Guild members with the "Dahalo" role — powers the officer/admin-only
+// "assign a player" dropdown on the events page (manual add, mirroring the
+// Discord thread command in index.js). Same raw-REST-with-bot-token
+// approach as /api/discord-channels above, so this works even before the
+// live Client has finished connecting, and doesn't need the privileged
+// GUILD_MEMBERS gateway intent — the List Guild Members REST endpoint
+// doesn't require it, only the gateway/cache-based discord.js helpers do.
+// Cached briefly since a guild's member list can be large and this pages
+// through it in batches of 1000; no need to re-fetch on every popover open.
+let dahaloMembersCache = { data: null, ts: 0 };
+const DAHALO_MEMBERS_CACHE_TTL = 60 * 1000;
+
+router.get('/api/discord-members', auth.requireOfficer, async (req, res) => {
+  try {
+    if (dahaloMembersCache.data && Date.now() - dahaloMembersCache.ts < DAHALO_MEMBERS_CACHE_TTL) {
+      return res.json(dahaloMembersCache.data);
+    }
+
+    const guildId = process.env.GUILD_ID;
+    const botAuth = { Authorization: `Bot ${process.env.DISCORD_TOKEN}` };
+
+    const rolesRes = await fetch(`https://discord.com/api/v10/guilds/${guildId}/roles`, { headers: botAuth });
+    if (!rolesRes.ok) throw new Error(`Discord role lookup failed: ${rolesRes.status}`);
+    const roles = await rolesRes.json();
+    const dahaloRole = roles.find((r) => (r.name || '').toLowerCase() === 'dahalo');
+    if (!dahaloRole) return res.json([]);
+
+    const members = [];
+    let after = '0';
+    for (;;) {
+      const membersRes = await fetch(
+        `https://discord.com/api/v10/guilds/${guildId}/members?limit=1000&after=${after}`,
+        { headers: botAuth }
+      );
+      if (!membersRes.ok) throw new Error(`Discord member list failed: ${membersRes.status}`);
+      const page = await membersRes.json();
+      if (page.length === 0) break;
+
+      for (const m of page) {
+        if (m.user && !m.user.bot && (m.roles || []).includes(dahaloRole.id)) {
+          members.push({
+            id: m.user.id,
+            username: m.nick || m.user.global_name || m.user.username,
+            avatar: m.user.avatar || null,
+          });
+        }
+      }
+
+      if (page.length < 1000) break;
+      after = page[page.length - 1].user.id;
+    }
+
+    members.sort((a, b) => a.username.localeCompare(b.username));
+    dahaloMembersCache = { data: members, ts: Date.now() };
+    res.json(members);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to load guild members.' });
+  }
+});
+
 router.post('/api/events', auth.requireOfficer, async (req, res) => {
   const client = requireDiscordClient(res);
   if (!client) return;
@@ -553,6 +614,94 @@ router.put('/api/events/:id/rows/:category/:itemIndex/build', auth.requireOffice
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Failed to update the build link.' });
+  }
+});
+
+// Manual "assign a player to an open slot" — the site equivalent of
+// mentioning someone + a role name in an event's Discord thread (see
+// index.js). Officer/admin only. Only covers items-mode categories, same
+// restriction as the build-link route above — quota-mode roles keep using
+// their own self-serve "pick a weapon, sign up" section, since there's no
+// single slot to assign into.
+router.post('/api/events/:id/rows/:category/:itemIndex/assign', auth.requireOfficer, async (req, res) => {
+  try {
+    const events = await eventsStore.loadEvents();
+    const event = events[req.params.id];
+    if (!event) return res.status(404).json({ error: 'Event not found.' });
+    if (event.closed) return res.status(400).json({ error: 'This event is no longer open.' });
+
+    const catData = event.categories[req.params.category];
+    if (!catData || catData.mode !== 'items') return res.status(400).json({ error: 'Invalid category.' });
+    const idx = Number(req.params.itemIndex);
+    const item = catData.items[idx];
+    if (!item) return res.status(404).json({ error: 'Role line not found.' });
+    if (item.signups.length > 0) return res.status(400).json({ error: 'That slot is already filled.' });
+
+    const { userId } = req.body || {};
+    if (!userId) return res.status(400).json({ error: 'userId is required.' });
+
+    eventsStore.removeUserFromEvent(event, userId);
+    item.signups.push(userId);
+
+    await eventsStore.saveEvents(events);
+    activityStore.log(
+      req.user,
+      'event.assign',
+      `Assigned <@${userId}> to "${item.name}" (${req.params.category}) on event "${event.title}"`
+    );
+
+    if (discordClient) {
+      try {
+        await eventRender.updateEventMessage(discordClient, event);
+      } catch (e) {
+        console.error('Failed to update Discord message after manual assign', e);
+      }
+    }
+
+    res.json(await detailEvent(event));
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to assign player.' });
+  }
+});
+
+// Manual "remove whoever's in this slot" — the site equivalent of the
+// remove path in the same Discord thread command.
+router.delete('/api/events/:id/rows/:category/:itemIndex/assign', auth.requireOfficer, async (req, res) => {
+  try {
+    const events = await eventsStore.loadEvents();
+    const event = events[req.params.id];
+    if (!event) return res.status(404).json({ error: 'Event not found.' });
+    if (event.closed) return res.status(400).json({ error: 'This event is no longer open.' });
+
+    const catData = event.categories[req.params.category];
+    if (!catData || catData.mode !== 'items') return res.status(400).json({ error: 'Invalid category.' });
+    const idx = Number(req.params.itemIndex);
+    const item = catData.items[idx];
+    if (!item) return res.status(404).json({ error: 'Role line not found.' });
+
+    const removedUserId = item.signups[0] || null;
+    item.signups = [];
+
+    await eventsStore.saveEvents(events);
+    activityStore.log(
+      req.user,
+      'event.unassign',
+      `Removed ${removedUserId ? `<@${removedUserId}>` : 'a player'} from "${item.name}" (${req.params.category}) on event "${event.title}"`
+    );
+
+    if (discordClient) {
+      try {
+        await eventRender.updateEventMessage(discordClient, event);
+      } catch (e) {
+        console.error('Failed to update Discord message after manual unassign', e);
+      }
+    }
+
+    res.json(await detailEvent(event));
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to remove player.' });
   }
 });
 
