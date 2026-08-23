@@ -37,11 +37,12 @@
 .event-card.is-closed { opacity: 0.6; }
 
 /* wrapper color matches the event's type — same color language as the
-   .event-type-badge above, just applied to the whole card so it reads at
-   a glance in the grid, not just from the little pill inside. */
-.event-card.type-PVP { border-color: var(--dps); background: var(--dps-bg); }
-.event-card.type-PVE { border-color: var(--healer); background: var(--healer-bg); }
-.event-card.type-Economy { border-color: var(--support); background: var(--support-bg); }
+   .event-type-badge above, just applied to the card's outline so it
+   reads at a glance in the grid. Only the border changes; the card's
+   own background stays as it was. */
+.event-card.type-PVP { border-color: var(--dps); }
+.event-card.type-PVE { border-color: var(--healer); }
+.event-card.type-Economy { border-color: var(--support); }
 .event-card.type-PVP:hover { border-color: var(--dps); box-shadow: 0 0 0 1px var(--dps); }
 .event-card.type-PVE:hover { border-color: var(--healer); box-shadow: 0 0 0 1px var(--healer); }
 .event-card.type-Economy:hover { border-color: var(--support); box-shadow: 0 0 0 1px var(--support); }
