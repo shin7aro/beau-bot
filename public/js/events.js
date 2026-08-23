@@ -126,7 +126,7 @@ function renderList() {
   empty.style.display = list.length === 0 ? '' : 'none';
 
   grid.innerHTML = list.map(e => `
-    <div class="event-card type-${escapeHtml(e.type)}${e.closed ? ' is-closed' : ''}" data-id="${escapeHtml(e.id)}">
+    <div class="event-card${e.closed ? ' is-closed' : ''}" data-id="${escapeHtml(e.id)}">
       <div class="event-card-top">
         <span class="event-type-badge type-${escapeHtml(e.type)}">${e.typeEmoji || '🔷'} ${escapeHtml(e.type)}</span>
         ${e.closed ? '<span class="event-card-closed-flag">Closed</span>' : ''}
