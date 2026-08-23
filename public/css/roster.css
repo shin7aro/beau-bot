@@ -7,35 +7,36 @@
    are all defined there)
 ───────────────────────────────────────── */
 
-/* ---------- the tree (GM > Right Hand > Officers) ---------- */
+/* ---------- the tree (GM > Right Hand > Officers), top to bottom ---------- */
 .roster-tree-section { padding-bottom: 56px; }
 .roster-tree {
   display: flex;
+  flex-direction: column;
   align-items: center;
   gap: 0;
-  overflow-x: auto;
   padding: 12px 4px 28px;
 }
 
-.tree-col { display: flex; flex-direction: column; justify-content: center; flex-shrink: 0; position: relative; }
-.tree-col-gm, .tree-col-rh { padding-right: 46px; }
-/* straight connector: GM -> Right Hand, Right Hand -> Officers column */
+.tree-col { display: flex; flex-direction: column; align-items: center; position: relative; }
+.tree-col-gm, .tree-col-rh { padding-bottom: 40px; }
+/* straight connector: GM -> Right Hand, Right Hand -> Officers row */
 .tree-col-gm::after, .tree-col-rh::after {
   content: '';
-  position: absolute; top: 50%; right: 0;
-  width: 46px; height: 2px;
+  position: absolute; bottom: 0; left: 50%;
+  width: 2px; height: 40px;
   background: var(--line-2);
+  transform: translateX(-50%);
 }
-.tree-col-officers { padding-left: 46px; }
+.tree-col-officers { padding-top: 40px; }
 
 .tree-node {
-  --node-h: 128px;
-  width: 168px; height: var(--node-h);
+  width: 168px; min-height: 122px;
   background: var(--surface); border: 1px solid var(--line-2); border-radius: 14px;
   display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px;
   padding: 14px 10px;
   box-shadow: 0 10px 26px -14px rgba(0,0,0,0.5);
   flex-shrink: 0;
+  position: relative;
 }
 .tree-node-avatar {
   width: 52px; height: 52px; border-radius: 50%; object-fit: cover;
@@ -56,34 +57,34 @@
 .tree-node-gm .tree-node-tag { color: var(--accent); }
 .tree-node-rh .tree-node-tag { color: var(--moss); }
 
-/* fan-out branch: a vertical trunk connecting every officer's mid-height,
-   with each card getting its own short horizontal stub back to the trunk */
+/* fan-out branch: a horizontal trunk connecting every officer's
+   mid-width, with each card getting its own short vertical stub back up
+   to the trunk. Names render exactly like the GM/Right Hand cards above —
+   same .tree-node size and layout, just without the accent border. */
 .tree-branch {
   position: relative;
-  display: flex; flex-direction: column; gap: 16px;
-  padding-left: 26px;
+  display: flex; flex-direction: row; flex-wrap: wrap; justify-content: center;
+  gap: 20px 16px;
+  padding-top: 24px;
 }
 .tree-branch::before {
   content: '';
-  position: absolute; left: 0; width: 2px; background: var(--line-2);
-  top: calc(var(--node-h, 128px) / 2);
-  bottom: calc(var(--node-h, 128px) / 2);
+  position: absolute; top: 0; height: 2px; background: var(--line-2);
+  left: calc(84px + 8px); right: calc(84px + 8px);
 }
-.tree-branch .tree-node { position: relative; width: 148px; height: 96px; }
 .tree-branch .tree-node::before {
   content: '';
-  position: absolute; left: -26px; top: 50%; width: 26px; height: 2px;
+  position: absolute; top: -24px; left: 50%; width: 2px; height: 24px;
   background: var(--line-2);
+  transform: translateX(-50%);
 }
-.tree-node-officer .tree-node-avatar { width: 42px; height: 42px; }
-.tree-node-officer .tree-node-name { font-size: 13.5px; }
+/* a single officer sits dead-center under Right Hand — no trunk needed */
+.tree-branch:has(.tree-node:only-child)::before { display: none; }
 
-@media (max-width: 880px) {
-  .roster-tree { flex-direction: column; align-items: stretch; overflow-x: visible; gap: 18px; }
-  .tree-col-gm, .tree-col-rh, .tree-col-officers { padding: 0; display: flex; justify-content: center; }
-  .tree-col-gm::after, .tree-col-rh::after { display: none; }
-  .tree-branch { padding-left: 0; align-items: center; }
-  .tree-branch::before, .tree-branch .tree-node::before { display: none; }
+@media (max-width: 620px) {
+  .tree-branch::before { display: none; }
+  .tree-branch .tree-node::before { height: 12px; top: -12px; }
+  .tree-col-officers { padding-top: 12px; }
 }
 
 /* ---------- all-members grid ---------- */
