@@ -1,43 +1,3 @@
-
-
-Texte collé.txt
-Document
-
-Texte collé (2).txt
-Document
-compare these two css and tell me what changed
-
-I compared both CSS files line-by-line. There is only one functional CSS change between them.
-
-The actual change
-In Texte collé.txt, event cards only changed their border color based on event type:
-
-.event-card.type-PVP { border-color: var(--dps); }
-.event-card.type-PVE { border-color: var(--healer); }
-.event-card.type-Economy { border-color: var(--support); }
-In Texte collé (2).txt, the cards also get a background color based on event type:
-
-.event-card.type-PVP { border-color: var(--dps); background: var(--dps-bg); }
-.event-card.type-PVE { border-color: var(--healer); background: var(--healer-bg); }
-.event-card.type-Economy { border-color: var(--support); background: var(--support-bg); }
-So visually:
-
-Event type	First CSS	Second CSS
-PVP	Colored border, normal var(--surface) background	Colored border + var(--dps-bg) background
-PVE	Colored border, normal background	Colored border + var(--healer-bg) background
-Economy	Colored border, normal background	Colored border + var(--support-bg) background
-Everything else
-The rest of the CSS is effectively identical. The line numbers shift by 1–2 because the comments were shortened/changed, but there are no other property/value changes.
-
-The first version explicitly says the card's own background stays unchanged. 
-
-
-The second version changes that behavior by applying the type-specific background directly to the card. 
-
-
-Bottom line: Texte collé (2).txt makes PVP/PVE/Economy event cards tinted with their respective role colors, whereas Texte collé.txt only gives them colored outlines.
-
-
 /* ─────────────────────────────────────────
 EVENTS — public sign-up page, shared with
 the Discord bot's /event commands. Layout
@@ -389,6 +349,3 @@ color: var(--ink-dim); font: inherit; font-size: 12.5px; font-weight: 600; paddi
 .event-detail-app { padding: 0 16px 16px; }
 .modal-row { grid-template-columns: 1fr; }
 }
-
-
-Fermer
