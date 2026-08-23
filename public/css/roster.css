@@ -57,20 +57,26 @@
 .tree-node-gm .tree-node-tag { color: var(--accent); }
 .tree-node-rh .tree-node-tag { color: var(--moss); }
 
-/* fan-out branch: a horizontal trunk connecting every officer's
-   mid-width, with each card getting its own short vertical stub back up
-   to the trunk. Names render exactly like the GM/Right Hand cards above —
-   same .tree-node size and layout, just without the accent border. */
+/* fan-out branch: every officer sits on one single row, hanging off one
+   continuous horizontal line at the same level — deliberately NOT a
+   trunk-with-stubs into a sub-tree, so there's no visual hierarchy
+   between officers, no matter how many there are. Names render exactly
+   like the GM/Right Hand cards above — same .tree-node size and layout,
+   just without the accent border. Scrolls horizontally instead of
+   wrapping to a second row, since a wrapped second row would itself read
+   as a lower tier. */
 .tree-branch {
   position: relative;
-  display: flex; flex-direction: row; flex-wrap: wrap; justify-content: center;
-  gap: 20px 16px;
+  display: flex; flex-direction: row; flex-wrap: nowrap; align-items: flex-start;
+  justify-content: center;
+  gap: 16px;
   padding-top: 24px;
+  overflow-x: auto;
+  max-width: 100%;
 }
 .tree-branch::before {
   content: '';
-  position: absolute; top: 0; height: 2px; background: var(--line-2);
-  left: calc(84px + 8px); right: calc(84px + 8px);
+  position: absolute; top: 0; left: 0; right: 0; height: 2px; background: var(--line-2);
 }
 .tree-branch .tree-node::before {
   content: '';
@@ -78,7 +84,7 @@
   background: var(--line-2);
   transform: translateX(-50%);
 }
-/* a single officer sits dead-center under Right Hand — no trunk needed */
+/* a single officer sits dead-center under Right Hand — no shared line needed */
 .tree-branch:has(.tree-node:only-child)::before { display: none; }
 
 @media (max-width: 620px) {
