@@ -248,15 +248,15 @@ async function openLootForm() {
     <h2>New loot split</h2>
     <div class="modal-field">
       <label>Loot name</label>
-      <input type="text" id="lf-name" placeholder="e.g. Avalonian chest">
+      <input type="text" id="lf-name">
     </div>
     <div class="modal-field">
       <label>Loot location</label>
-      <input type="text" id="lf-location" placeholder="e.g. 5.2 Roads of Avalon">
+      <input type="text" id="lf-location">
     </div>
     <div class="modal-field">
       <label>Loot value <span style="font-weight:400;text-transform:none">(silver)</span></label>
-      <input type="number" id="lf-value" min="1" step="1" placeholder="e.g. 2500000">
+      <input type="number" id="lf-value" min="1" step="1">
     </div>
     <div class="modal-field">
       <label>Participants <span id="lf-participant-count" style="font-weight:400;text-transform:none">(0 selected)</span></label>
