@@ -77,6 +77,7 @@ function renderAuthControl() {
         <svg class="auth-menu-caret" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
       </button>
       <div class="auth-menu-dropdown" id="auth-menu-dropdown">
+        <a class="auth-menu-item" href="profile.html?id=${encodeURIComponent(id)}">My Profile</a>
         <a class="auth-menu-item" href="builds.html">War Ledger</a>
         <a class="auth-menu-item" href="roster.html">Roster</a>
         <a class="auth-menu-item" href="events.html">Events</a>

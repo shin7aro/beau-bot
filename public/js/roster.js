@@ -57,11 +57,11 @@ const TIER_CARD_CLASS = { gm: 'roster-card-gm', right_hand: 'roster-card-rh', of
 function rosterCardHtml(member) {
   const avatarUrl = window.discordAvatarUrl(member.id, member.avatar, 96);
   return `
-    <div class="roster-card ${TIER_CARD_CLASS[member.tier] || 'roster-card-member'}">
+    <a class="roster-card ${TIER_CARD_CLASS[member.tier] || 'roster-card-member'}" href="profile.html?id=${encodeURIComponent(member.id)}">
       <img class="roster-card-avatar" src="${avatarUrl}" alt="" loading="lazy">
       <div class="roster-card-name">${escapeHtml(member.username)}</div>
       <div class="roster-card-tag">${TIER_TAGS[member.tier] || 'Dahalo'}</div>
-    </div>`;
+    </a>`;
 }
 
 // GM, then Right Hand, then Officers, then everyone else — each subgroup

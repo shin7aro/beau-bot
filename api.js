@@ -607,6 +607,77 @@ router.get('/api/loot/members', auth.requireMember, async (req, res) => {
   }
 });
 
+// ── PROFILE ──────────────────────────────────────────────────────────────
+// Maps the old, pre-PVP/PVE/Economy event "type" values (see
+// events-store.js's EVENT_TYPES comment) onto the three attendance
+// buckets below, so events created before that change still count toward
+// attendance instead of being silently dropped. "Other" has no sensible
+// bucket and is intentionally left uncounted.
+const LEGACY_EVENT_TYPE_BUCKET = {
+  CTA: 'PVP',
+  'Group Dungeon': 'PVE',
+  'Ava Dungeon': 'PVE',
+  Tracking: 'Economy',
+};
+
+function attendanceBucketFor(type) {
+  if (eventsStore.EVENT_TYPES.includes(type)) return type;
+  return LEGACY_EVENT_TYPE_BUCKET[type] || null;
+}
+
+// Attendance only counts CLOSED events — `noShows` is only known once an
+// event is closed, so an open event's sign-up is just intent, not
+// attendance yet. A no-show on a closed event doesn't count either, per
+// its name.
+async function computeAttendance(userId) {
+  const events = await eventsStore.loadEvents();
+  const counts = { PVP: 0, PVE: 0, Economy: 0 };
+  for (const event of Object.values(events)) {
+    if (!event.closed) continue;
+    if (!eventsStore.getSignedUpUserIds(event).includes(userId)) continue;
+    const noShows = new Set(event.noShows || []);
+    if (noShows.has(userId)) continue;
+    const bucket = attendanceBucketFor(event.type);
+    if (bucket) counts[bucket] += 1;
+  }
+  return counts;
+}
+
+// One member's profile — role, attendance, and loot earned. Gated the
+// same way events/loot data already is (auth.requireMember): the roster
+// page's list of names is public, but the stats behind each name follow
+// the same members-only boundary as the events/loot pages they're drawn
+// from.
+router.get('/api/profile/:userId', auth.requireMember, async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const raw = await fetchDahaloMembersRaw();
+    const found = raw.find((m) => m.id === userId);
+
+    const positions = await rosterStore.loadPositions();
+    const entry = rosterStore.getEntry(positions, userId);
+
+    const totals = await lootStore.getTotals();
+    const lootRecord = totals.perMember[userId];
+
+    const attendance = await computeAttendance(userId);
+
+    res.json({
+      id: userId,
+      username: (found && found.username) || (lootRecord && lootRecord.username) || userId,
+      avatar: (found && found.avatar) || null,
+      tier: entry.tier,
+      inactive: entry.inactive,
+      inGuild: Boolean(found),
+      attendance,
+      totalLootEarned: lootRecord ? lootRecord.totalReceived : 0,
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to load profile.' });
+  }
+});
+
 // ── LOOT MANAGER ────────────────────────────────────────────────────────
 // Open to any logged-in member, not just officers/admins — anyone in the
 // guild can run a split. Posting still goes through the live Discord bot

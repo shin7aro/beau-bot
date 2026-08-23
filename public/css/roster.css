@@ -40,7 +40,14 @@
   padding: 14px 10px;
   box-shadow: 0 10px 26px -14px rgba(0,0,0,0.5);
   flex-shrink: 0;
+  text-decoration: none; color: inherit; cursor: pointer;
+  transition: transform 0.12s ease, border-color 0.12s ease;
 }
+.roster-card:hover { transform: translateY(-2px); }
+.roster-card-member:hover { border-color: var(--accent); }
+.roster-card-gm:hover { box-shadow: 0 10px 26px -14px rgba(0,0,0,0.5), 0 0 0 2px var(--rank-gold); }
+.roster-card-rh:hover { box-shadow: 0 10px 26px -14px rgba(0,0,0,0.5), 0 0 0 2px var(--rank-silver); }
+.roster-card-officer:hover { box-shadow: 0 10px 26px -14px rgba(0,0,0,0.5), 0 0 0 2px var(--rank-bronze); }
 .roster-card-avatar {
   width: 52px; height: 52px; border-radius: 50%; object-fit: cover;
   border: 2px solid var(--line-2); background: var(--surface-2);

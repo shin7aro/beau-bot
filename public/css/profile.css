@@ -1,0 +1,53 @@
+/* ─────────────────────────────────────────
+   PROFILE PAGE
+   (builds on tokens + shared classes from
+   base.css / home.css / builds.css /
+   events.css / roster.css — .wrap, .section,
+   .cta-*, .stats-grid, .stat, .empty-state,
+   and the --rank-gold/silver/bronze tokens
+   are all defined there)
+───────────────────────────────────────── */
+
+.profile-section {
+  display: flex; flex-direction: column; align-items: center; gap: 32px;
+}
+
+/* ---------- profile card ---------- */
+.profile-card {
+  display: flex; flex-direction: column; align-items: center;
+  text-align: center; gap: 4px;
+}
+
+.profile-avatar-wrap {
+  width: 120px; height: 120px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  border: 3px solid var(--line-2);
+  margin-bottom: 6px;
+}
+.profile-avatar { width: 100%; height: 100%; border-radius: 50%; object-fit: cover; background: var(--surface-2); }
+
+.profile-avatar-wrap.roster-card-gm { border-color: var(--rank-gold); box-shadow: 0 0 0 6px var(--rank-gold-dim); }
+.profile-avatar-wrap.roster-card-rh { border-color: var(--rank-silver); box-shadow: 0 0 0 6px var(--rank-silver-dim); }
+.profile-avatar-wrap.roster-card-officer { border-color: var(--rank-bronze); box-shadow: 0 0 0 6px var(--rank-bronze-dim); }
+
+.profile-name { font-family: 'Big Shoulders Display', sans-serif; font-weight: 800; font-size: 28px; color: var(--ink); }
+.profile-tag {
+  font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em;
+  color: var(--ink-faint);
+}
+.profile-tag.roster-card-gm { color: var(--rank-gold); }
+.profile-tag.roster-card-rh { color: var(--rank-silver); }
+.profile-tag.roster-card-officer { color: var(--rank-bronze); }
+
+.profile-flag {
+  margin-top: 10px; font-size: 11px; font-weight: 600;
+  color: var(--dps); background: var(--dps-bg); border: 1px solid var(--dps);
+  padding: 4px 12px; border-radius: 999px;
+}
+
+/* ---------- stats ---------- */
+.profile-stats-grid { grid-template-columns: repeat(4, 1fr); max-width: 760px; width: 100%; }
+
+@media (max-width: 700px) {
+  .profile-stats-grid { grid-template-columns: repeat(2, 1fr); }
+}
