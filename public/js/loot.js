@@ -41,7 +41,7 @@ function showToast(message) {
 }
 
 function formatSilver(n) {
-  return `${Math.round(n).toLocaleString('en-US')} silver`;
+  return Math.round(n).toLocaleString('en-US');
 }
 
 /* ---------- boot ---------- */
