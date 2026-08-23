@@ -76,7 +76,7 @@ async function loadLoot() {
   } catch (err) {
     showToast('Failed to load loot splits: ' + err.message);
     lootRecent = [];
-    lootTotals = { totalLootValue: 0, totalGuildTax: 0, totalMemberShare: 0, splitCount: 0 };
+    lootTotals = { totalLootValue: 0, totalGuildTax: 0, totalMemberShare: 0, totalDonated: 0, splitCount: 0 };
   }
   renderStats();
   renderList();
@@ -111,6 +111,7 @@ function renderStats() {
     <div class="stat"><div class="stat-num">${formatSilver(lootTotals.totalLootValue)}</div><div class="stat-label">Total loot</div></div>
     <div class="stat"><div class="stat-num">${formatSilver(lootTotals.totalGuildTax)}</div><div class="stat-label">Guild tax</div></div>
     <div class="stat"><div class="stat-num">${formatSilver(lootTotals.totalMemberShare)}</div><div class="stat-label">Paid to members</div></div>
+    <div class="stat"><div class="stat-num">${formatSilver(lootTotals.totalDonated || 0)}</div><div class="stat-label">Donated to guild</div></div>
     <div class="stat"><div class="stat-num">${lootTotals.splitCount}</div><div class="stat-label">Splits recorded</div></div>`;
 }
 
@@ -154,30 +155,31 @@ async function deleteSplit(id, name) {
 }
 
 function renderLootCard(s) {
-  const unclaimed = s.participants.filter(p => !p.claimed).length;
+  const pending = s.participants.filter(p => !p.claimed && !p.donated).length;
   const canManageSplit = s.createdBy?.id === window.SITE_AUTH.id || window.SITE_AUTH.role === 'officer' || window.SITE_AUTH.role === 'admin';
-  const canRemind = !s.closed && unclaimed > 0 && canManageSplit;
+  const canRemind = !s.closed && pending > 0 && canManageSplit;
   const canDelete = window.SITE_AUTH.role === 'officer' || window.SITE_AUTH.role === 'admin';
 
   return `
     <div class="loot-card ${s.closed ? 'closed' : ''}">
       <div class="loot-card-head">
         <h3>${escapeHtml(s.lootName)}</h3>
-        <span class="loot-status-badge ${s.closed ? 'done' : 'pending'}">${s.closed ? 'All claimed' : `${unclaimed} pending`}</span>
+        <span class="loot-status-badge ${s.closed ? 'done' : 'pending'}">${s.closed ? 'All resolved' : `${pending} pending`}</span>
       </div>
       ${s.lootLocation ? `<p class="loot-location">📍 ${escapeHtml(s.lootLocation)}</p>` : ''}
       <div class="loot-numbers">
         <div><span class="loot-num-label">Loot value</span><span class="loot-num-val">${formatSilver(s.lootValue)}</span></div>
-        <div><span class="loot-num-label">Guild tax (5%)</span><span class="loot-num-val">${formatSilver(s.taxAmount)}</span></div>
+        <div><span class="loot-num-label">${s.taxed ? 'Guild tax (5%)' : 'Guild tax'}</span><span class="loot-num-val">${s.taxed ? formatSilver(s.taxAmount) : 'None'}</span></div>
         <div><span class="loot-num-label">Each share</span><span class="loot-num-val">${formatSilver(s.shareAmount)}</span></div>
       </div>
       <div class="loot-participants">
         ${s.participants.map(p => {
-          const label = `${p.claimed ? '✅' : '⏳'} ${escapeHtml(p.username || p.userId)}`;
-          if (!p.claimed && canManageSplit) {
-            return `<button type="button" class="loot-participant-chip mark-claim-btn" data-split-id="${escapeHtml(s.id)}" data-user-id="${escapeHtml(p.userId)}" data-username="${escapeHtml(p.username || p.userId)}" title="Mark as claimed — they took it but forgot to react">${label}</button>`;
+          const glyph = p.claimed ? '✅' : p.donated ? '🎁' : '⏳';
+          const label = `${glyph} ${escapeHtml(p.username || p.userId)}`;
+          if (!p.claimed && !p.donated && canManageSplit) {
+            return `<button type="button" class="loot-participant-chip mark-claim-btn" data-split-id="${escapeHtml(s.id)}" data-user-id="${escapeHtml(p.userId)}" data-username="${escapeHtml(p.username || p.userId)}" title="Mark as claimed — they took it but forgot to use the button">${label}</button>`;
           }
-          return `<span class="loot-participant-chip ${p.claimed ? 'claimed' : ''}">${label}</span>`;
+          return `<span class="loot-participant-chip ${p.claimed ? 'claimed' : ''} ${p.donated ? 'donated' : ''}">${label}</span>`;
         }).join('')}
       </div>
       <div class="loot-card-foot">
@@ -191,7 +193,7 @@ function renderLootCard(s) {
 }
 
 async function markParticipantClaimed(splitId, userId, username) {
-  if (!confirm(`Mark ${username} as having taken their share? Use this if they already took it but forgot to react.`)) return;
+  if (!confirm(`Mark ${username} as having taken their share? Use this if they already took it but forgot to use the button.`)) return;
   try {
     await api(`/api/loot/${encodeURIComponent(splitId)}/claim`, {
       method: 'POST',
@@ -259,6 +261,10 @@ async function openLootForm() {
       <input type="number" id="lf-value" min="1" step="1">
     </div>
     <div class="modal-field">
+      <label class="loot-tax-toggle"><input type="checkbox" id="lf-taxed" checked> Take the 5% guild tax</label>
+      <p class="modal-hint">Unchecked, this loot run splits evenly with no cut for the guild.</p>
+    </div>
+    <div class="modal-field">
       <label>Participants <span id="lf-participant-count" style="font-weight:400;text-transform:none">(0 selected)</span></label>
       <input type="text" id="lf-participant-search" placeholder="Search members…" autocomplete="off">
       <div class="loot-member-picker" id="lf-member-picker">
@@ -268,7 +274,7 @@ async function openLootForm() {
             ${escapeHtml(m.username)}
           </label>`).join('')}
       </div>
-      <p class="modal-hint">5% of the loot value goes to the guild; the rest splits evenly across everyone checked.</p>
+      <p class="modal-hint">The guild tax (if checked) comes off the top; the rest splits evenly across everyone checked.</p>
     </div>
     <div class="modal-actions">
       <button class="event-action-btn" id="lf-cancel">Cancel</button>
@@ -299,6 +305,7 @@ async function submitLootForm() {
   const lootName = document.getElementById('lf-name').value.trim();
   const lootLocation = document.getElementById('lf-location').value.trim();
   const lootValue = Number(document.getElementById('lf-value').value);
+  const taxed = document.getElementById('lf-taxed').checked;
   const participantIds = [...selectedParticipantIds];
 
   if (!lootName) return showToast('Loot name is required.');
@@ -312,7 +319,7 @@ async function submitLootForm() {
   try {
     await api('/api/loot', {
       method: 'POST',
-      body: JSON.stringify({ lootName, lootLocation, lootValue, participantIds }),
+      body: JSON.stringify({ lootName, lootLocation, lootValue, taxed, participantIds }),
     });
     closeModal();
     showToast('Split posted to #payout.');

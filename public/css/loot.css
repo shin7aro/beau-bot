@@ -6,7 +6,8 @@
    .event-action-btn are all defined there)
 ───────────────────────────────────────── */
 
-.loot-stats-grid { grid-template-columns: repeat(4, 1fr); margin-top: 16px; }
+.loot-stats-grid { grid-template-columns: repeat(5, 1fr); margin-top: 16px; }
+@media (max-width: 900px) { .loot-stats-grid { grid-template-columns: repeat(3, 1fr); } }
 @media (max-width: 700px) { .loot-stats-grid { grid-template-columns: repeat(2, 1fr); } }
 
 /* ---------- split cards ---------- */
@@ -47,6 +48,7 @@
   font-family: inherit;
 }
 .loot-participant-chip.claimed { color: var(--ink); border-color: var(--accent); }
+.loot-participant-chip.donated { color: var(--support); border-color: var(--support); background: var(--support-bg); }
 button.loot-participant-chip {
   cursor: pointer; transition: border-color 0.15s, color 0.15s;
 }
@@ -57,6 +59,12 @@ button.loot-participant-chip:hover { color: var(--ink); border-color: var(--acce
 .loot-card-date { font-size: 11px; color: var(--ink-faint); font-family: 'JetBrains Mono', monospace; }
 
 /* ---------- member picker (create-split form) ---------- */
+.loot-tax-toggle {
+  display: flex; align-items: center; gap: 8px; cursor: pointer;
+  font-size: 13px; color: var(--ink); text-transform: none; font-weight: 600;
+}
+.loot-tax-toggle input[type="checkbox"] { accent-color: var(--accent); width: 15px; height: 15px; }
+
 .loot-member-picker {
   max-height: 220px; overflow-y: auto; border: 1px solid var(--line); border-radius: 8px;
   padding: 6px; display: flex; flex-direction: column; gap: 2px; margin-top: 6px;

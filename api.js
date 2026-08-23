@@ -637,7 +637,7 @@ router.post('/api/loot', auth.requireMember, async (req, res) => {
   const client = requireDiscordClient(res);
   if (!client) return;
 
-  const { lootName, lootLocation, lootValue, participantIds } = req.body || {};
+  const { lootName, lootLocation, lootValue, participantIds, taxed } = req.body || {};
   if (!Array.isArray(participantIds) || participantIds.length === 0) {
     return res.status(400).json({ error: 'Pick at least one participant.' });
   }
@@ -657,6 +657,7 @@ router.post('/api/loot', auth.requireMember, async (req, res) => {
     lootLocation,
     lootValue,
     participants,
+    taxed: taxed !== false, // defaults to true unless the form explicitly unchecked it
     createdBy: { id: req.user.id, username: req.user.username },
     guildId: process.env.GUILD_ID,
   });
@@ -704,11 +705,12 @@ router.post('/api/loot/:id/claim', auth.requireMember, async (req, res) => {
 
   const result = lootStore.markClaimed(split, userId);
   if (result.error === 'not_participant') return res.status(400).json({ error: 'That person is not a participant on this split.' });
+  if (result.error === 'already_donated') return res.status(400).json({ error: 'That share was already donated to the guild.' });
   if (result.alreadyClaimed) return res.json({ split, alreadyClaimed: true });
 
   await lootStore.persistSplit(split);
   await lootRender.updateSplitMessage(client, split);
-  if (result.allClaimed) await lootRender.celebrateCompletedThread(client, split);
+  if (result.allResolved) await lootRender.celebrateCompletedThread(client, split);
 
   const claimedParticipant = split.participants.find((p) => p.userId === userId);
   activityStore.log(

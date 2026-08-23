@@ -147,11 +147,11 @@ const commands = [
     ),
   new SlashCommandBuilder()
     .setName('loot')
-    .setDescription('Split loot value between participants, with an automatic 5% guild tax')
+    .setDescription('Split loot value between participants, with an optional 5% guild tax')
     .addSubcommand((sub) =>
       sub
         .setName('create')
-        .setDescription('Post a new loot split — 5% goes to the guild, the rest splits evenly')
+        .setDescription('Post a new loot split — 5% guild tax by default, evenly split otherwise')
         .addStringOption((opt) => opt.setName('name').setDescription('What was looted, e.g. "Avalonian chest"').setRequired(true))
         .addStringOption((opt) => opt.setName('location').setDescription('Where it happened, e.g. "5.2 Roads"').setRequired(true))
         .addNumberOption((opt) => opt.setName('value').setDescription('Total loot value in silver').setRequired(true))
@@ -160,6 +160,9 @@ const commands = [
             .setName('participants')
             .setDescription('Mention everyone who gets a share, e.g. @Alice @Bob @Carol')
             .setRequired(true)
+        )
+        .addBooleanOption((opt) =>
+          opt.setName('taxed').setDescription('Take the 5% guild cut? Defaults to yes.').setRequired(false)
         )
     )
     .addSubcommand((sub) => sub.setName('list').setDescription('See loot splits still waiting on someone'))
