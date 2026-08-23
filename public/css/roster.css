@@ -7,105 +7,46 @@
    are all defined there)
 ───────────────────────────────────────── */
 
-/* ---------- the tree (GM > Right Hand > Officers), top to bottom ---------- */
-.roster-tree-section { padding-bottom: 56px; }
-.roster-tree {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 0;
-  padding: 12px 4px 28px;
+/* ---------- roster grid ----------
+   One flat, ordered grid, no hierarchy lines: GM first, then Right Hand,
+   then Officers, then everyone else — the ordering itself communicates
+   rank, the layout doesn't try to. Every person gets the same box:
+   avatar, name, and a small role line underneath. */
+.roster-grid-section { padding-bottom: 12px; }
+.controls .roster-count { font-size: 12.5px; color: var(--ink-faint); margin-left: auto; }
+
+.roster-grid {
+  display: flex; flex-wrap: wrap;
+  gap: 14px;
+  padding: 4px 0 8px;
 }
 
-.tree-col { display: flex; flex-direction: column; align-items: center; position: relative; }
-.tree-col-gm, .tree-col-rh { padding-bottom: 40px; }
-/* straight connector: GM -> Right Hand, Right Hand -> Officers row */
-.tree-col-gm::after, .tree-col-rh::after {
-  content: '';
-  position: absolute; bottom: 0; left: 50%;
-  width: 2px; height: 40px;
-  background: var(--line-2);
-  transform: translateX(-50%);
-}
-.tree-col-officers { padding-top: 40px; }
-
-.tree-node {
+.roster-card {
   width: 168px; min-height: 122px;
   background: var(--surface); border: 1px solid var(--line-2); border-radius: 14px;
   display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px;
   padding: 14px 10px;
   box-shadow: 0 10px 26px -14px rgba(0,0,0,0.5);
   flex-shrink: 0;
-  position: relative;
 }
-.tree-node-avatar {
+.roster-card-avatar {
   width: 52px; height: 52px; border-radius: 50%; object-fit: cover;
   border: 2px solid var(--line-2); background: var(--surface-2);
 }
-.tree-node-gm { border-color: var(--accent); }
-.tree-node-gm .tree-node-avatar { border-color: var(--accent); box-shadow: 0 0 0 4px var(--accent-dim); }
-.tree-node-rh .tree-node-avatar { border-color: var(--moss); }
-.tree-node-name {
+.roster-card-gm { border-color: var(--accent); }
+.roster-card-gm .roster-card-avatar { border-color: var(--accent); box-shadow: 0 0 0 4px var(--accent-dim); }
+.roster-card-rh .roster-card-avatar { border-color: var(--moss); }
+.roster-card-name {
   font-family: 'Big Shoulders Display', sans-serif; font-weight: 700; font-size: 15px;
   color: var(--ink); text-align: center; line-height: 1.2;
   max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
-.tree-node-tag {
+.roster-card-tag {
   font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em;
   color: var(--ink-faint);
 }
-.tree-node-gm .tree-node-tag { color: var(--accent); }
-.tree-node-rh .tree-node-tag { color: var(--moss); }
-
-/* fan-out branch: every officer sits on one single row, hanging off one
-   continuous horizontal line at the same level — deliberately NOT a
-   trunk-with-stubs into a sub-tree, so there's no visual hierarchy
-   between officers, no matter how many there are. Names render exactly
-   like the GM/Right Hand cards above — same .tree-node size and layout,
-   just without the accent border. Scrolls horizontally instead of
-   wrapping to a second row, since a wrapped second row would itself read
-   as a lower tier. */
-.tree-branch {
-  position: relative;
-  display: flex; flex-direction: row; flex-wrap: nowrap; align-items: flex-start;
-  justify-content: center;
-  gap: 16px;
-  padding-top: 24px;
-  overflow-x: auto;
-  max-width: 100%;
-}
-.tree-branch::before {
-  content: '';
-  position: absolute; top: 0; left: 0; right: 0; height: 2px; background: var(--line-2);
-}
-.tree-branch .tree-node::before {
-  content: '';
-  position: absolute; top: -24px; left: 50%; width: 2px; height: 24px;
-  background: var(--line-2);
-  transform: translateX(-50%);
-}
-/* a single officer sits dead-center under Right Hand — no shared line needed */
-.tree-branch:has(.tree-node:only-child)::before { display: none; }
-
-@media (max-width: 620px) {
-  .tree-branch::before { display: none; }
-  .tree-branch .tree-node::before { height: 12px; top: -12px; }
-  .tree-col-officers { padding-top: 12px; }
-}
-
-/* ---------- all-members grid ---------- */
-.roster-member-grid {
-  display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-  gap: 8px;
-}
-.roster-member-chip {
-  display: flex; align-items: center; gap: 9px;
-  padding: 8px 12px; border-radius: 10px;
-  background: var(--surface); border: 1px solid var(--line);
-  font-size: 13px; color: var(--ink-dim);
-}
-.roster-member-chip img { width: 30px; height: 30px; border-radius: 50%; object-fit: cover; background: var(--surface-2); flex-shrink: 0; }
-.roster-member-chip span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.roster-card-gm .roster-card-tag { color: var(--accent); }
+.roster-card-rh .roster-card-tag { color: var(--moss); }
 
 /* ---------- hierarchy editor modal ---------- */
 .roster-editor-card { max-width: 720px; }

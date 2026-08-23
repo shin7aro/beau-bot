@@ -1,11 +1,12 @@
 /* ─────────────────────────────────────────
-   ROSTER — family-tree hierarchy page
-   Public read (GET /api/roster): GM > Right
-   Hand > Officers rendered as a connected
-   tree, then every other active member as a
-   searchable grid below. Anyone marked
-   inactive by a roster manager is already
-   excluded server-side.
+   ROSTER page
+   Public read (GET /api/roster): renders one
+   flat, ordered grid — GM, then Right Hand,
+   then Officers, then everyone else — same
+   box style for every person. The ordering
+   communicates rank; nothing else tries to.
+   Anyone marked inactive by a roster manager
+   is already excluded server-side.
 
    Roster managers (Shin7aro / Erdan — see
    web-auth.js's isRosterAdmin) additionally
@@ -48,87 +49,57 @@ function showToast(message) {
 }
 
 const TIER_LABELS = { gm: 'GM', right_hand: 'Right Hand', officer: 'Officer', member: 'Member' };
+const TIER_TAGS = { gm: 'Guild Master', right_hand: 'Right Hand', officer: 'Officer', member: 'Member' };
+const TIER_CARD_CLASS = { gm: 'roster-card-gm', right_hand: 'roster-card-rh', officer: 'roster-card-officer', member: 'roster-card-member' };
 
-/* ---------- tree rendering ---------- */
+/* ---------- roster grid ---------- */
 
-function nodeCardHtml(member, kind) {
+function rosterCardHtml(member) {
   const avatarUrl = window.discordAvatarUrl(member.id, member.avatar, 96);
   return `
-    <div class="tree-node tree-node-${kind}">
-      <img class="tree-node-avatar" src="${avatarUrl}" alt="" loading="lazy">
-      <div class="tree-node-name">${escapeHtml(member.username)}</div>
-      <div class="tree-node-tag">${kind === 'gm' ? 'Guild Master' : kind === 'rh' ? 'Right Hand' : 'Officer'}</div>
+    <div class="roster-card ${TIER_CARD_CLASS[member.tier] || 'roster-card-member'}">
+      <img class="roster-card-avatar" src="${avatarUrl}" alt="" loading="lazy">
+      <div class="roster-card-name">${escapeHtml(member.username)}</div>
+      <div class="roster-card-tag">${TIER_TAGS[member.tier] || 'Member'}</div>
     </div>`;
 }
 
-function renderTree() {
-  const wrap = document.getElementById('roster-tree');
-  if (!rosterData) return;
-
-  const gm = rosterData.gm[0];
-  const rightHand = rosterData.rightHand[0];
-  const officers = rosterData.officers;
-
-  const cols = [];
-
-  if (gm) {
-    cols.push(`<div class="tree-col tree-col-gm">${nodeCardHtml(gm, 'gm')}</div>`);
-  }
-  if (rightHand) {
-    cols.push(`<div class="tree-col tree-col-rh">${nodeCardHtml(rightHand, 'rh')}</div>`);
-  }
-  if (officers.length > 0) {
-    cols.push(`
-      <div class="tree-col tree-col-officers">
-        <div class="tree-branch">
-          ${officers.map(o => nodeCardHtml(o, 'officer')).join('')}
-        </div>
-      </div>`);
-  }
-
-  if (cols.length === 0) {
-    wrap.innerHTML = `<div class="empty-state">Leadership hasn't been set yet. Check back soon.</div>`;
-    return;
-  }
-
-  wrap.innerHTML = cols.join('');
+// GM, then Right Hand, then Officers, then everyone else — each subgroup
+// already arrives from the API sorted (manual order first, alphabetical
+// after), so this is just a straight concatenation in rank order.
+function fullRosterList() {
+  if (!rosterData) return [];
+  return [...rosterData.gm, ...rosterData.rightHand, ...rosterData.officers, ...rosterData.members];
 }
 
-/* ---------- member grid ---------- */
+function renderRosterGrid() {
+  const grid = document.getElementById('roster-grid');
+  const empty = document.getElementById('roster-empty');
+  const countLabel = document.getElementById('roster-count');
+  const query = (document.getElementById('roster-search').value || '').trim().toLowerCase();
 
-function renderMemberGrid() {
-  const grid = document.getElementById('roster-member-grid');
-  const empty = document.getElementById('roster-members-empty');
-  const countLabel = document.getElementById('roster-members-count');
-  const query = (document.getElementById('roster-member-search').value || '').trim().toLowerCase();
+  const all = fullRosterList();
+  countLabel.textContent = `${all.length} member${all.length === 1 ? '' : 's'}`;
 
-  const members = rosterData.members;
-  countLabel.textContent = `${members.length} member${members.length === 1 ? '' : 's'}`;
-
-  const matches = query ? members.filter(m => m.username.toLowerCase().includes(query)) : members;
+  const matches = query ? all.filter(m => m.username.toLowerCase().includes(query)) : all;
 
   if (matches.length === 0) {
     grid.innerHTML = '';
     empty.style.display = '';
-    empty.textContent = members.length === 0 ? 'No members found.' : 'No matches.';
+    empty.textContent = all.length === 0 ? 'Nobody here yet.' : 'No matches.';
     return;
   }
   empty.style.display = 'none';
-
-  grid.innerHTML = matches.map(m => `
-    <div class="roster-member-chip">
-      <img src="${window.discordAvatarUrl(m.id, m.avatar, 64)}" alt="" loading="lazy">
-      <span>${escapeHtml(m.username)}</span>
-    </div>`).join('');
+  grid.innerHTML = matches.map(rosterCardHtml).join('');
 }
 
 async function loadRoster() {
   try {
     rosterData = await api('/api/roster');
-    renderTree();
-    renderMemberGrid();
+    renderRosterGrid();
   } catch (err) {
-    document.getElementById('roster-tree').innerHTML = `<div class="empty-state">Failed to load the roster: ${escapeHtml(err.message)}</div>`;
+
+    document.getElementById('roster-grid').innerHTML = `<div class="empty-state">Failed to load the roster: ${escapeHtml(err.message)}</div>`;
   }
 }
 
@@ -328,7 +299,7 @@ async function init() {
   await window.SITE_AUTH_READY;
   await loadRoster();
 
-  document.getElementById('roster-member-search').addEventListener('input', renderMemberGrid);
+  document.getElementById('roster-search').addEventListener('input', renderRosterGrid);
 
   if (window.SITE_AUTH.rosterAdmin) {
     document.getElementById('manage-hierarchy-btn').addEventListener('click', openHierarchyModal);

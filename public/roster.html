@@ -50,30 +50,21 @@
   <div class="section-head">
     <div class="section-eyebrow">Chain of command</div>
     <h2 class="section-title">Roster</h2>
-    <p class="section-sub">Who's who — from the top down, left to right. Everyone here is currently carrying the Dahalo role in Discord.</p>
+    <p class="section-sub">Guild Master first, then the Right Hand, then Officers, then everyone else. Everyone here is currently carrying the Dahalo role in Discord.</p>
   </div>
 </section>
 
-<!-- TREE -->
-<section class="wrap roster-tree-section">
-  <div class="roster-tree" id="roster-tree"><!-- filled by js/roster.js --></div>
-</section>
-
-<!-- ALL MEMBERS -->
-<section class="wrap section roster-members-section">
-  <div class="section-head" style="margin-bottom: 18px;">
-    <div class="section-eyebrow">Everyone else</div>
-    <h2 class="section-title" style="font-size: 24px;">All members</h2>
-    <p class="section-sub" id="roster-members-count"></p>
-  </div>
+<!-- ROSTER GRID -->
+<section class="wrap section roster-grid-section">
   <div class="controls" style="padding: 0 0 14px; border: none;">
     <div class="search-wrap">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
-      <input type="text" id="roster-member-search" placeholder="Search members…" autocomplete="off">
+      <input type="text" id="roster-search" placeholder="Search the roster…" autocomplete="off">
     </div>
+    <p class="roster-count" id="roster-count"></p>
   </div>
-  <div class="roster-member-grid" id="roster-member-grid"></div>
-  <div class="empty-state" id="roster-members-empty" style="display:none">No members found.</div>
+  <div class="roster-grid" id="roster-grid"><!-- filled by js/roster.js --></div>
+  <div class="empty-state" id="roster-empty" style="display:none">No members found.</div>
 </section>
 
 <!-- HIERARCHY EDITOR MODAL (roster managers only) -->
