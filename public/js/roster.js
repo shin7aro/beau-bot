@@ -215,6 +215,7 @@ function renderHierarchyList() {
   const query = (document.getElementById('hierarchy-search').value || '').trim().toLowerCase();
 
   let rows = hierarchyData;
+  if (hierarchyFilter === 'active') rows = rows.filter(m => !m.inactive);
   if (hierarchyFilter === 'inactive') rows = rows.filter(m => m.inactive);
   if (query) rows = rows.filter(m => m.username.toLowerCase().includes(query));
 
