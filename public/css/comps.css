@@ -91,13 +91,14 @@
 
 /* Multi-choice line — a role line that accepts more than one weapon (see
    comps.js's item.options). Each option gets its own mini-row (emoji +
-   name + remove-this-choice), stacked under a shared "+ Add choice" link,
-   with the normal "remove whole line" button still on the far right. No
-   build-select here — a multi-choice line can't link a single build. */
+   name + build select + remove-this-choice), stacked under a shared
+   "+ Add choice" link, with the normal "remove whole line" button still
+   on the far right — each option can link its own build, same as a
+   single-choice line's build select. */
 .comp-item-row-multi { display: flex; align-items: flex-start; gap: 8px; }
 .comp-item-options { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
 .comp-item-option {
-  display: grid; grid-template-columns: 34px 1fr auto; gap: 8px; align-items: center;
+  display: grid; grid-template-columns: 34px 1fr 1.3fr auto; gap: 8px; align-items: center;
 }
 .comp-item-option-remove {
   background: transparent; border: 1px solid var(--line-2); border-radius: 7px;

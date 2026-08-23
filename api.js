@@ -988,9 +988,11 @@ router.put('/api/events/:id', auth.requireOfficer, async (req, res) => {
 
 // Links (or unlinks, if buildTab/buildId are omitted) a build to one role
 // line on THIS event only — it doesn't touch the saved composition the
-// event may have come from, same way sign-ups are event-specific. Anyone
-// can already see a linked build (see detailEvent's row.buildTab/buildId,
-// or GET /api/builds, both public); only officers/admins can change the link.
+// event may have come from, same way sign-ups are event-specific. A
+// multi-choice line has no single build of its own, so req.body.optionIndex
+// says which of its options the link applies to. Anyone can already see a
+// linked build (see detailEvent's row.options[].buildTab/buildId, or GET
+// /api/builds, both public); only officers/admins can change the link.
 router.put('/api/events/:id/rows/:category/:itemIndex/build', auth.requireOfficer, async (req, res) => {
   try {
     const events = await eventsStore.loadEvents();
@@ -1002,23 +1004,31 @@ router.put('/api/events/:id/rows/:category/:itemIndex/build', auth.requireOffice
     const idx = Number(req.params.itemIndex);
     const item = catData.items[idx];
     if (!item) return res.status(404).json({ error: 'Role line not found.' });
-    // Multi-choice lines have no single weapon to attach one build to.
-    if (item.options) return res.status(400).json({ error: "Build links aren't supported on multi-choice lines." });
 
-    const { buildTab, buildId } = req.body || {};
+    const { buildTab, buildId, optionIndex } = req.body || {};
+    // Multi-choice lines have no single weapon of their own — the caller
+    // must say which option's build they mean instead.
+    let target = item;
+    if (item.options) {
+      if (optionIndex === undefined || optionIndex === null || !item.options[optionIndex]) {
+        return res.status(400).json({ error: 'Provide a valid optionIndex for a multi-choice line.' });
+      }
+      target = item.options[optionIndex];
+    }
+
     if (buildTab && buildId !== undefined && buildId !== null) {
-      item.buildTab = buildTab;
-      item.buildId = Number(buildId);
+      target.buildTab = buildTab;
+      target.buildId = Number(buildId);
     } else {
-      item.buildTab = null;
-      item.buildId = null;
+      target.buildTab = null;
+      target.buildId = null;
     }
 
     await eventsStore.saveEvents(events);
     activityStore.log(
       req.user,
       'event.link-build',
-      `${item.buildTab ? 'Linked' : 'Unlinked'} a build for "${item.name}" (${req.params.category}) on event "${event.title}"`
+      `${target.buildTab ? 'Linked' : 'Unlinked'} a build for "${comps.itemLabel(item)}" (${req.params.category}) on event "${event.title}"`
     );
 
     if (discordClient) {

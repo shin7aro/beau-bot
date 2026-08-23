@@ -186,6 +186,7 @@ function renderMultiChoiceRow(cat, i, item) {
     <div class="comp-item-option" data-cat="${cat}" data-i="${i}" data-oi="${oi}">
       <button type="button" class="comp-item-emoji-pick comp-item-option-emoji-pick" title="Pick a server emoji">${emojiPreviewHtml(opt.emoji)}</button>
       <input type="text" class="comp-item-name comp-item-option-name" value="${escapeHtml(opt.name)}" placeholder="Weapon name">
+      <select class="comp-item-build comp-item-option-build">${buildOptionsHtml(opt.buildTab, opt.buildId, cat)}</select>
       <button type="button" class="comp-item-option-remove" title="Remove this choice">${TRASH_ICON}</button>
     </div>`).join('');
   return `
@@ -283,7 +284,7 @@ function renderDetail() {
     const row = e.target.closest('.comp-item-row');
     draft.categories[row.dataset.cat].items[+row.dataset.i].name = e.target.value;
   }));
-  card.querySelectorAll('.comp-item-build').forEach(sel => sel.addEventListener('change', e => {
+  card.querySelectorAll('.comp-item-build:not(.comp-item-option-build)').forEach(sel => sel.addEventListener('change', e => {
     const row = e.target.closest('.comp-item-row');
     const item = draft.categories[row.dataset.cat].items[+row.dataset.i];
     if (!e.target.value) { item.buildTab = null; item.buildId = null; }
@@ -305,7 +306,10 @@ function renderDetail() {
   card.querySelectorAll('.comp-item-add-choice-btn').forEach(btn => btn.addEventListener('click', () => {
     const item = draft.categories[btn.dataset.cat].items[+btn.dataset.i];
     draft.categories[btn.dataset.cat].items[+btn.dataset.i] = {
-      options: [{ name: item.name || '', emoji: item.emoji || null }, { name: '', emoji: null }],
+      options: [
+        { name: item.name || '', emoji: item.emoji || null, buildId: item.buildId ?? null, buildTab: item.buildTab ?? null },
+        { name: '', emoji: null, buildId: null, buildTab: null },
+      ],
       party: item.party || 0,
       signups: [],
       signedOptionIndex: null,
@@ -322,21 +326,29 @@ function renderDetail() {
     const opt = e.target.closest('.comp-item-option');
     draft.categories[opt.dataset.cat].items[+opt.dataset.i].options[+opt.dataset.oi].name = e.target.value;
   }));
+  card.querySelectorAll('.comp-item-option-build').forEach(sel => sel.addEventListener('change', e => {
+    const opt = e.target.closest('.comp-item-option');
+    const option = draft.categories[opt.dataset.cat].items[+opt.dataset.i].options[+opt.dataset.oi];
+    if (!e.target.value) { option.buildTab = null; option.buildId = null; }
+    else { const [tab, idx] = e.target.value.split(':'); option.buildTab = tab; option.buildId = parseInt(idx, 10); }
+  }));
   card.querySelectorAll('.comp-item-add-option-btn').forEach(btn => btn.addEventListener('click', () => {
-    draft.categories[btn.dataset.cat].items[+btn.dataset.i].options.push({ name: '', emoji: null });
+    draft.categories[btn.dataset.cat].items[+btn.dataset.i].options.push({ name: '', emoji: null, buildId: null, buildTab: null });
     renderDetail();
   }));
   // Removing an option drops it straight back to a normal single-choice
   // line once only one option is left, instead of leaving a "multi-choice"
-  // line with nothing to choose between.
+  // line with nothing to choose between — carries that last option's own
+  // build link forward too, so it isn't lost in the conversion.
   card.querySelectorAll('.comp-item-option-remove').forEach(btn => btn.addEventListener('click', e => {
     const opt = e.target.closest('.comp-item-option');
     const item = draft.categories[opt.dataset.cat].items[+opt.dataset.i];
     item.options.splice(+opt.dataset.oi, 1);
     if (item.options.length < 2) {
-      const last = item.options[0] || { name: '', emoji: null };
+      const last = item.options[0] || { name: '', emoji: null, buildId: null, buildTab: null };
       draft.categories[opt.dataset.cat].items[+opt.dataset.i] = {
-        name: last.name, emoji: last.emoji, party: item.party || 0, signups: [], buildId: null, buildTab: null,
+        name: last.name, emoji: last.emoji, party: item.party || 0, signups: [],
+        buildId: last.buildId ?? null, buildTab: last.buildTab ?? null,
       };
     }
     renderDetail();

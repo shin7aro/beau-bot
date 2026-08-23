@@ -315,18 +315,22 @@ function renderRosterRow(e, row) {
   // section instead.
   const canManageAssign = isOfficerOrAdmin() && !e.closed && hasItemIndex;
 
-  let nameLabel;
+  let namePill;
   if (isMultiChoice) {
-    // Multi-choice line — every option gets its own icon + name, chained
-    // with "/" (mirrors the Discord embed's "⚔️ **A**/⚔️ **B**" format).
-    // No build to link here (which option's build would it even be?), so
-    // this never becomes a clickable button, unlike the single-choice case.
-    nameLabel = row.options.map((o) => {
+    // Multi-choice line — each option gets its own smaller pill, split
+    // evenly across the same footprint the single-choice pill occupies
+    // (see .event-row-name-pill-group in events.css), instead of one pill
+    // with names chained by "/". Each option is independently clickable —
+    // same as a single-choice role's pill — to view/link that option's
+    // own build.
+    const optionPills = row.options.map((o, oi) => {
       const optIcon = o.iconUrl
         ? `<img class="event-row-pill-icon" src="${escapeHtml(o.iconUrl)}" alt="" loading="lazy">`
         : `<span class="event-row-pill-icon-fallback">${emojiToHtml(o.emoji, { size: 15 })}</span>`;
-      return `${optIcon}<span class="event-row-name-text">${escapeHtml(o.name)}</span>`;
-    }).join('<span class="event-row-name-sep">/</span>');
+      const label = `${optIcon}<span class="event-row-name-text">${escapeHtml(o.name)}</span>`;
+      return `<button type="button" class="event-row-option-pill event-row-build-trigger role-${row.category.toLowerCase()}" data-cat="${escapeHtml(row.category)}" data-item-index="${row.itemIndex}" data-option-index="${oi}" title="View linked build">${label}</button>`;
+    }).join('');
+    namePill = `<div class="event-row-name-pill-group">${optionPills}</div>`;
   } else {
     // Weapon icon renders inside the name pill itself (see
     // .event-row-name-pill in events.css) instead of as its own column, so
@@ -334,11 +338,11 @@ function renderRosterRow(e, row) {
     const icon = row.iconUrl
       ? `<img class="event-row-pill-icon" src="${escapeHtml(row.iconUrl)}" alt="" loading="lazy">`
       : `<span class="event-row-pill-icon-fallback">${emojiToHtml(row.emoji, { size: 15 })}</span>`;
-    nameLabel = `${icon}<span class="event-row-name-text">${escapeHtml(row.name || 'Any')}</span>`;
+    const nameLabel = `${icon}<span class="event-row-name-text">${escapeHtml(row.name || 'Any')}</span>`;
+    namePill = hasItemIndex
+      ? `<button type="button" class="event-row-name-pill event-row-build-trigger role-${row.category.toLowerCase()}" data-cat="${escapeHtml(row.category)}" data-item-index="${row.itemIndex}" title="View linked build">${nameLabel}</button>`
+      : `<span class="event-row-name-pill role-${row.category.toLowerCase()}">${nameLabel}</span>`;
   }
-  const namePill = (hasItemIndex && !isMultiChoice)
-    ? `<button type="button" class="event-row-name-pill role-${row.category.toLowerCase()}" data-cat="${escapeHtml(row.category)}" data-item-index="${row.itemIndex}" title="View linked build">${nameLabel}</button>`
-    : `<span class="event-row-name-pill role-${row.category.toLowerCase()}${isMultiChoice ? ' is-multi-choice' : ''}">${nameLabel}</span>`;
   const assignBtn = canManageAssign
     ? `<button type="button" class="event-row-assign-btn${isOpen ? ' add' : ' remove'}"
         data-cat="${escapeHtml(row.category)}" data-item-index="${row.itemIndex}"
@@ -349,7 +353,7 @@ function renderRosterRow(e, row) {
         <img class="event-row-player-avatar" src="${escapeHtml(row.signedAvatarUrl || window.discordAvatarUrl(row.signedUserId, null))}" alt="" loading="lazy">
         <span class="event-row-player-name">${escapeHtml(row.signedUsername)}</span>
       </button>`
-    : `<span class="event-row-status">${canSignup ? 'Open — click to sign up' : 'Open'}</span>`;
+    : `<span class="event-row-status">${canSignup ? 'Sign up' : 'Open'}</span>`;
 
   return `
     <div class="event-row${isOpen ? ' is-open' : ''}${canSignup ? ' can-signup' : ''}${isMine ? ' is-mine' : ''}${canManageAssign ? ' has-assign-btn' : ''}"
@@ -585,19 +589,26 @@ function renderDetailsPanelPlaceholder() {
     <p class="event-details-empty">Click a role to see its linked build, or a player's name to see their profile.</p>`;
 }
 
-async function showBuildPanel(cat, itemIndexStr) {
+async function showBuildPanel(cat, itemIndexStr, optionIndexStr) {
   const col = document.getElementById('event-details-col');
   const itemIndex = itemIndexStr === '' ? undefined : Number(itemIndexStr);
   const row = currentDetail.rows.find(r => r.category === cat && r.itemIndex === itemIndex);
   if (!row) return;
+  // A multi-choice line has no build of its own — each option carries its
+  // own buildTab/buildId, so every lookup/save below reads and writes
+  // `target` (the option) instead of `row` whenever one was clicked.
+  const optionIndex = (optionIndexStr === undefined || optionIndexStr === '') ? undefined : Number(optionIndexStr);
+  const option = optionIndex !== undefined && row.options ? row.options[optionIndex] : null;
+  if (optionIndex !== undefined && !option) return;
+  const target = option || row;
 
   col.innerHTML = `<div class="event-details-head">Details</div><p class="event-details-empty">Loading build…</p>`;
 
   let build = null;
-  if (row.buildTab && row.buildId != null) {
+  if (target.buildTab && target.buildId != null) {
     try {
       const all = await ensureAllBuildsLoaded();
-      build = (all[row.buildTab] || [])[row.buildId] || null;
+      build = (all[target.buildTab] || [])[target.buildId] || null;
     } catch (err) {
       showToast('Failed to load build: ' + err.message);
     }
@@ -617,7 +628,7 @@ async function showBuildPanel(cat, itemIndexStr) {
       <div class="event-build-linker">
         <select class="event-build-link-select">
           <option value="">No build</option>
-          ${roleOptions.map(o => `<option value="${o.tab}:${o.index}" ${build && row.buildTab === o.tab && row.buildId === o.index ? 'selected' : ''}>${escapeHtml(o.weapon)}</option>`).join('')}
+          ${roleOptions.map(o => `<option value="${o.tab}:${o.index}" ${build && target.buildTab === o.tab && target.buildId === o.index ? 'selected' : ''}>${escapeHtml(o.weapon)}</option>`).join('')}
         </select>
         <button type="button" class="event-action-btn" id="event-build-link-save">${build ? 'Change' : 'Link build'}</button>
       </div>`;
@@ -626,6 +637,7 @@ async function showBuildPanel(cat, itemIndexStr) {
   const roleKey = cat.toLowerCase();
   const color = EVENT_ROLE_COLORS[roleKey] || 'var(--line-2)';
   const roleLabel = EVENT_ROLE_LABELS[roleKey] || cat;
+  const displayName = option ? option.name : (row.name || 'Any');
 
   // Same card-header / slots-grid / card-note-block markup as the builds
   // tab's own detail card (see builds.js select()), just read-only and
@@ -659,7 +671,7 @@ async function showBuildPanel(cat, itemIndexStr) {
         </div>
         ${build.note ? `<div class="card-note-block">${EVENT_FLAG_SVG}<span class="card-note-text">${escapeHtml(build.note)}</span></div>` : ''}
       ` : `
-        <div class="event-build-role"><span class="role-pill role-${roleKey}"><span class="role-pill-dot" style="background:${color}"></span>${escapeHtml(roleLabel)}</span> ${escapeHtml(row.name || 'Any')}</div>
+        <div class="event-build-role"><span class="role-pill role-${roleKey}"><span class="role-pill-dot" style="background:${color}"></span>${escapeHtml(roleLabel)}</span> ${escapeHtml(displayName)}</div>
         <p class="event-details-empty">No build linked yet.</p>`}
       ${linkerHtml}
     </div>`;
@@ -688,6 +700,7 @@ async function showBuildPanel(cat, itemIndexStr) {
       const select = col.querySelector('.event-build-link-select');
       const value = select.value;
       const body = value ? { buildTab: value.split(':')[0], buildId: Number(value.split(':')[1]) } : {};
+      if (optionIndex !== undefined) body.optionIndex = optionIndex;
       try {
         currentDetail = await api(
           `/api/events/${encodeURIComponent(currentDetail.id)}/rows/${encodeURIComponent(cat)}/${itemIndex}/build`,
@@ -695,7 +708,7 @@ async function showBuildPanel(cat, itemIndexStr) {
         );
         document.getElementById('event-roster-col').innerHTML = renderRosterCol(currentDetail);
         wireRosterActions();
-        showBuildPanel(cat, itemIndexStr);
+        showBuildPanel(cat, itemIndexStr, optionIndexStr);
         showToast(value ? 'Build linked.' : 'Build unlinked.');
       } catch (err) {
         showToast('Failed to update build link: ' + err.message);
@@ -745,10 +758,10 @@ function wireRosterActions() {
     });
   });
 
-  document.querySelectorAll('.event-row-name-pill[data-item-index]').forEach(btn => {
+  document.querySelectorAll('.event-row-build-trigger[data-item-index]').forEach(btn => {
     btn.addEventListener('click', (e) => {
       e.stopPropagation();
-      showBuildPanel(btn.dataset.cat, btn.dataset.itemIndex);
+      showBuildPanel(btn.dataset.cat, btn.dataset.itemIndex, btn.dataset.optionIndex);
     });
   });
   document.querySelectorAll('.event-row-player-pill').forEach(btn => {

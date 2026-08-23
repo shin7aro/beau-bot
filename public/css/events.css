@@ -174,14 +174,30 @@ span.event-row-name-pill { cursor: default; }
 .event-row-name-pill.role-support { background: var(--support-bg); border-color: var(--support); }
 .event-row-name-pill.role-battlemount { background: rgba(74,78,143,0.14); border-color: var(--cosmic); }
 
-/* Multi-choice line — several "icon Name" pairs chained with "/" inside
-   the same pill (mirrors the Discord embed's "⚔️ A/⚔️ B" format). Tighter
-   gap than the single-choice pill since it's fitting more in, and never
-   clickable (no single build to link/view). */
-.event-row-name-pill.is-multi-choice { gap: 4px; cursor: default; }
-.event-row-name-sep { color: var(--ink-faint); flex-shrink: 0; }
+/* Multi-choice line — the pill boundary (border+padding+height) that used
+   to belong to a single .event-row-name-pill moves to this wrapper, so the
+   group keeps exactly the same footprint the single pill had (same
+   border+padding trick .event-row-status uses below, just with a
+   transparent border/fill since the wrapper itself isn't a pill). Inside
+   it, each option gets its own smaller, independently clickable pill
+   (flex:1 1 0 splits them evenly) instead of one line joined by "/". */
+.event-row-name-pill-group {
+  flex: 1 1 0; min-width: 0; display: flex; align-items: center; gap: 4px;
+  height: 28px; padding: 0 10px; border: 1px solid transparent; box-sizing: border-box;
+}
+.event-row-option-pill {
+  flex: 1 1 0; min-width: 0; height: 100%; display: inline-flex; align-items: center; gap: 5px;
+  background: transparent; border: 1px solid; border-radius: 5px;
+  padding: 0 6px; font-size: 12px; font-weight: 600; cursor: pointer;
+}
+.event-row-option-pill:hover { filter: brightness(1.2); }
+.event-row-option-pill.role-tank { background: var(--tank-bg); border-color: var(--tank); }
+.event-row-option-pill.role-dps { background: var(--dps-bg); border-color: var(--dps); }
+.event-row-option-pill.role-healer { background: var(--healer-bg); border-color: var(--healer); }
+.event-row-option-pill.role-support { background: var(--support-bg); border-color: var(--support); }
+.event-row-option-pill.role-battlemount { background: rgba(74,78,143,0.14); border-color: var(--cosmic); }
 
-/* Plain-text status ("Open — click to sign up") gets the exact same
+/* Plain-text status ("Sign up") gets the exact same
    padding+border footprint as the pills either side of it (just with a
    transparent border/no fill) even though it isn't a pill itself. Without
    this, flex-basis:0 can't make a true 50/50 split: a border-box flex item

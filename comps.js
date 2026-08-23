@@ -82,8 +82,10 @@ const PARTY_HEADER_RE = /^party\b/i;
 // segments separated by " / ". Stored as item.options (instead of a single
 // name/emoji) so the player (or an officer assigning them) picks exactly
 // one when they take the slot; item.signedOptionIndex records which one
-// the current occupant chose. Per-option build linking isn't supported —
-// only single-choice lines can link a build for now.
+// the current occupant chose. Each option can link its own build (set via
+// the site editor or the events page), same as a single-choice line's
+// item-level link — a raw-text /comp edit still can't express this, so
+// carryOverBuildLinks() is what keeps those links from being wiped out.
 function parseWeaponSegment(segStr, guild) {
   let seg = segStr.trim();
   let emoji = null;
@@ -419,7 +421,27 @@ function carryOverBuildLinks(oldCategories, newCategories) {
 
     const used = new Array(oldCatData.items.length).fill(false);
     for (const item of newCatData.items) {
-      if (item.options) continue; // multi-choice lines don't support build links
+      if (item.options) {
+        // Multi-choice line — match the whole option set (same identity
+        // key itemSignature() uses elsewhere), then carry each option's
+        // own build link across by its position within that set.
+        const matchIdx = oldCatData.items.findIndex(
+          (oi, idx) =>
+            !used[idx] &&
+            oi.options &&
+            (oi.party || 0) === (item.party || 0) &&
+            itemSignature(oi) === itemSignature(item)
+        );
+        if (matchIdx !== -1) {
+          const oldOptions = oldCatData.items[matchIdx].options;
+          item.options.forEach((opt, oi) => {
+            opt.buildId = oldOptions[oi] ? oldOptions[oi].buildId ?? null : null;
+            opt.buildTab = oldOptions[oi] ? oldOptions[oi].buildTab ?? null : null;
+          });
+          used[matchIdx] = true;
+        }
+        continue;
+      }
       const matchIdx = oldCatData.items.findIndex(
         (oi, idx) =>
           !used[idx] &&
@@ -509,11 +531,16 @@ function normalizeStructuredCategories(categories) {
       items: catData.items
         .map((it) => {
           // Multi-choice line — two or more weapon options sharing one
-          // slot (see itemLabel/itemSignature above). No build link
-          // support per-option, so buildId/buildTab don't apply here.
+          // slot (see itemLabel/itemSignature above). Each option can link
+          // its own build, same as a single-choice line's item-level link.
           if (Array.isArray(it.options) && it.options.length >= 2) {
             const options = it.options
-              .map((o) => ({ name: String((o && o.name) || '').trim(), emoji: (o && o.emoji) || null }))
+              .map((o) => ({
+                name: String((o && o.name) || '').trim(),
+                emoji: (o && o.emoji) || null,
+                buildId: (o && o.buildId) ?? null,
+                buildTab: (o && o.buildTab) ?? null,
+              }))
               .filter((o) => o.name);
             if (options.length < 2) return null;
             return {
