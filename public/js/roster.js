@@ -48,8 +48,8 @@ function showToast(message) {
   showToast._t = setTimeout(() => toast.classList.remove('show'), 3000);
 }
 
-const TIER_LABELS = { gm: 'GM', right_hand: 'Right Hand', officer: 'Officer', member: 'Member' };
-const TIER_TAGS = { gm: 'Guild Master', right_hand: 'Right Hand', officer: 'Officer', member: 'Member' };
+const TIER_LABELS = { gm: 'GM', right_hand: 'Right Hand', officer: 'Officer', member: 'Dahalo' };
+const TIER_TAGS = { gm: 'Guild Master', right_hand: 'Right Hand', officer: 'Officer', member: 'Dahalo' };
 const TIER_CARD_CLASS = { gm: 'roster-card-gm', right_hand: 'roster-card-rh', officer: 'roster-card-officer', member: 'roster-card-member' };
 
 /* ---------- roster grid ---------- */
@@ -60,7 +60,7 @@ function rosterCardHtml(member) {
     <div class="roster-card ${TIER_CARD_CLASS[member.tier] || 'roster-card-member'}">
       <img class="roster-card-avatar" src="${avatarUrl}" alt="" loading="lazy">
       <div class="roster-card-name">${escapeHtml(member.username)}</div>
-      <div class="roster-card-tag">${TIER_TAGS[member.tier] || 'Member'}</div>
+      <div class="roster-card-tag">${TIER_TAGS[member.tier] || 'Dahalo'}</div>
     </div>`;
 }
 
@@ -79,7 +79,7 @@ function renderRosterGrid() {
   const query = (document.getElementById('roster-search').value || '').trim().toLowerCase();
 
   const all = fullRosterList();
-  countLabel.textContent = `${all.length} member${all.length === 1 ? '' : 's'}`;
+  countLabel.textContent = `${all.length} Dahalo`;
 
   const matches = query ? all.filter(m => m.username.toLowerCase().includes(query)) : all;
 

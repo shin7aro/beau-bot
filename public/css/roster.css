@@ -11,9 +11,21 @@
    One flat, ordered grid, no hierarchy lines: GM first, then Right Hand,
    then Officers, then everyone else — the ordering itself communicates
    rank, the layout doesn't try to. Every person gets the same box:
-   avatar, name, and a small role line underneath. */
+   avatar, name, and a small role line underneath. Rank colors — gold /
+   silver / bronze — apply to the whole card (border + avatar ring + tag),
+   not just the avatar, so GM/Right Hand/Officer read as a medal color at
+   a glance. */
 .roster-grid-section { padding-bottom: 12px; }
 .controls .roster-count { font-size: 12.5px; color: var(--ink-faint); margin-left: auto; }
+
+:root {
+  --rank-gold:       #e3bb47;
+  --rank-gold-dim:   rgba(227,187,71,0.20);
+  --rank-silver:     #c7ccd8;
+  --rank-silver-dim: rgba(199,204,216,0.20);
+  --rank-bronze:     #cd7f4e;
+  --rank-bronze-dim: rgba(205,127,78,0.20);
+}
 
 .roster-grid {
   display: flex; flex-wrap: wrap;
@@ -33,9 +45,6 @@
   width: 52px; height: 52px; border-radius: 50%; object-fit: cover;
   border: 2px solid var(--line-2); background: var(--surface-2);
 }
-.roster-card-gm { border-color: var(--accent); }
-.roster-card-gm .roster-card-avatar { border-color: var(--accent); box-shadow: 0 0 0 4px var(--accent-dim); }
-.roster-card-rh .roster-card-avatar { border-color: var(--moss); }
 .roster-card-name {
   font-family: 'Big Shoulders Display', sans-serif; font-weight: 700; font-size: 15px;
   color: var(--ink); text-align: center; line-height: 1.2;
@@ -45,8 +54,19 @@
   font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em;
   color: var(--ink-faint);
 }
-.roster-card-gm .roster-card-tag { color: var(--accent); }
-.roster-card-rh .roster-card-tag { color: var(--moss); }
+
+.roster-card-gm { border-color: var(--rank-gold); }
+.roster-card-gm .roster-card-avatar { border-color: var(--rank-gold); box-shadow: 0 0 0 4px var(--rank-gold-dim); }
+.roster-card-gm .roster-card-tag { color: var(--rank-gold); }
+
+.roster-card-rh { border-color: var(--rank-silver); }
+.roster-card-rh .roster-card-avatar { border-color: var(--rank-silver); box-shadow: 0 0 0 4px var(--rank-silver-dim); }
+.roster-card-rh .roster-card-tag { color: var(--rank-silver); }
+
+.roster-card-officer { border-color: var(--rank-bronze); }
+.roster-card-officer .roster-card-avatar { border-color: var(--rank-bronze); box-shadow: 0 0 0 4px var(--rank-bronze-dim); }
+.roster-card-officer .roster-card-tag { color: var(--rank-bronze); }
+
 
 /* ---------- hierarchy editor modal ---------- */
 .roster-editor-card { max-width: 720px; }
