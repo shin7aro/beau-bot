@@ -32,7 +32,7 @@ function findPayoutChannel(guild) {
 }
 
 function formatSilver(n) {
-  return `${Math.round(n).toLocaleString('en-US')} silver`;
+  return Math.round(n).toLocaleString('en-US');
 }
 
 function buildEmbed(split) {
@@ -113,7 +113,7 @@ async function postSplit(client, split, guildId) {
 
   const mentions = split.participants.map((p) => `<@${p.userId}>`).join(' ');
   const message = await channel.send({
-    content: `${mentions}\n📢 New loot split posted — use the buttons below once you've taken your share (or want to donate it to the guild instead).`,
+    content: `📢 ${mentions}`,
     embeds: [buildEmbed(split)],
     components: [buildActionRow(split)],
   });
