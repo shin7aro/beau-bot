@@ -5,32 +5,61 @@
 ───────────────────────────────────────── */
 .role-battlemount { color: var(--gank); background: var(--gank-bg); }
 
-/* ---------- comp picker dropdown (replaces the old search + table list) ---------- */
-.comp-select-wrap { flex: 1; min-width: 200px; max-width: 360px; }
-.comp-select-wrap select {
-  width: 100%; background: var(--surface-2); border: 1px solid var(--line-2); border-radius: 8px;
-  color: var(--ink); font: inherit; font-size: 13px; padding: 9px 11px; cursor: pointer;
+/* ---------- comp cards (list view — same grid/card look as events.css's
+   .event-card-grid/.event-card, reused here so the two pages match) ---------- */
+.comp-card-title-row { display: flex; align-items: center; gap: 8px; }
+.comp-card-weapon-icon {
+  width: 22px; height: 22px; object-fit: contain; border-radius: 5px; flex-shrink: 0;
+  background: var(--surface-2); border: 1px solid var(--line-2);
 }
-.comp-select-wrap select:focus { outline: none; border-color: var(--accent); }
+.comp-card-title-row .event-card-title { flex: 1; min-width: 0; }
+.comp-card-untagged { color: var(--ink-faint); font-size: 11px; font-style: italic; }
 
-/* ---------- editor wrap (single full-width pane, no more list/detail split) ---------- */
-.comp-editor-wrap {
-  flex: 1; overflow-y: auto; min-height: 0;
-  display: flex; flex-direction: column;
+/* ---------- editor modal (the party-column editor, now inside a modal
+   instead of its own full-page pane) ---------- */
+.modal-card.comp-editor-modal {
+  max-width: 1180px; max-height: calc(100vh - 80px); overflow-y: auto;
 }
-.comp-editor-wrap .detail-placeholder {
-  flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px;
-}
-.comp-editor-wrap .detail-card {
-  width: 100%; max-width: 1400px; margin: 0 auto; padding: 32px 36px;
-}
-
+.comp-editor-head-row { display: flex; align-items: flex-start; gap: 14px; flex-wrap: wrap; }
 .comp-label-input {
   font-size: 20px; font-weight: 700; font-family: 'Big Shoulders Display', sans-serif;
   background: transparent; border: none; color: var(--ink);
-  border-bottom: 1px dashed var(--line-2); padding: 4px 0; flex: 1; min-width: 0;
+  border-bottom: 1px dashed var(--line-2); padding: 4px 0; flex: 1; min-width: 200px;
 }
 .comp-label-input:focus { outline: none; border-color: var(--accent); }
+.comp-category-select {
+  background: var(--surface-2); border: 1px solid var(--line-2); border-radius: 8px; color: var(--ink);
+  font: inherit; font-size: 12.5px; padding: 8px 10px; cursor: pointer;
+}
+
+/* Main weapon picker — same floating-popover chrome as the emoji picker,
+   just a searchable text list of weapon names (window.ITEM_MAP keys)
+   instead of a grid of server emoji, since there can be a lot of weapons. */
+.comp-weapon-pick {
+  display: inline-flex; align-items: center; gap: 8px;
+  background: var(--surface-2); border: 1px solid var(--line-2); border-radius: 8px;
+  color: var(--ink-dim); font: inherit; font-size: 12.5px; font-weight: 600; padding: 6px 10px;
+  cursor: pointer; white-space: nowrap;
+}
+.comp-weapon-pick:hover { border-color: var(--accent); color: var(--ink); }
+.comp-weapon-pick img { width: 20px; height: 20px; object-fit: contain; border-radius: 4px; }
+.comp-weapon-popover {
+  position: absolute; z-index: 50; width: 240px; max-height: 320px;
+  background: var(--surface-2); border: 1px solid var(--line-2); border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(0,0,0,.35); padding: 8px; display: flex; flex-direction: column; gap: 6px;
+}
+.comp-weapon-popover-search {
+  background: var(--surface); border: 1px solid var(--line-2); border-radius: 6px;
+  color: var(--ink); font: inherit; font-size: 12px; padding: 6px 8px;
+}
+.comp-weapon-popover-list { display: flex; flex-direction: column; gap: 2px; overflow-y: auto; max-height: 260px; }
+.comp-weapon-popover-item {
+  display: flex; align-items: center; gap: 8px; background: transparent; border: 1px solid transparent;
+  border-radius: 6px; padding: 6px 8px; cursor: pointer; font-size: 12.5px; font-weight: 600; color: var(--ink); text-align: left;
+}
+.comp-weapon-popover-item:hover { border-color: var(--accent); background: var(--surface); }
+.comp-weapon-popover-item img { width: 20px; height: 20px; object-fit: contain; flex-shrink: 0; }
+.comp-weapon-popover-empty { color: var(--ink-faint); font-size: 12px; padding: 6px 4px; }
 
 /* ---------- party columns ---------- */
 .comp-parties-toolbar { display: flex; justify-content: flex-end; padding: 4px 0 14px; }
@@ -138,7 +167,7 @@
 .comp-save-row { padding: 20px 0 0; border-top: 1px solid var(--line); margin-top: 20px; display: flex; justify-content: flex-end; }
 
 @media (max-width: 900px) {
-  .comp-editor-wrap .detail-card { padding: 20px 16px; }
+  .modal-card.comp-editor-modal { padding: 16px; }
   .comp-parties-row { flex-direction: column; }
   .comp-party-col { max-width: none; }
 }

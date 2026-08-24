@@ -143,19 +143,19 @@ router.get('/api/comps/:key', auth.requireOfficer, async (req, res) => {
 });
 
 router.post('/api/comps', auth.requireOfficer, async (req, res) => {
-  const { label, categories } = req.body || {};
+  const { label, categories, category, mainWeapon } = req.body || {};
   if (!label || !categories) return res.status(400).json({ error: 'label and categories are required.' });
-  const result = await comps.createCompStructured({ label, categories, userId: req.user.id });
+  const result = await comps.createCompStructured({ label, categories, category, mainWeapon, userId: req.user.id });
   if (!result) return res.status(400).json({ error: 'A composition with that name already exists, or it had no items.' });
   activityStore.log(req.user, 'comp.create', `Created composition "${label}"`);
   res.status(201).json(result);
 });
 
 router.put('/api/comps/:key', auth.requireOfficer, async (req, res) => {
-  const { newLabel, categories } = req.body || {};
+  const { newLabel, categories, category, mainWeapon } = req.body || {};
   if (!newLabel || !categories) return res.status(400).json({ error: 'newLabel and categories are required.' });
   const result = await comps.updateCompStructured({
-    key: req.params.key, newLabel, categories, userId: req.user.id,
+    key: req.params.key, newLabel, categories, category, mainWeapon, userId: req.user.id,
   });
   if (!result) return res.status(400).json({ error: 'Composition not found, name collision, or no items.' });
   activityStore.log(req.user, 'comp.update', `Updated composition "${newLabel}"`);
