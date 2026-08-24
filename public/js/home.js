@@ -60,7 +60,7 @@ function renderHighlights() {
     grid.innerHTML = `<p class="section-sub">No highlights posted yet.</p>`;
     return;
   }
-  const adminVisible = typeof isAdmin === 'function' && isAdmin();
+  const removeVisible = editMode;
   grid.innerHTML = highlights.map(h => {
     const embed = youtubeEmbedUrl(h.youtubeUrl);
     return `<div class="highlight-card">
@@ -68,7 +68,7 @@ function renderHighlights() {
         ? `<div class="highlight-frame"><iframe src="${embed}" title="${escapeHtml(h.title)}" frameborder="0" allowfullscreen loading="lazy"></iframe></div>`
         : `<div class="highlight-frame highlight-broken">Invalid YouTube URL</div>`}
       <div class="highlight-title">${escapeHtml(h.title || 'Untitled')}</div>
-      <button class="btn admin-only${adminVisible ? ' visible' : ''}" data-id="${h.id}" style="margin-top:6px">Remove</button>
+      <button class="btn admin-only${removeVisible ? ' visible' : ''}" data-id="${h.id}" style="margin-top:6px">Remove</button>
     </div>`;
   }).join('');
   grid.querySelectorAll('button[data-id]').forEach(btn => {
@@ -120,6 +120,7 @@ async function init() {
     editBar.style.display = 'flex';
     document.querySelectorAll('[data-cms]').forEach(el => el.contentEditable = 'true');
     if (discordUrlInput) discordUrlInput.value = homeContent.discordInviteUrl || '';
+    renderHighlights();
   });
 
   cancelBtn && cancelBtn.addEventListener('click', () => {

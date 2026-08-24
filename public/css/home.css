@@ -170,8 +170,13 @@
 
 /* ── LEDGER PREVIEW ── */
 .ledger-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
-.highlights-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+/* Single scrollable row (same fixed-card-width pattern as
+   .comp-parties-row) instead of wrapping to a new line after 3 — sized so
+   ~3 cards show at once on a normal desktop width, more get revealed by
+   scrolling sideways rather than by growing the page vertically. */
+.highlights-grid { display: flex; gap: 16px; overflow-x: auto; padding-bottom: 8px; }
 .highlight-card {
+  flex: 0 0 300px; min-width: 300px;
   background: var(--surface); border: 1px solid var(--line); border-radius: 12px;
   padding: 12px; display: flex; flex-direction: column; gap: 8px;
 }
@@ -191,9 +196,6 @@
   outline: 1px dashed var(--accent); outline-offset: 2px; border-radius: 4px;
 }
 
-@media (max-width: 880px) {
-  .highlights-grid { grid-template-columns: 1fr; }
-}
 .lcard {
   background: var(--surface); border: 1px solid var(--line); border-left: 3px solid var(--role-color, var(--accent));
   border-radius: 10px; padding: 20px; transition: border-color 0.18s ease, transform 0.18s ease;
