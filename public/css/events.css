@@ -187,7 +187,11 @@ span.event-row-name-pill { cursor: default; }
    directly (not 100%) so its own border-box matches .event-row-name-pill's
    height exactly — 100% would instead measure against the group's
    *content* box, which is 2px shorter than 28px because of the group's
-   own top/bottom border. */
+   own top/bottom border. The wrapper's own padding+border reserves the
+   right amount of space for that outer-width match, but it also inset the
+   visible pills 11px from each true edge — negative margin on the first
+   and last pill cancels exactly that inset, so the visible pills still
+   reach the same left/right extent a single pill's border would. */
 .event-row-name-pill-group {
   flex: 1 1 0; min-width: 0; display: flex; align-items: center; gap: 4px;
   height: 28px; padding: 0 10px; border: 1px solid transparent; box-sizing: border-box;
@@ -197,6 +201,8 @@ span.event-row-name-pill { cursor: default; }
   background: transparent; border: 1px solid; border-radius: 5px;
   padding: 0 6px; font-size: 12px; font-weight: 600; cursor: pointer;
 }
+.event-row-option-pill:first-child { margin-left: -11px; }
+.event-row-option-pill:last-child { margin-right: -11px; }
 .event-row-option-pill:hover { filter: brightness(1.2); }
 .event-row-option-pill.role-tank { background: var(--tank-bg); border-color: var(--tank); }
 .event-row-option-pill.role-dps { background: var(--dps-bg); border-color: var(--dps); }
