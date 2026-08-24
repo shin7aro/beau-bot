@@ -70,7 +70,7 @@ router.get('/auth/callback', async (req, res) => {
     const role = await auth.roleForMember(member);
 
     if (!role) {
-      return res.status(403).send('You need the Dahalo role on the Discord server to access this.');
+      return res.status(403).send("You don't have access to this site — you need the Dahalo role and an active roster status.");
     }
 
     auth.makeSessionCookie(res, {

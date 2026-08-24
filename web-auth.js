@@ -11,6 +11,7 @@
 // server memory, so this is fine across Render restarts/multiple instances.
 
 const jwt = require('jsonwebtoken');
+const rosterStore = require('./roster-store');
 
 const DISCORD_CLIENT_ID = process.env.CLIENT_ID; // same var the bot already uses
 const {
@@ -112,15 +113,31 @@ async function fetchDahaloRoleId() {
 // exactly like someone who isn't a guild member: null, blocked at login).
 // Admins/officers bypass this Dahalo check entirely — those Discord roles
 // already imply trust on their own.
+//
+// A roster manager marking someone inactive (see roster-store.js) then
+// overrides ALL of the above, admin/officer included — inactive means no
+// site access at all, on top of already being hidden from the roster tree
+// and assign-player picker, until a roster manager flips them back.
 async function roleForMember(member) {
   if (!member) return null;
   const roles = member.roles || [];
-  if (ADMIN_ROLE_ID && roles.includes(ADMIN_ROLE_ID)) return 'admin';
-  if (OFFICER_ROLE_ID && roles.includes(OFFICER_ROLE_ID)) return 'officer';
 
-  const dahaloRoleId = await fetchDahaloRoleId();
-  if (dahaloRoleId && roles.includes(dahaloRoleId)) return 'member';
-  return null;
+  let baseRole = null;
+  if (ADMIN_ROLE_ID && roles.includes(ADMIN_ROLE_ID)) baseRole = 'admin';
+  else if (OFFICER_ROLE_ID && roles.includes(OFFICER_ROLE_ID)) baseRole = 'officer';
+  else {
+    const dahaloRoleId = await fetchDahaloRoleId();
+    if (dahaloRoleId && roles.includes(dahaloRoleId)) baseRole = 'member';
+  }
+  if (!baseRole) return null;
+
+  const userId = member.user && member.user.id;
+  if (userId) {
+    const positions = await rosterStore.loadPositions();
+    if (rosterStore.getEntry(positions, userId).inactive) return null;
+  }
+
+  return baseRole;
 }
 
 function makeSessionCookie(res, payload) {
