@@ -178,7 +178,7 @@ router.get('/api/comps-build-options', auth.requireOfficer, async (req, res) => 
 // Uses the BOT token, same pattern as web-auth.js's guild member lookup —
 // no dependency on the live discord.js Client, so this works regardless of
 // bot process timing and can't affect the bot's own connection.
-let emojiCache = { data: null, fetchedAt: 0 };
+let emojiCache = { data: null, fetchedAt: 0, pending: null };
 const EMOJI_CACHE_TTL_MS = 5 * 60 * 1000; // 5 min - avoids hammering Discord on every page load
 
 router.get('/api/discord-emojis', auth.requireOfficer, async (req, res) => {
@@ -186,20 +186,33 @@ router.get('/api/discord-emojis', auth.requireOfficer, async (req, res) => {
     if (emojiCache.data && Date.now() - emojiCache.fetchedAt < EMOJI_CACHE_TTL_MS) {
       return res.json(emojiCache.data);
     }
-    const discordRes = await fetch(`https://discord.com/api/v10/guilds/${process.env.GUILD_ID}/emojis`, {
-      headers: { Authorization: `Bot ${process.env.DISCORD_TOKEN}` },
-    });
-    if (!discordRes.ok) throw new Error(`Discord emoji lookup failed: ${discordRes.status}`);
-    const raw = await discordRes.json();
-    const emojis = raw.map((e) => ({
-      id: e.id,
-      name: e.name,
-      animated: !!e.animated,
-      tag: `<${e.animated ? 'a' : ''}:${e.name}:${e.id}>`,
-      url: `https://cdn.discordapp.com/emojis/${e.id}.${e.animated ? 'gif' : 'png'}?size=32`,
-    }));
-    emojiCache = { data: emojis, fetchedAt: Date.now() };
-    res.json(emojis);
+    // Concurrent requests during a cold cache (e.g. several officers
+    // loading a page right after a fresh deploy, when the in-memory cache
+    // resets) share this same in-flight fetch instead of each hitting
+    // Discord separately — that stampede is what trips Discord's 429 rate
+    // limit even with the TTL cache above in place.
+    if (!emojiCache.pending) {
+      emojiCache.pending = (async () => {
+        const discordRes = await fetch(`https://discord.com/api/v10/guilds/${process.env.GUILD_ID}/emojis`, {
+          headers: { Authorization: `Bot ${process.env.DISCORD_TOKEN}` },
+        });
+        if (!discordRes.ok) throw new Error(`Discord emoji lookup failed: ${discordRes.status}`);
+        const raw = await discordRes.json();
+        const emojis = raw.map((e) => ({
+          id: e.id,
+          name: e.name,
+          animated: !!e.animated,
+          tag: `<${e.animated ? 'a' : ''}:${e.name}:${e.id}>`,
+          url: `https://cdn.discordapp.com/emojis/${e.id}.${e.animated ? 'gif' : 'png'}?size=32`,
+        }));
+        emojiCache = { data: emojis, fetchedAt: Date.now(), pending: null };
+        return emojis;
+      })().catch((err) => {
+        emojiCache.pending = null; // let the next request retry instead of staying stuck on a failed fetch
+        throw err;
+      });
+    }
+    res.json(await emojiCache.pending);
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Failed to load server emojis.' });
@@ -384,23 +397,51 @@ function stripLeadingChannelIcon(name) {
   return String(name || '').toLowerCase().replace(/^[^a-z0-9]+/, '');
 }
 
+// Same TTL-cache-plus-in-flight-dedup pattern as emojiCache above — this
+// route used to have no caching at all, hitting Discord fresh on every
+// single request, which is exactly what was tripping Discord's 429 rate
+// limit whenever a few officers loaded the "new event" form around the
+// same time (especially right after a deploy, when the cache is cold).
+let discordChannelsCache = { data: null, fetchedAt: 0, pending: null };
+const DISCORD_CHANNELS_CACHE_TTL_MS = 5 * 60 * 1000;
+
 router.get('/api/discord-channels', auth.requireOfficer, async (req, res) => {
   try {
-    const discordRes = await fetch(`https://discord.com/api/v10/guilds/${process.env.GUILD_ID}/channels`, {
-      headers: { Authorization: `Bot ${process.env.DISCORD_TOKEN}` },
-    });
-    if (!discordRes.ok) throw new Error(`Discord channel lookup failed: ${discordRes.status}`);
-    const raw = await discordRes.json();
-    // type 0 = text, 5 = announcement — the only channel types a bot can
-    // post a plain message + buttons into — further narrowed to just the
-    // approved event channels.
-    const channels = raw
-      .filter((c) => (c.type === 0 || c.type === 5) && EVENT_CHANNEL_NAMES.includes(stripLeadingChannelIcon(c.name)))
-      .map((c) => ({ id: c.id, name: c.name }));
-    res.json(channels);
+    if (discordChannelsCache.data && Date.now() - discordChannelsCache.fetchedAt < DISCORD_CHANNELS_CACHE_TTL_MS) {
+      return res.json(discordChannelsCache.data);
+    }
+    if (!discordChannelsCache.pending) {
+      discordChannelsCache.pending = (async () => {
+        const discordRes = await fetch(`https://discord.com/api/v10/guilds/${process.env.GUILD_ID}/channels`, {
+          headers: { Authorization: `Bot ${process.env.DISCORD_TOKEN}` },
+        });
+        if (!discordRes.ok) {
+          // Surface what Discord actually said (401 = bad/expired token, 403 =
+          // bot isn't in that guild or lacks View Channel, 429 = rate-limited,
+          // etc.) instead of a bare status code — this is what used to show up
+          // as a generic "Failed to load channels." toast with the real reason
+          // only visible in the Render logs.
+          const detail = await discordRes.text().catch(() => '');
+          throw new Error(`Discord channel lookup failed: ${discordRes.status} ${detail}`.trim());
+        }
+        const raw = await discordRes.json();
+        // type 0 = text, 5 = announcement — the only channel types a bot can
+        // post a plain message + buttons into — further narrowed to just the
+        // approved event channels.
+        const channels = raw
+          .filter((c) => (c.type === 0 || c.type === 5) && EVENT_CHANNEL_NAMES.includes(stripLeadingChannelIcon(c.name)))
+          .map((c) => ({ id: c.id, name: c.name }));
+        discordChannelsCache = { data: channels, fetchedAt: Date.now(), pending: null };
+        return channels;
+      })().catch((err) => {
+        discordChannelsCache.pending = null; // let the next request retry instead of staying stuck on a failed fetch
+        throw err;
+      });
+    }
+    res.json(await discordChannelsCache.pending);
   } catch (err) {
     console.error(err);
-    res.status(500).json({ error: 'Failed to load channels.' });
+    res.status(500).json({ error: `Failed to load channels: ${err.message}` });
   }
 });
 
