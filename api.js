@@ -924,6 +924,7 @@ router.post('/api/events', auth.requireOfficer, async (req, res) => {
       embeds: [eventRender.buildEmbed(event, channel.guild)],
       components: eventRender.buildButtons(event, channel.guild),
     });
+    await eventRender.createEventThread(message, event);
   } catch (err) {
     console.error('Failed to post site-created event to Discord', err);
     return res.status(400).json({ error: "Couldn't post to that channel — check the bot has access to it." });

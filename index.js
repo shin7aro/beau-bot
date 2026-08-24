@@ -620,6 +620,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
           await saveEvents(events);
           activityStore.log(logUser(interaction.user), 'event.create', `Created event "${event.title}" (${event.type}) from comp "${saved.label}"`);
           await interaction.editReply({ embeds: [buildEmbed(event, interaction.guild)], components: buildButtons(event, interaction.guild) });
+          await eventRender.createEventThread(message, event);
           return;
         }
 
@@ -1510,6 +1511,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
       activityStore.log(logUser(interaction.user), 'event.create', `Created event "${event.title}" (${event.type}, manual composition)`);
 
       await interaction.editReply({ embeds: [buildEmbed(event, interaction.guild)], components: buildButtons(event, interaction.guild) });
+      await eventRender.createEventThread(message, event);
       return;
     }
 

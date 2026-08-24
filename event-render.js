@@ -200,6 +200,37 @@ async function deleteEventMessage(client, event) {
   }
 }
 
+// Auto-creates the event's Discord thread right when it's first posted,
+// instead of waiting for someone to manually right-click → Create Thread
+// on the event message (which used to be the only way reminders could ever
+// work at all — see the "No Discord thread exists yet" error elsewhere).
+// Also drops one immediate "📢 @Dahalo" ping in the new thread — just the
+// ping, no other text — so members notice a new event thread exists,
+// separate from (and before) any "still missing" reminders that show up
+// there later. Best-effort: thread creation can fail (rate limits,
+// permission hiccups, an unboosted guild rejecting a longer archive
+// duration) without stopping the event itself from existing — callers just
+// don't get an auto-thread yet and can still create one manually.
+async function createEventThread(message, event) {
+  let thread;
+  try {
+    thread = await message.startThread({
+      name: (event.title || 'Event').slice(0, 100),
+      autoArchiveDuration: 1440,
+    });
+  } catch (e) {
+    console.error('Failed to auto-create event thread', event.id, e);
+    return null;
+  }
+  try {
+    const role = findDahaloRole(thread.guild);
+    if (role) await thread.send(`📢 <@&${role.id}>`);
+  } catch (e) {
+    console.error('Failed to send thread-creation ping', event.id, e);
+  }
+  return thread;
+}
+
 // Deletes the previous reminder message (if any) right before a new one
 // gets posted, so a thread doesn't accumulate a stack of stale reminders —
 // used by both the auto reminder loop and the manual "Ping" button (site +
@@ -226,6 +257,7 @@ module.exports = {
   buildButtons,
   updateEventMessage,
   deleteEventMessage,
+  createEventThread,
   deletePreviousReminder,
   findDahaloRole,
 };
