@@ -817,10 +817,12 @@ router.post('/api/loot/:id/remind', auth.requireMember, async (req, res) => {
   try {
     const thread = await client.channels.fetch(split.threadId);
     const mentionText = unclaimed.map((p) => `<@${p.userId}>`).join(' ');
-    await thread.send(
+    await lootRender.deletePreviousReminder(thread, split.lastReminderMessageId);
+    const sent = await thread.send(
       `⏰ Still waiting on your split from **${split.lootName}** (${lootRender.formatSilver(split.shareAmount)} each): ${mentionText}`
     );
     split.lastReminderAt = Date.now();
+    split.lastReminderMessageId = sent.id;
     await lootStore.persistSplit(split);
     res.json({ ok: true });
   } catch (err) {
@@ -1269,11 +1271,14 @@ router.post('/api/events/:id/ping', auth.requireOfficer, async (req, res) => {
 
     const roleMention = eventRender.findDahaloRole(thread.guild);
     const missingText = missing.map((m) => `**${m.category}** (${m.missing} open)`).join(', ');
-    await thread.send(
+    await eventRender.deletePreviousReminder(thread, event.lastReminderMessageId);
+    const sent = await thread.send(
       `⏰ Reminder for **${event.title}** (${event.time}) — still missing: ${missingText}.${
         roleMention ? ` <@&${roleMention.id}>` : ''
       } *(pinged from the site by ${req.user.username})*`
     );
+    event.lastReminderMessageId = sent.id;
+    await eventsStore.saveEvents(events);
     res.json({ ok: true });
   } catch (err) {
     console.error(err);

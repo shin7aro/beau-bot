@@ -160,6 +160,7 @@ function createSplit({ lootName, lootLocation, lootValue, participants, createdB
     createdBy: createdBy ? { id: createdBy.id, username: createdBy.username } : null,
     createdAt: Date.now(),
     lastReminderAt: null,
+    lastReminderMessageId: null, // so a fresh reminder can delete the previous one first
     closed: false, // true once every participant has claimed or donated
   };
   return { split };

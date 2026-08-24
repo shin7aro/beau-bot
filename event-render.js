@@ -200,6 +200,22 @@ async function deleteEventMessage(client, event) {
   }
 }
 
+// Deletes the previous reminder message (if any) right before a new one
+// gets posted, so a thread doesn't accumulate a stack of stale reminders —
+// used by both the auto reminder loop and the manual "Ping" button (site +
+// bot). Best-effort: the message may already be gone (deleted manually, or
+// from before the bot could see it), which isn't a reason to skip sending
+// the new reminder.
+async function deletePreviousReminder(thread, messageId) {
+  if (!messageId) return;
+  try {
+    const message = await thread.messages.fetch(messageId);
+    await message.delete();
+  } catch {
+    // already gone, or unreachable — fine, just move on
+  }
+}
+
 module.exports = {
   CATEGORY_META,
   ROLE_EMOJI_NAMES,
@@ -210,5 +226,6 @@ module.exports = {
   buildButtons,
   updateEventMessage,
   deleteEventMessage,
+  deletePreviousReminder,
   findDahaloRole,
 };

@@ -167,6 +167,21 @@ async function celebrateCompletedThread(client, split) {
   }
 }
 
+// Deletes the previous reminder message (if any) right before a new one
+// gets posted, so a thread doesn't accumulate a stack of stale reminders —
+// used by the auto reminder sweep and both manual "remind" triggers (site +
+// bot). Best-effort: the message may already be gone, which isn't a reason
+// to skip sending the new reminder.
+async function deletePreviousReminder(thread, messageId) {
+  if (!messageId) return;
+  try {
+    const message = await thread.messages.fetch(messageId);
+    await message.delete();
+  } catch {
+    // already gone, or unreachable — fine, just move on
+  }
+}
+
 module.exports = {
   PAYOUT_CHANNEL_NAMES,
   stripLeadingChannelIcon,
@@ -177,4 +192,5 @@ module.exports = {
   postSplit,
   updateSplitMessage,
   celebrateCompletedThread,
+  deletePreviousReminder,
 };

@@ -266,11 +266,14 @@ client.once(Events.ClientReady, (c) => {
       const missingText = missing.map((m) => `**${m.category}** (${m.missing} open)`).join(', ');
 
       try {
-        await thread.send(
+        await eventRender.deletePreviousReminder(thread, event.lastReminderMessageId);
+        const sent = await thread.send(
           `⏰ Reminder for **${event.title}** (${event.time}) — still missing: ${missingText}.${
             roleMention ? ` <@&${roleMention.id}>` : ''
           }`
         );
+        event.lastReminderMessageId = sent.id;
+        await saveEvents(events);
       } catch (e) {
         console.error('Failed to send reminder for event', event.id, e);
       }
@@ -338,12 +341,14 @@ client.once(Events.ClientReady, (c) => {
       // ----- normal reminder for whoever's still actually pending -----
       const mentionText = pending.map((p) => `<@${p.userId}>`).join(' ');
       try {
-        await thread.send(
+        await lootRender.deletePreviousReminder(thread, split.lastReminderMessageId);
+        const sent = await thread.send(
           `⏰ Still waiting on your split from **${split.lootName}** (${lootRender.formatSilver(
             split.shareAmount
           )} each): ${mentionText} — use the buttons on the split message above once you've decided.`
         );
         split.lastReminderAt = Date.now();
+        split.lastReminderMessageId = sent.id;
         await lootStore.persistSplit(split);
       } catch (e) {
         console.error('Failed to send loot reminder for split', split.id, e);
@@ -1285,12 +1290,14 @@ client.on(Events.InteractionCreate, async (interaction) => {
         try {
           const thread = await client.channels.fetch(split.threadId);
           const mentionText = unclaimed.map((p) => `<@${p.userId}>`).join(' ');
-          await thread.send(
+          await lootRender.deletePreviousReminder(thread, split.lastReminderMessageId);
+          const sent = await thread.send(
             `⏰ Still waiting on your split from **${split.lootName}** (${lootRender.formatSilver(
               split.shareAmount
             )} each): ${mentionText}`
           );
           split.lastReminderAt = Date.now();
+          split.lastReminderMessageId = sent.id;
           await lootStore.persistSplit(split);
           await interaction.reply({ content: 'Reminder sent.', ephemeral: true });
         } catch (e) {

@@ -126,6 +126,7 @@ function baseMetaFrom({ type, title, time, mass, sets, organizerId, organizerTag
     guildId,
     closed: false,
     createdAt: Date.now(),
+    lastReminderMessageId: null, // so a fresh reminder can delete the previous one first
   };
 }
 
