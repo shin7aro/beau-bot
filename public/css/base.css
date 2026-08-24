@@ -34,6 +34,28 @@
   --header-h: 64px;
 }
 
+/* ── SCROLLBARS — themed instead of each browser's default (light-grey
+   on this dark background looks out of place). scrollbar-width/-color
+   covers Firefox; the ::-webkit-scrollbar pseudo-elements cover
+   Chrome/Edge/Safari. Applied broadly (*) so any scrollable element —
+   the page itself, a horizontally-scrolling row, a modal's overflow
+   list — picks this up automatically without its own rule. A more
+   specific selector elsewhere (e.g. .tab-nav's scrollbar-width: none)
+   still wins over this on purpose, for spots that want no visible
+   scrollbar at all. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--line-2) transparent;
+}
+*::-webkit-scrollbar { width: 10px; height: 10px; }
+*::-webkit-scrollbar-track { background: transparent; }
+*::-webkit-scrollbar-thumb {
+  background-color: var(--line-2); border-radius: 999px;
+  border: 2px solid transparent; background-clip: padding-box;
+}
+*::-webkit-scrollbar-thumb:hover { background-color: var(--accent); }
+*::-webkit-scrollbar-corner { background: transparent; }
+
 html { background: var(--bg); }
 
 @media (prefers-reduced-motion: reduce) {
