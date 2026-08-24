@@ -114,10 +114,12 @@ async function init() {
   const saveBtn = document.getElementById('save-home-btn');
   const cancelBtn = document.getElementById('cancel-edit-btn');
   const discordUrlInput = document.getElementById('discord-url-input');
+  const addRow = document.getElementById('highlight-add-row');
 
   editBtn && editBtn.addEventListener('click', () => {
     editMode = true;
     editBar.style.display = 'flex';
+    if (addRow) addRow.style.display = 'flex';
     document.querySelectorAll('[data-cms]').forEach(el => el.contentEditable = 'true');
     if (discordUrlInput) discordUrlInput.value = homeContent.discordInviteUrl || '';
     renderHighlights();
@@ -126,6 +128,7 @@ async function init() {
   cancelBtn && cancelBtn.addEventListener('click', () => {
     editMode = false;
     editBar.style.display = 'none';
+    if (addRow) addRow.style.display = 'none';
     document.querySelectorAll('[data-cms]').forEach(el => el.contentEditable = 'false');
     renderAll();
   });
@@ -137,6 +140,7 @@ async function init() {
     if (discordUrlInput) homeContent.discordInviteUrl = discordUrlInput.value.trim();
     editMode = false;
     editBar.style.display = 'none';
+    if (addRow) addRow.style.display = 'none';
     document.querySelectorAll('[data-cms]').forEach(el => el.contentEditable = 'false');
     await saveHome();
   });
