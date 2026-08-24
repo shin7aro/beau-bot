@@ -200,6 +200,11 @@ function renderDetail() {
 
 function renderInfoCol(e, canManage) {
   const mySignedRow = e.rows.find(r => r.signedUserId === window.SITE_AUTH.id);
+  // A multi-choice row has no name/emoji of its own — the actual weapon the
+  // signed-up player picked lives at options[signedOptionIndex] instead.
+  const mySignedChoice = mySignedRow && mySignedRow.options
+    ? (mySignedRow.options[mySignedRow.signedOptionIndex] || null)
+    : mySignedRow;
   return `
     <div class="event-info-card">
       <span class="event-type-badge type-${escapeHtml(e.type)}">${e.typeEmoji || '🔷'} ${escapeHtml(e.type)}</span>
@@ -213,7 +218,7 @@ function renderInfoCol(e, canManage) {
     </div>
     ${mySignedRow ? `
       <div class="event-your-signup">
-        <div>You're signed up as <strong>${escapeHtml(mySignedRow.category)}</strong> — ${emojiToHtml(mySignedRow.emoji, { size: 14 })} ${escapeHtml(mySignedRow.name || 'Any')}</div>
+        <div>You're signed up as <strong>${escapeHtml(mySignedRow.category)}</strong> — ${emojiToHtml(mySignedChoice && mySignedChoice.emoji, { size: 14 })} ${escapeHtml((mySignedChoice && mySignedChoice.name) || 'Any')}</div>
         ${!e.closed ? `<button class="event-action-btn danger" id="event-leave-btn">Leave slot</button>` : ''}
       </div>` : ''}
     ${canManage ? `
