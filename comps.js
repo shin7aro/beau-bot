@@ -575,18 +575,7 @@ async function getCompByKey(key) {
   return comps[key] || null;
 }
 
-// `category` tags the comp as PVP/PVE for the site's filter (any other
-// value is dropped to null); `mainWeapon` is a weapon name (matching a key
-// in the shared item map) shown as an icon on the comp's card.
-function normalizeCompCategory(category) {
-  return category === 'PVP' || category === 'PVE' ? category : null;
-}
-function normalizeMainWeapon(mainWeapon) {
-  const trimmed = typeof mainWeapon === 'string' ? mainWeapon.trim() : '';
-  return trimmed || null;
-}
-
-async function createCompStructured({ label, categories, userId, category, mainWeapon }) {
+async function createCompStructured({ label, categories, userId }) {
   const clean = normalizeStructuredCategories(categories);
   if (Object.keys(clean).length === 0) return null;
 
@@ -597,8 +586,6 @@ async function createCompStructured({ label, categories, userId, category, mainW
   comps[key] = {
     label: label.trim(),
     categories: clean,
-    category: normalizeCompCategory(category),
-    mainWeapon: normalizeMainWeapon(mainWeapon),
     createdBy: userId,
     updatedBy: userId,
     updatedAt: Date.now(),
@@ -607,7 +594,7 @@ async function createCompStructured({ label, categories, userId, category, mainW
   return { key, ...comps[key] };
 }
 
-async function updateCompStructured({ key, newLabel, categories, userId, category, mainWeapon }) {
+async function updateCompStructured({ key, newLabel, categories, userId }) {
   const clean = normalizeStructuredCategories(categories);
   if (Object.keys(clean).length === 0) return null;
 
@@ -622,8 +609,6 @@ async function updateCompStructured({ key, newLabel, categories, userId, categor
   comps[newKey] = {
     label: newLabel.trim(),
     categories: clean,
-    category: normalizeCompCategory(category),
-    mainWeapon: normalizeMainWeapon(mainWeapon),
     createdBy: existing.createdBy,
     updatedBy: userId,
     updatedAt: Date.now(),
