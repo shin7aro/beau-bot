@@ -3,8 +3,9 @@
 // Application (same Client ID/Secret as DISCORD_TOKEN belongs to). After
 // login we ask Discord who the user is, then use the BOT TOKEN (server-side
 // only, never exposed to the browser) to look up that user's member record
-// in the guild and read their roles — this is what decides "officer" or
-// "admin", not anything the browser claims about itself.
+// in the guild and read their roles — this is what decides "officer",
+// "admin", or plain "member" (which now also requires the "Dahalo" role,
+// see roleForMember below), not anything the browser claims about itself.
 //
 // Session = a signed JWT stored in an httpOnly cookie. Nothing is kept in
 // server memory, so this is fine across Render restarts/multiple instances.
@@ -79,15 +80,47 @@ async function fetchGuildMember(userId) {
   return res.json();
 }
 
-// 'admin'/'officer' for those roles, 'member' for anyone else who's still
-// actually in the guild (so they can view + sign up for events), null only
-// if they're not a guild member at all.
-function roleForMember(member) {
+// Resolves the "Dahalo" role's Discord ID by name — same lookup
+// findDahaloRole() (event-render.js) and fetchDahaloMembersRaw() (api.js)
+// already do, so no separate DAHALO_ROLE_ID env var is needed. The
+// trade-off: unlike ADMIN_ROLE_ID/OFFICER_ROLE_ID (fixed IDs), renaming
+// that Discord role silently breaks this — the role stops resolving,
+// roleForMember() below then finds no ordinary member has it, and every
+// non-officer/admin guild member is locked out until the role is either
+// renamed back or this lookup is pointed at a real ID. Cached briefly
+// since it's one extra Discord API call per resolution.
+let dahaloRoleIdCache = { id: null, ts: 0 };
+const DAHALO_ROLE_ID_CACHE_TTL = 60 * 1000;
+
+async function fetchDahaloRoleId() {
+  if (dahaloRoleIdCache.id && Date.now() - dahaloRoleIdCache.ts < DAHALO_ROLE_ID_CACHE_TTL) {
+    return dahaloRoleIdCache.id;
+  }
+  const res = await fetch(`https://discord.com/api/v10/guilds/${GUILD_ID}/roles`, {
+    headers: { Authorization: `Bot ${DISCORD_TOKEN}` },
+  });
+  if (!res.ok) throw new Error(`Discord role lookup failed: ${res.status}`);
+  const roles = await res.json();
+  const dahalo = roles.find((r) => (r.name || '').toLowerCase() === 'dahalo');
+  dahaloRoleIdCache = { id: dahalo ? dahalo.id : null, ts: Date.now() };
+  return dahaloRoleIdCache.id;
+}
+
+// 'admin'/'officer' for those roles. Everyone else needs the "Dahalo" role
+// specifically to get in at all — just being in the guild isn't enough by
+// itself anymore (an ally, alt, or applicant without that role is treated
+// exactly like someone who isn't a guild member: null, blocked at login).
+// Admins/officers bypass this Dahalo check entirely — those Discord roles
+// already imply trust on their own.
+async function roleForMember(member) {
   if (!member) return null;
   const roles = member.roles || [];
   if (ADMIN_ROLE_ID && roles.includes(ADMIN_ROLE_ID)) return 'admin';
   if (OFFICER_ROLE_ID && roles.includes(OFFICER_ROLE_ID)) return 'officer';
-  return 'member';
+
+  const dahaloRoleId = await fetchDahaloRoleId();
+  if (dahaloRoleId && roles.includes(dahaloRoleId)) return 'member';
+  return null;
 }
 
 function makeSessionCookie(res, payload) {

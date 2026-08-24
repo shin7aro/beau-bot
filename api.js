@@ -67,10 +67,10 @@ router.get('/auth/callback', async (req, res) => {
     const tokenData = await auth.exchangeCode(req.query.code);
     const discordUser = await auth.fetchDiscordUser(tokenData.access_token);
     const member = await auth.fetchGuildMember(discordUser.id);
-    const role = auth.roleForMember(member);
+    const role = await auth.roleForMember(member);
 
     if (!role) {
-      return res.status(403).send('You need to be a member of the Discord server to access this.');
+      return res.status(403).send('You need the Dahalo role on the Discord server to access this.');
     }
 
     auth.makeSessionCookie(res, {
