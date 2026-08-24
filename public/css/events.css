@@ -174,16 +174,23 @@ span.event-row-name-pill { cursor: default; }
 .event-row-name-pill.role-support { background: var(--support-bg); border-color: var(--support); }
 .event-row-name-pill.role-battlemount { background: rgba(74,78,143,0.14); border-color: var(--cosmic); }
 
-/* Multi-choice line — each option gets its own smaller, independently
-   clickable pill inside this wrapper (flex:1 1 0 splits them evenly)
-   instead of one line joined by "/". The wrapper itself carries no
-   border/padding of its own — each option pill already has its own (same
-   as a single-choice pill's), so stacking a second layer of padding here
-   would just shrink the pills' usable length for no reason. The wrapper
-   still gets the same flex:1 1 0 + min-width:0 a single-choice pill has,
-   so the group as a whole still claims the same half of the row. */
+/* Multi-choice line — the pill boundary (border+padding+height) that used
+   to belong to a single .event-row-name-pill moves to this wrapper, so the
+   group keeps exactly the same border-box footprint the single pill had —
+   without matching that footprint, this flex item ends up measured
+   smaller than its "Sign up"/player-pill sibling despite flex:1 1 0 and
+   min-width:0 on both (same reason .event-row-status below needs the
+   identical fake border+padding). The border stays transparent since the
+   wrapper itself isn't a visible pill. Inside it, each option gets its own
+   smaller, independently clickable pill (flex:1 1 0 splits them evenly)
+   instead of one line joined by "/". Each option pill is given height:28px
+   directly (not 100%) so its own border-box matches .event-row-name-pill's
+   height exactly — 100% would instead measure against the group's
+   *content* box, which is 2px shorter than 28px because of the group's
+   own top/bottom border. */
 .event-row-name-pill-group {
-  flex: 1 1 0; min-width: 0; display: flex; align-items: center; gap: 4px; height: 28px;
+  flex: 1 1 0; min-width: 0; display: flex; align-items: center; gap: 4px;
+  height: 28px; padding: 0 10px; border: 1px solid transparent; box-sizing: border-box;
 }
 .event-row-option-pill {
   flex: 1 1 0; min-width: 0; height: 28px; display: inline-flex; align-items: center; gap: 5px;
