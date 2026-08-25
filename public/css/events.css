@@ -23,6 +23,10 @@
 /* ---------- LIST VIEW: event cards ---------- */
 .event-card-grid {
   display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  align-content: start; /* without this, a single row of "auto"-height cards
+    stretches to fill the container's leftover vertical space — only visible
+    when there are few enough events that the grid doesn't already overflow
+    and scroll */
   gap: 14px; padding: 4px 24px 24px;
   overflow-y: auto; flex: 1; min-height: 0;
 }
