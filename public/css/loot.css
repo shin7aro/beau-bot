@@ -10,6 +10,22 @@
 @media (max-width: 900px) { .loot-stats-grid { grid-template-columns: repeat(3, 1fr); } }
 @media (max-width: 700px) { .loot-stats-grid { grid-template-columns: repeat(2, 1fr); } }
 
+/* ---------- top layout: totals (left) + leaderboard (right) ---------- */
+.loot-top-grid {
+  display: grid; grid-template-columns: 1fr 1fr; align-items: start;
+  gap: 32px; padding: 40px 0 32px;
+}
+/* Each panel is narrower than the full page now, so 5 stat cards in one
+   row would be too cramped — 2 columns (3 rows: 2/2/1) fits comfortably
+   regardless of viewport width, instead of relying on the width-based
+   breakpoints above (which assumed the grid spanned the full page). */
+.loot-top-grid .loot-stats-grid { grid-template-columns: repeat(2, 1fr); }
+.loot-leaderboard-panel .history-table-wrap { margin-top: 16px; }
+
+@media (max-width: 900px) {
+  .loot-top-grid { grid-template-columns: 1fr; gap: 28px; padding: 28px 0 24px; }
+}
+
 /* ---------- split cards ---------- */
 .loot-card-grid {
   display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
