@@ -9,6 +9,7 @@
 <link rel="stylesheet" href="css/home.css">
 <link rel="stylesheet" href="css/builds.css">
 <link rel="stylesheet" href="css/events.css">
+<link rel="stylesheet" href="css/history.css">
 <link rel="stylesheet" href="css/loot.css">
 </head>
 <body class="app-shell">
@@ -49,12 +50,27 @@
 <!-- MAIN VIEW -->
 <div class="app-main" id="loot-view" style="display:none">
 
-  <div class="wrap section">
-    <div class="section-head">
-      <h2 class="section-title">All-time totals</h2>
-      <p class="section-sub">Updated the moment a split is posted — not when people get around to claiming it.</p>
+  <div class="wrap loot-top-grid">
+    <div class="loot-totals-panel">
+      <div class="section-head">
+        <h2 class="section-title">All-time totals</h2>
+        <p class="section-sub">Updated the moment a split is posted — not when people get around to claiming it.</p>
+      </div>
+      <div class="stats-grid loot-stats-grid" id="loot-stats-grid"></div>
     </div>
-    <div class="stats-grid loot-stats-grid" id="loot-stats-grid"></div>
+
+    <div class="loot-leaderboard-panel" id="loot-leaderboard-section" style="display:none">
+      <div class="section-head">
+        <h2 class="section-title">Top earners</h2>
+        <p class="section-sub">Lifetime silver received across every split.</p>
+      </div>
+      <div class="history-table-wrap">
+        <table class="history-table">
+          <thead><tr><th>#</th><th>Member</th><th>Total received</th><th>Splits</th></tr></thead>
+          <tbody id="loot-leaderboard-body"></tbody>
+        </table>
+      </div>
+    </div>
   </div>
 
   <div class="controls">
@@ -65,19 +81,6 @@
 
   <div class="loot-card-grid" id="loot-card-grid"></div>
   <div class="empty-state" id="loot-empty" style="display:none">No loot splits yet — post the first one.</div>
-
-  <div class="wrap section" id="loot-leaderboard-section" style="display:none">
-    <div class="section-head">
-      <h2 class="section-title">Top earners</h2>
-      <p class="section-sub">Lifetime silver received across every split.</p>
-    </div>
-    <div class="history-table-wrap">
-      <table class="history-table">
-        <thead><tr><th>#</th><th>Member</th><th>Total received</th><th>Splits</th></tr></thead>
-        <tbody id="loot-leaderboard-body"></tbody>
-      </table>
-    </div>
-  </div>
 </div>
 
 <!-- CREATE SPLIT FORM -->
