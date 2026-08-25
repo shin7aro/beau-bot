@@ -91,7 +91,7 @@ function showError(message) {
 
 function renderBanner(profile) {
   const banner = document.getElementById('profile-banner');
-  const avatarUrl = window.discordAvatarUrl(profile.id, profile.avatar, 168);
+  const avatarUrl = window.discordAvatarUrl(profile.id, profile.avatar, 128);
   const ringClass = TIER_RING_CLASS[profile.tier] || 'ring-member';
   const bannerClass = TIER_BANNER_CLASS[profile.tier] || 'banner-member';
   const textClass = TIER_TEXT_CLASS[profile.tier] || 'tier-member';
@@ -119,9 +119,6 @@ function renderBanner(profile) {
 function renderLedger(profile) {
   const ledger = document.getElementById('profile-ledger');
   const totalEvents = profile.attendance.PVP + profile.attendance.PVE + profile.attendance.Economy;
-  const standing = profile.lootRank
-    ? `#${profile.lootRank.position} of ${profile.lootRank.totalMembers}`
-    : '—';
 
   const campaignsHtml = profile.recentCampaigns.length
     ? profile.recentCampaigns.map(c => `
@@ -139,7 +136,6 @@ function renderLedger(profile) {
       <div class="ledger-row"><span class="ledger-lbl">Economy attendance</span><span class="ledger-val">${profile.attendance.Economy}</span></div>
       <div class="ledger-row"><span class="ledger-lbl">Total events</span><span class="ledger-val">${totalEvents}</span></div>
       <div class="ledger-row"><span class="ledger-lbl">Total loot earned</span><span class="ledger-val ledger-gold">${formatSilver(profile.totalLootEarned)}</span></div>
-      <div class="ledger-row"><span class="ledger-lbl">Guild standing</span><span class="ledger-val ledger-gold">${standing}</span></div>
     </div>
     <div class="ledger-panel">
       <div class="ledger-panel-title">Recent campaigns</div>
