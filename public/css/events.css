@@ -23,6 +23,7 @@
 /* ---------- LIST VIEW: event cards ---------- */
 .event-card-grid {
   display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  align-content: start; align-items: start;
   gap: 14px; padding: 4px 24px 24px;
   overflow-y: auto; flex: 1; min-height: 0;
 }
