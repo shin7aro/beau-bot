@@ -548,6 +548,7 @@ async function fetchDahaloMembersRaw() {
               id: m.user.id,
               username: m.nick || m.user.global_name || m.user.username,
               avatar: m.user.avatar || null,
+              joinedAt: m.joined_at || null,
             });
           }
         }
@@ -732,18 +733,54 @@ function attendanceBucketFor(type) {
 // event is closed, so an open event's sign-up is just intent, not
 // attendance yet. A no-show on a closed event doesn't count either, per
 // its name.
-async function computeAttendance(userId) {
+//
+// Also derives, from that same closed-event history:
+//   - favoriteRole: whichever CATEGORY_ORDER role (Tank/Support/DPS/
+//     Healer/Battlemount) this member's signed-up slot fell under most
+//     often — ties keep whichever role was seen first.
+//   - recentCampaigns: every closed event they attended (not a no-show
+//     on), newest first.
+// profile.js (the frontend) renders both of these directly, so they need
+// to always be present — an empty roleCounts/campaigns list still
+// resolves to `null`/`[]` rather than `undefined`.
+async function computeProfileStats(userId) {
   const events = await eventsStore.loadEvents();
-  const counts = { PVP: 0, PVE: 0, Economy: 0 };
+  const attendance = { PVP: 0, PVE: 0, Economy: 0 };
+  const roleCounts = {};
+  const campaigns = [];
+
   for (const event of Object.values(events)) {
     if (!event.closed) continue;
     if (!eventsStore.getSignedUpUserIds(event).includes(userId)) continue;
     const noShows = new Set(event.noShows || []);
     if (noShows.has(userId)) continue;
+
     const bucket = attendanceBucketFor(event.type);
-    if (bucket) counts[bucket] += 1;
+    if (bucket) attendance[bucket] += 1;
+
+    const rows = comps.expandAllCategoryRows(event.categories);
+    for (const row of rows) {
+      if (row.signedUserId === userId) {
+        roleCounts[row.category] = (roleCounts[row.category] || 0) + 1;
+      }
+    }
+
+    campaigns.push({ id: event.id, title: event.title, type: event.type, createdAt: event.createdAt });
   }
-  return counts;
+
+  campaigns.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+
+  let favoriteRole = null;
+  let bestCount = 0;
+  for (const role of comps.CATEGORY_ORDER) {
+    const count = roleCounts[role] || 0;
+    if (count > bestCount) {
+      bestCount = count;
+      favoriteRole = role;
+    }
+  }
+
+  return { attendance, favoriteRole, recentCampaigns: campaigns };
 }
 
 // One member's profile — role, attendance, and loot earned. Gated the
@@ -763,7 +800,7 @@ router.get('/api/profile/:userId', auth.requireMember, async (req, res) => {
     const totals = await lootStore.getTotals();
     const lootRecord = totals.perMember[userId];
 
-    const attendance = await computeAttendance(userId);
+    const { attendance, favoriteRole, recentCampaigns } = await computeProfileStats(userId);
 
     res.json({
       id: userId,
@@ -772,7 +809,10 @@ router.get('/api/profile/:userId', auth.requireMember, async (req, res) => {
       tier: entry.tier,
       inactive: entry.inactive,
       inGuild: Boolean(found),
+      memberSince: (found && found.joinedAt) || null,
       attendance,
+      favoriteRole,
+      recentCampaigns,
       totalLootEarned: lootRecord ? lootRecord.totalReceived : 0,
     });
   } catch (err) {
