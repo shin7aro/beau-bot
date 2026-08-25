@@ -91,7 +91,12 @@
 .ledger-val { font-family: 'JetBrains Mono', monospace; font-weight: 600; font-size: 15px; color: var(--ink); }
 .ledger-val.ledger-gold { color: var(--rank-gold); }
 
-.campaigns-list { display: flex; flex-direction: column; }
+/* Capped to roughly the height 5 rows take in the sibling "Service
+   record" panel — before this, a member with a long history made the
+   whole panel (and, via the shared grid row, its sibling too) grow
+   without bound. Now the panel stays the same size regardless of how
+   many campaigns are in the list, and the list scrolls internally. */
+.campaigns-list { display: flex; flex-direction: column; max-height: 210px; overflow-y: auto; }
 .campaign-row {
   display: flex; align-items: center; gap: 12px; padding: 9px 0;
   border-bottom: 1px solid var(--line); font-size: 12.5px;
