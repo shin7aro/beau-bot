@@ -794,16 +794,6 @@ async function computeMemberActivity(userId) {
   return { attendance, favoriteRole, recentCampaigns: campaigns.slice(0, 5) };
 }
 
-// Where a member's all-time loot earnings rank against everyone else who's
-// ever received a share. Returns null for someone with no loot history yet
-// (never in perMember) rather than a misleading "#1 of 1".
-function computeLootRank(userId, totals) {
-  const entries = Object.entries(totals.perMember || {});
-  if (!entries.some(([id]) => id === userId)) return null;
-  entries.sort((a, b) => b[1].totalReceived - a[1].totalReceived);
-  const position = entries.findIndex(([id]) => id === userId) + 1;
-  return { position, totalMembers: entries.length };
-}
 
 // One member's profile — role, attendance, and loot earned. Gated the
 // same way events/loot data already is (auth.requireMember): the roster
@@ -823,7 +813,6 @@ router.get('/api/profile/:userId', auth.requireMember, async (req, res) => {
     const lootRecord = totals.perMember[userId];
 
     const { attendance, favoriteRole, recentCampaigns } = await computeMemberActivity(userId);
-    const lootRank = computeLootRank(userId, totals);
 
     res.json({
       id: userId,
@@ -836,7 +825,6 @@ router.get('/api/profile/:userId', auth.requireMember, async (req, res) => {
       favoriteRole,
       attendance,
       totalLootEarned: lootRecord ? lootRecord.totalReceived : 0,
-      lootRank,
       recentCampaigns,
     });
   } catch (err) {
