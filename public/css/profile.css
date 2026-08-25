@@ -1,53 +1,106 @@
 /* ─────────────────────────────────────────
-   PROFILE PAGE
+   PROFILE PAGE — "Field Dossier"
    (builds on tokens + shared classes from
    base.css / home.css / builds.css /
    events.css / roster.css — .wrap, .section,
-   .cta-*, .stats-grid, .stat, .empty-state,
-   and the --rank-gold/silver/bronze tokens
-   are all defined there)
+   .cta-*, .empty-state, and the
+   --rank-gold/silver/bronze + role color
+   tokens are all defined there)
 ───────────────────────────────────────── */
 
 .profile-section {
-  display: flex; flex-direction: column; align-items: center; gap: 32px;
+  display: flex; flex-direction: column; gap: 22px;
 }
 
-/* ---------- profile card ---------- */
-.profile-card {
-  display: flex; flex-direction: column; align-items: center;
-  text-align: center; gap: 4px;
+/* ---------- role chip (also used inline in the campaigns list) ---------- */
+.role-chip {
+  display: inline-flex; align-items: center; gap: 6px; flex-shrink: 0;
+  font-size: 12px; font-weight: 700; letter-spacing: 0.02em;
+  padding: 7px 16px 7px 10px; border-radius: 999px; border: 1px solid transparent;
+  white-space: nowrap;
+}
+.role-chip svg { width: 15px; height: 15px; flex-shrink: 0; }
+.role-chip.role-chip-sm { font-size: 10.5px; padding: 3px 10px 3px 8px; }
+.role-chip.role-chip-sm svg { width: 12px; height: 12px; }
+
+.role-Tank       { color: var(--tank);    background: var(--tank-bg);    border-color: rgba(93,143,201,0.35); }
+.role-Support    { color: var(--support); background: var(--support-bg); border-color: rgba(207,157,63,0.35); }
+.role-DPS        { color: var(--dps);     background: var(--dps-bg);     border-color: rgba(199,88,71,0.35); }
+.role-Healer     { color: var(--healer);  background: var(--healer-bg);  border-color: rgba(107,171,122,0.35); }
+.role-Battlemount{ color: var(--gank);    background: var(--gank-bg);    border-color: rgba(155,114,196,0.35); }
+
+/* ---------- tier text / ring / banner-accent colors ---------- */
+.tier-gold   { color: var(--rank-gold); }
+.tier-silver { color: var(--rank-silver); }
+.tier-bronze { color: var(--rank-bronze); }
+.tier-member { color: var(--ink-faint); }
+
+.ring-gold   { border-color: var(--rank-gold) !important;   box-shadow: 0 0 0 6px var(--rank-gold-dim); }
+.ring-silver { border-color: var(--rank-silver) !important; box-shadow: 0 0 0 6px var(--rank-silver-dim); }
+.ring-bronze { border-color: var(--rank-bronze) !important; box-shadow: 0 0 0 6px var(--rank-bronze-dim); }
+.ring-member { border-color: var(--line-2) !important; }
+
+.banner-gold   { border-left-color: var(--rank-gold) !important; }
+.banner-silver { border-left-color: var(--rank-silver) !important; }
+.banner-bronze { border-left-color: var(--rank-bronze) !important; }
+.banner-member { border-left-color: var(--line-2) !important; }
+
+/* ---------- banner ---------- */
+.profile-banner {
+  display: flex; align-items: center; gap: 22px; flex-wrap: wrap;
+  padding: 26px 28px;
+  background: linear-gradient(120deg, var(--surface) 0%, var(--surface-2) 100%);
+  border: 1px solid var(--line-2); border-left: 4px solid var(--line-2);
+  border-radius: 14px;
 }
 
 .profile-avatar-wrap {
-  width: 120px; height: 120px; border-radius: 50%;
+  width: 84px; height: 84px; border-radius: 50%; flex-shrink: 0;
   display: flex; align-items: center; justify-content: center;
   border: 3px solid var(--line-2);
-  margin-bottom: 6px;
 }
 .profile-avatar { width: 100%; height: 100%; border-radius: 50%; object-fit: cover; background: var(--surface-2); }
 
-.profile-avatar-wrap.roster-card-gm { border-color: var(--rank-gold); box-shadow: 0 0 0 6px var(--rank-gold-dim); }
-.profile-avatar-wrap.roster-card-rh { border-color: var(--rank-silver); box-shadow: 0 0 0 6px var(--rank-silver-dim); }
-.profile-avatar-wrap.roster-card-officer { border-color: var(--rank-bronze); box-shadow: 0 0 0 6px var(--rank-bronze-dim); }
-
-.profile-name { font-family: 'Big Shoulders Display', sans-serif; font-weight: 800; font-size: 28px; color: var(--ink); }
-.profile-tag {
-  font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em;
-  color: var(--ink-faint);
-}
-.profile-tag.roster-card-gm { color: var(--rank-gold); }
-.profile-tag.roster-card-rh { color: var(--rank-silver); }
-.profile-tag.roster-card-officer { color: var(--rank-bronze); }
+.profile-id { flex: 1; min-width: 200px; }
+.profile-name { font-family: 'Big Shoulders Display', sans-serif; font-weight: 800; font-size: 26px; line-height: 1; color: var(--ink); }
+.profile-tier-line { display: flex; align-items: center; gap: 10px; margin-top: 8px; flex-wrap: wrap; }
+.profile-tier { font-size: 11.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; }
+.profile-since { font-size: 11.5px; color: var(--ink-faint); font-family: 'JetBrains Mono', monospace; }
 
 .profile-flag {
   margin-top: 10px; font-size: 11px; font-weight: 600;
   color: var(--dps); background: var(--dps-bg); border: 1px solid var(--dps);
-  padding: 4px 12px; border-radius: 999px;
+  padding: 4px 12px; border-radius: 999px; display: inline-block;
 }
 
-/* ---------- stats ---------- */
-.profile-stats-grid { grid-template-columns: repeat(4, 1fr); max-width: 760px; width: 100%; }
+/* ---------- ledger (service record + recent campaigns) ---------- */
+.profile-ledger { display: grid; grid-template-columns: 1.3fr 1fr; gap: 16px; }
+
+.ledger-panel { background: var(--surface); border: 1px solid var(--line-2); border-radius: 14px; padding: 20px 22px; }
+.ledger-panel-title {
+  font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em;
+  color: var(--ink-faint); margin-bottom: 14px;
+}
+
+.ledger-row {
+  display: flex; justify-content: space-between; align-items: baseline;
+  padding: 10px 0; border-bottom: 1px dashed var(--line);
+}
+.ledger-row:last-child { border-bottom: none; }
+.ledger-lbl { font-size: 13px; color: var(--ink-dim); }
+.ledger-val { font-family: 'JetBrains Mono', monospace; font-weight: 600; font-size: 15px; color: var(--ink); }
+.ledger-val.ledger-gold { color: var(--rank-gold); }
+
+.campaigns-list { display: flex; flex-direction: column; }
+.campaign-row {
+  display: flex; align-items: center; gap: 12px; padding: 9px 0;
+  border-bottom: 1px solid var(--line); font-size: 12.5px;
+}
+.campaign-row:last-child { border-bottom: none; }
+.campaign-date { font-family: 'JetBrains Mono', monospace; color: var(--ink-faint); width: 52px; flex-shrink: 0; }
+.campaign-title { flex: 1; color: var(--ink); }
+.empty-state-inline { color: var(--ink-faint); font-size: 12.5px; padding: 6px 0; }
 
 @media (max-width: 700px) {
-  .profile-stats-grid { grid-template-columns: repeat(2, 1fr); }
+  .profile-ledger { grid-template-columns: 1fr; }
 }
