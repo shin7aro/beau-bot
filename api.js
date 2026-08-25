@@ -545,6 +545,7 @@ async function fetchDahaloMembersRaw() {
               id: m.user.id,
               username: m.nick || m.user.global_name || m.user.username,
               avatar: m.user.avatar || null,
+              joinedAt: m.joined_at || null, // ISO string, straight from Discord — powers "member since" on the profile page
             });
           }
         }
@@ -725,22 +726,83 @@ function attendanceBucketFor(type) {
   return LEGACY_EVENT_TYPE_BUCKET[type] || null;
 }
 
+// Which category (Tank/Support/DPS/Healer/Battlemount) a user is signed up
+// under in a given event — mirrors the two sign-up shapes events-store.js
+// itself understands (quota categories keep a flat signups array of
+// {userId, weapon}; item categories keep one signup per row).
+function findUserCategory(event, userId) {
+  for (const [catName, cat] of Object.entries(event.categories || {})) {
+    if (cat.mode === 'quota') {
+      if ((cat.signups || []).some((s) => s.userId === userId)) return catName;
+    } else {
+      for (const item of cat.items || []) {
+        if (item.signups && item.signups[0] === userId) return catName;
+      }
+    }
+  }
+  return null;
+}
+
 // Attendance only counts CLOSED events — `noShows` is only known once an
 // event is closed, so an open event's sign-up is just intent, not
 // attendance yet. A no-show on a closed event doesn't count either, per
-// its name.
-async function computeAttendance(userId) {
+// its name. This single pass also derives:
+//  - favoriteRole: the category (Tank/Support/DPS/Healer/Battlemount) the
+//    member has actually played most across every closed event they
+//    attended, all-time — not just what they're signed up as right now.
+//    Ties keep whichever category comes first in CATEGORY_ORDER.
+//  - recentCampaigns: their 5 most recently attended closed events, newest
+//    first, for the profile page's "Recent campaigns" list.
+async function computeMemberActivity(userId) {
   const events = await eventsStore.loadEvents();
-  const counts = { PVP: 0, PVE: 0, Economy: 0 };
+  const attendance = { PVP: 0, PVE: 0, Economy: 0 };
+  const roleCounts = {};
+  const campaigns = [];
+
   for (const event of Object.values(events)) {
     if (!event.closed) continue;
     if (!eventsStore.getSignedUpUserIds(event).includes(userId)) continue;
     const noShows = new Set(event.noShows || []);
     if (noShows.has(userId)) continue;
+
     const bucket = attendanceBucketFor(event.type);
-    if (bucket) counts[bucket] += 1;
+    if (bucket) attendance[bucket] += 1;
+
+    const category = findUserCategory(event, userId);
+    if (category) roleCounts[category] = (roleCounts[category] || 0) + 1;
+
+    campaigns.push({
+      id: event.id,
+      title: event.title,
+      type: event.type,
+      category: category || null,
+      createdAt: event.createdAt,
+    });
   }
-  return counts;
+
+  let favoriteRole = null;
+  let bestCount = 0;
+  for (const cat of eventsStore.CATEGORY_ORDER) {
+    if ((roleCounts[cat] || 0) > bestCount) {
+      bestCount = roleCounts[cat];
+      favoriteRole = cat;
+    }
+  }
+
+  campaigns.sort((a, b) => b.createdAt - a.createdAt);
+
+  return { attendance, favoriteRole, recentCampaigns: campaigns.slice(0, 5) };
+}
+
+// Where a member's all-time loot earnings rank against everyone else who's
+// ever received a share. Returns null for someone with no loot history yet
+// (never in perMember) rather than a misleading "#1 of 1".
+function computeLootRank(userId, totals) {
+  const entries = Object.entries(totals.perMember || {});
+  if (!entries.some(([id]) => id === userId)) return null;
+  entries.sort((a, b) => b[1].totalReceived - a[1].totalReceived);
+  const position = entries.findIndex(([id]) => id === userId) + 1;
+  return { position, totalMembers: entries.length };
 }
 
 // One member's profile — role, attendance, and loot earned. Gated the
@@ -760,7 +822,8 @@ router.get('/api/profile/:userId', auth.requireMember, async (req, res) => {
     const totals = await lootStore.getTotals();
     const lootRecord = totals.perMember[userId];
 
-    const attendance = await computeAttendance(userId);
+    const { attendance, favoriteRole, recentCampaigns } = await computeMemberActivity(userId);
+    const lootRank = computeLootRank(userId, totals);
 
     res.json({
       id: userId,
@@ -769,8 +832,12 @@ router.get('/api/profile/:userId', auth.requireMember, async (req, res) => {
       tier: entry.tier,
       inactive: entry.inactive,
       inGuild: Boolean(found),
+      memberSince: (found && found.joinedAt) || null,
+      favoriteRole,
       attendance,
       totalLootEarned: lootRecord ? lootRecord.totalReceived : 0,
+      lootRank,
+      recentCampaigns,
     });
   } catch (err) {
     console.error(err);
