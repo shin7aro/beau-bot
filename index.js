@@ -242,8 +242,24 @@ require('./api.js').setClient(client);
 // blind fetch() once the bot's actually connected.
 require('./web-auth.js').setClient(client);
 
-client.once(Events.ClientReady, (c) => {
+client.once(Events.ClientReady, async (c) => {
   console.log(`Logged in as ${c.user.tag}`);
+
+  // Application emojis (the ones uploaded via the Discord Developer Portal)
+  // aren't guild-scoped, so there's no gateway event that pushes them into
+  // client.application.emojis.cache the way a guild's own emoji creation
+  // does — the cache just starts empty and stays empty until something
+  // explicitly fetches it. Without this, /api/discord-emojis in api.js sees
+  // discordClient.application truthy and ready, returns an empty mapped
+  // cache, and never falls back to the REST lookup — so the comp editor's
+  // picker looks empty even though the emojis genuinely exist on Discord's
+  // side.
+  try {
+    await c.application.emojis.fetch();
+    console.log(`Loaded ${c.application.emojis.cache.size} application emoji(s).`);
+  } catch (err) {
+    console.error('Failed to fetch application emojis on startup:', err);
+  }
 
   // Every 30 minutes, ping the Dahalo role in each open event's thread with
   // whatever roles are still missing. Only fires if the organizer actually
