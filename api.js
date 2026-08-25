@@ -181,8 +181,30 @@ router.get('/api/comps-build-options', auth.requireOfficer, async (req, res) => 
 let emojiCache = { data: null, fetchedAt: 0, pending: null };
 const EMOJI_CACHE_TTL_MS = 5 * 60 * 1000; // 5 min - avoids hammering Discord on every page load
 
+// Reads straight from the bot's own live gateway cache instead of ever
+// calling Discord's REST API — the Guilds intent (already enabled, and
+// non-privileged) keeps guild.emojis.cache in sync automatically via
+// Discord's push events, so there's nothing to fetch or cache here at all,
+// and this can never contribute to a rate limit. Falls back to the raw
+// REST call (with the caching+dedup below) only if the bot's gateway
+// connection isn't up yet, so this route still works during the brief
+// window right after a deploy before the client finishes connecting.
 router.get('/api/discord-emojis', auth.requireOfficer, async (req, res) => {
   try {
+    const guild = discordClient && discordClient.isReady && discordClient.isReady()
+      ? discordClient.guilds.cache.get(process.env.GUILD_ID)
+      : null;
+    if (guild) {
+      const emojis = guild.emojis.cache.map((e) => ({
+        id: e.id,
+        name: e.name,
+        animated: !!e.animated,
+        tag: `<${e.animated ? 'a' : ''}:${e.name}:${e.id}>`,
+        url: e.imageURL({ extension: e.animated ? 'gif' : 'png', size: 32 }),
+      }));
+      return res.json(emojis);
+    }
+
     if (emojiCache.data && Date.now() - emojiCache.fetchedAt < EMOJI_CACHE_TTL_MS) {
       return res.json(emojiCache.data);
     }
@@ -407,6 +429,24 @@ const DISCORD_CHANNELS_CACHE_TTL_MS = 5 * 60 * 1000;
 
 router.get('/api/discord-channels', auth.requireOfficer, async (req, res) => {
   try {
+    // Same "read the bot's live gateway cache instead of calling Discord's
+    // REST API" approach as /api/discord-emojis above — the Guilds intent
+    // keeps guild.channels.cache in sync automatically, so the normal case
+    // costs zero Discord API calls. Falls back to the raw REST call (with
+    // caching+dedup) only while the client isn't connected yet.
+    const guild = discordClient && discordClient.isReady && discordClient.isReady()
+      ? discordClient.guilds.cache.get(process.env.GUILD_ID)
+      : null;
+    if (guild) {
+      // type 0 = text, 5 = announcement — the only channel types a bot can
+      // post a plain message + buttons into — further narrowed to just the
+      // approved event channels.
+      const channels = guild.channels.cache
+        .filter((c) => (c.type === 0 || c.type === 5) && EVENT_CHANNEL_NAMES.includes(stripLeadingChannelIcon(c.name)))
+        .map((c) => ({ id: c.id, name: c.name }));
+      return res.json(channels);
+    }
+
     if (discordChannelsCache.data && Date.now() - discordChannelsCache.fetchedAt < DISCORD_CHANNELS_CACHE_TTL_MS) {
       return res.json(discordChannelsCache.data);
     }
@@ -425,9 +465,6 @@ router.get('/api/discord-channels', auth.requireOfficer, async (req, res) => {
           throw new Error(`Discord channel lookup failed: ${discordRes.status} ${detail}`.trim());
         }
         const raw = await discordRes.json();
-        // type 0 = text, 5 = announcement — the only channel types a bot can
-        // post a plain message + buttons into — further narrowed to just the
-        // approved event channels.
         const channels = raw
           .filter((c) => (c.type === 0 || c.type === 5) && EVENT_CHANNEL_NAMES.includes(stripLeadingChannelIcon(c.name)))
           .map((c) => ({ id: c.id, name: c.name }));
@@ -447,14 +484,16 @@ router.get('/api/discord-channels', auth.requireOfficer, async (req, res) => {
 
 // Guild members with the "Dahalo" role — powers the officer/admin-only
 // "assign a player" dropdown on the events page (manual add, mirroring the
-// Discord thread command in index.js). Same raw-REST-with-bot-token
-// approach as /api/discord-channels above, so this works even before the
-// live Client has finished connecting, and doesn't need the privileged
-// GUILD_MEMBERS gateway intent — the List Guild Members REST endpoint
-// doesn't require it, only the gateway/cache-based discord.js helpers do.
-// Cached briefly since a guild's member list can be large and this pages
-// through it in batches of 1000; no need to re-fetch on every popover open.
-let dahaloMembersRawCache = { data: null, ts: 0 };
+// Discord thread command in index.js), the roster hierarchy editor, and
+// every profile page (any logged-in member, not just officers, so this is
+// hit far more often than the other raw-REST routes above). The member
+// list itself still needs a raw REST call — it doesn't need the privileged
+// GUILD_MEMBERS gateway intent (the List Guild Members REST endpoint
+// doesn't require it, only the gateway/cache-based discord.js helpers do),
+// but the role lookup that precedes it can skip Discord's API entirely and
+// read the bot's live guild.roles.cache instead, same as the channels/
+// emojis routes above. Cached + de-duped the same way as those too.
+let dahaloMembersRawCache = { data: null, ts: 0, pending: null };
 const DAHALO_MEMBERS_CACHE_TTL = 60 * 1000;
 
 // The full Dahalo-role member list straight from Discord, no roster-store
@@ -465,44 +504,64 @@ async function fetchDahaloMembersRaw() {
   if (dahaloMembersRawCache.data && Date.now() - dahaloMembersRawCache.ts < DAHALO_MEMBERS_CACHE_TTL) {
     return dahaloMembersRawCache.data;
   }
+  if (!dahaloMembersRawCache.pending) {
+    dahaloMembersRawCache.pending = (async () => {
+      const guildId = process.env.GUILD_ID;
+      const botAuth = { Authorization: `Bot ${process.env.DISCORD_TOKEN}` };
 
-  const guildId = process.env.GUILD_ID;
-  const botAuth = { Authorization: `Bot ${process.env.DISCORD_TOKEN}` };
-
-  const rolesRes = await fetch(`https://discord.com/api/v10/guilds/${guildId}/roles`, { headers: botAuth });
-  if (!rolesRes.ok) throw new Error(`Discord role lookup failed: ${rolesRes.status}`);
-  const roles = await rolesRes.json();
-  const dahaloRole = roles.find((r) => (r.name || '').toLowerCase() === 'dahalo');
-  if (!dahaloRole) return [];
-
-  const members = [];
-  let after = '0';
-  for (;;) {
-    const membersRes = await fetch(
-      `https://discord.com/api/v10/guilds/${guildId}/members?limit=1000&after=${after}`,
-      { headers: botAuth }
-    );
-    if (!membersRes.ok) throw new Error(`Discord member list failed: ${membersRes.status}`);
-    const page = await membersRes.json();
-    if (page.length === 0) break;
-
-    for (const m of page) {
-      if (m.user && !m.user.bot && (m.roles || []).includes(dahaloRole.id)) {
-        members.push({
-          id: m.user.id,
-          username: m.nick || m.user.global_name || m.user.username,
-          avatar: m.user.avatar || null,
-        });
+      const cachedGuild = discordClient && discordClient.isReady && discordClient.isReady()
+        ? discordClient.guilds.cache.get(guildId)
+        : null;
+      let dahaloRoleId;
+      if (cachedGuild) {
+        const role = cachedGuild.roles.cache.find((r) => (r.name || '').toLowerCase() === 'dahalo');
+        dahaloRoleId = role ? role.id : null;
+      } else {
+        const rolesRes = await fetch(`https://discord.com/api/v10/guilds/${guildId}/roles`, { headers: botAuth });
+        if (!rolesRes.ok) throw new Error(`Discord role lookup failed: ${rolesRes.status}`);
+        const roles = await rolesRes.json();
+        const role = roles.find((r) => (r.name || '').toLowerCase() === 'dahalo');
+        dahaloRoleId = role ? role.id : null;
       }
-    }
+      if (!dahaloRoleId) {
+        dahaloMembersRawCache = { data: [], ts: Date.now(), pending: null };
+        return [];
+      }
 
-    if (page.length < 1000) break;
-    after = page[page.length - 1].user.id;
+      const members = [];
+      let after = '0';
+      for (;;) {
+        const membersRes = await fetch(
+          `https://discord.com/api/v10/guilds/${guildId}/members?limit=1000&after=${after}`,
+          { headers: botAuth }
+        );
+        if (!membersRes.ok) throw new Error(`Discord member list failed: ${membersRes.status}`);
+        const page = await membersRes.json();
+        if (page.length === 0) break;
+
+        for (const m of page) {
+          if (m.user && !m.user.bot && (m.roles || []).includes(dahaloRoleId)) {
+            members.push({
+              id: m.user.id,
+              username: m.nick || m.user.global_name || m.user.username,
+              avatar: m.user.avatar || null,
+            });
+          }
+        }
+
+        if (page.length < 1000) break;
+        after = page[page.length - 1].user.id;
+      }
+
+      members.sort((a, b) => a.username.localeCompare(b.username));
+      dahaloMembersRawCache = { data: members, ts: Date.now(), pending: null };
+      return members;
+    })().catch((err) => {
+      dahaloMembersRawCache.pending = null;
+      throw err;
+    });
   }
-
-  members.sort((a, b) => a.username.localeCompare(b.username));
-  dahaloMembersRawCache = { data: members, ts: Date.now() };
-  return members;
+  return dahaloMembersRawCache.pending;
 }
 
 // The roster every picker/dropdown on the site should actually use — same

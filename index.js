@@ -237,6 +237,10 @@ const client = new Client({
 // bot connection, without api.js requiring index.js (which would re-run
 // this whole file as a side effect — see the note in api.js).
 require('./api.js').setClient(client);
+// Same idea for login (see web-auth.js's setClient) — lets fetchGuildMember
+// go through discord.js's own rate-limit-aware REST manager instead of a
+// blind fetch() once the bot's actually connected.
+require('./web-auth.js').setClient(client);
 
 client.once(Events.ClientReady, (c) => {
   console.log(`Logged in as ${c.user.tag}`);

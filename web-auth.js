@@ -27,6 +27,16 @@ const {
 const COOKIE_NAME = 'rod_session';
 const SESSION_MAX_AGE = 1000 * 60 * 60 * 24 * 14; // 14 days
 
+// Set once by index.js right after it creates its Client, same as
+// api.js's setClient — see the comment there for why this can't just
+// require index.js directly. Lets fetchGuildMember below go through
+// discord.js's own REST manager (queued, rate-limit-aware) instead of a
+// blind fetch(), once the bot's gateway connection is actually up.
+let discordClient = null;
+function setClient(client) {
+  discordClient = client;
+}
+
 function redirectUri() {
   return `${PUBLIC_URL}/auth/callback`;
 }
@@ -72,7 +82,41 @@ async function fetchDiscordUser(accessToken) {
 // member record — this is how we get their roles without needing the
 // guilds.members.read scope, which requires per-user approval in Discord's
 // Linked Roles flow. The bot is already in the guild, so this just works.
+// Prefers going through the real discord.js client (queued + rate-limit-
+// aware, and free if the member's already cached from something else),
+// falling back to a raw fetch() only in the narrow window right after a
+// deploy before the bot's gateway connection is up — login still works
+// during that window, just without the REST manager's protections.
+function normalizeMember(member) {
+  if (!member) return null;
+  return {
+    user: {
+      id: member.user.id,
+      username: member.user.username,
+      global_name: member.user.globalName ?? member.user.global_name ?? null,
+      avatar: member.user.avatar,
+      bot: !!member.user.bot,
+    },
+    nick: member.nickname || null,
+    roles: [...member.roles.cache.keys()],
+  };
+}
+
 async function fetchGuildMember(userId) {
+  if (discordClient && discordClient.isReady && discordClient.isReady()) {
+    const guild = discordClient.guilds.cache.get(GUILD_ID);
+    if (guild) {
+      try {
+        return normalizeMember(await guild.members.fetch(userId));
+      } catch (e) {
+        // Discord's "Unknown Member" error (not a raw HTTP 404 — discord.js
+        // throws instead of returning null) — same "not in this guild"
+        // case the raw-REST fallback below handles with res.status === 404.
+        if (e.code === 10007 || e.status === 404) return null;
+        throw e;
+      }
+    }
+  }
   const res = await fetch(`https://discord.com/api/guilds/${GUILD_ID}/members/${userId}`, {
     headers: { Authorization: `Bot ${DISCORD_TOKEN}` },
   });
@@ -90,21 +134,32 @@ async function fetchGuildMember(userId) {
 // non-officer/admin guild member is locked out until the role is either
 // renamed back or this lookup is pointed at a real ID. Cached briefly
 // since it's one extra Discord API call per resolution.
-let dahaloRoleIdCache = { id: null, ts: 0 };
+let dahaloRoleIdCache = { id: null, ts: 0, pending: null };
 const DAHALO_ROLE_ID_CACHE_TTL = 60 * 1000;
 
 async function fetchDahaloRoleId() {
   if (dahaloRoleIdCache.id && Date.now() - dahaloRoleIdCache.ts < DAHALO_ROLE_ID_CACHE_TTL) {
     return dahaloRoleIdCache.id;
   }
-  const res = await fetch(`https://discord.com/api/v10/guilds/${GUILD_ID}/roles`, {
-    headers: { Authorization: `Bot ${DISCORD_TOKEN}` },
-  });
-  if (!res.ok) throw new Error(`Discord role lookup failed: ${res.status}`);
-  const roles = await res.json();
-  const dahalo = roles.find((r) => (r.name || '').toLowerCase() === 'dahalo');
-  dahaloRoleIdCache = { id: dahalo ? dahalo.id : null, ts: Date.now() };
-  return dahaloRoleIdCache.id;
+  // Same in-flight de-dup as api.js's Discord-lookup routes — several
+  // people logging in around the same time on a cold cache would otherwise
+  // each fire their own Discord call here.
+  if (!dahaloRoleIdCache.pending) {
+    dahaloRoleIdCache.pending = (async () => {
+      const res = await fetch(`https://discord.com/api/v10/guilds/${GUILD_ID}/roles`, {
+        headers: { Authorization: `Bot ${DISCORD_TOKEN}` },
+      });
+      if (!res.ok) throw new Error(`Discord role lookup failed: ${res.status}`);
+      const roles = await res.json();
+      const dahalo = roles.find((r) => (r.name || '').toLowerCase() === 'dahalo');
+      dahaloRoleIdCache = { id: dahalo ? dahalo.id : null, ts: Date.now(), pending: null };
+      return dahaloRoleIdCache.id;
+    })().catch((err) => {
+      dahaloRoleIdCache.pending = null;
+      throw err;
+    });
+  }
+  return dahaloRoleIdCache.pending;
 }
 
 // 'admin'/'officer' for those roles. Everyone else needs the "Dahalo" role
@@ -225,6 +280,7 @@ function requireRosterAdmin(req, res, next) {
 
 module.exports = {
   COOKIE_NAME,
+  setClient,
   loginUrl,
   exchangeCode,
   fetchDiscordUser,
