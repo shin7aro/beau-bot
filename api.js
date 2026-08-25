@@ -182,20 +182,23 @@ let emojiCache = { data: null, fetchedAt: 0, pending: null };
 const EMOJI_CACHE_TTL_MS = 5 * 60 * 1000; // 5 min - avoids hammering Discord on every page load
 
 // Reads straight from the bot's own live gateway cache instead of ever
-// calling Discord's REST API — the Guilds intent (already enabled, and
-// non-privileged) keeps guild.emojis.cache in sync automatically via
-// Discord's push events, so there's nothing to fetch or cache here at all,
-// and this can never contribute to a rate limit. Falls back to the raw
-// REST call (with the caching+dedup below) only if the bot's gateway
-// connection isn't up yet, so this route still works during the brief
-// window right after a deploy before the client finishes connecting.
+// calling Discord's REST API — client.application.emojis.cache is kept in
+// sync automatically once the bot's connected, so there's nothing to fetch
+// here at all in the normal case, and this can never contribute to a rate
+// limit. Falls back to the raw REST call (with the caching+dedup below)
+// only if the bot's gateway connection isn't up yet, so this route still
+// works during the brief window right after a deploy.
+//
+// Application emojis (not this guild's own emojis) on purpose — see
+// weapon-emoji.js for why: this is what /emoji-sync-weapons populated with
+// all 136 weapon icons, and the comp editor's emoji picker is specifically
+// for per-weapon-line icons, not the Tank/DPS/Healer/Support role emojis
+// (those are a separate guild-emoji lookup, findCustomRoleEmoji in
+// event-render.js, used only when the bot builds its own embeds).
 router.get('/api/discord-emojis', auth.requireOfficer, async (req, res) => {
   try {
-    const guild = discordClient && discordClient.isReady && discordClient.isReady()
-      ? discordClient.guilds.cache.get(process.env.GUILD_ID)
-      : null;
-    if (guild) {
-      const emojis = guild.emojis.cache.map((e) => ({
+    if (discordClient && discordClient.isReady && discordClient.isReady() && discordClient.application) {
+      const emojis = discordClient.application.emojis.cache.map((e) => ({
         id: e.id,
         name: e.name,
         animated: !!e.animated,
@@ -215,11 +218,11 @@ router.get('/api/discord-emojis', auth.requireOfficer, async (req, res) => {
     // limit even with the TTL cache above in place.
     if (!emojiCache.pending) {
       emojiCache.pending = (async () => {
-        const discordRes = await fetch(`https://discord.com/api/v10/guilds/${process.env.GUILD_ID}/emojis`, {
+        const discordRes = await fetch(`https://discord.com/api/v10/applications/${process.env.CLIENT_ID}/emojis`, {
           headers: { Authorization: `Bot ${process.env.DISCORD_TOKEN}` },
         });
         if (!discordRes.ok) throw new Error(`Discord emoji lookup failed: ${discordRes.status}`);
-        const raw = await discordRes.json();
+        const { items: raw } = await discordRes.json();
         const emojis = raw.map((e) => ({
           id: e.id,
           name: e.name,
@@ -237,7 +240,7 @@ router.get('/api/discord-emojis', auth.requireOfficer, async (req, res) => {
     res.json(await emojiCache.pending);
   } catch (err) {
     console.error(err);
-    res.status(500).json({ error: 'Failed to load server emojis.' });
+    res.status(500).json({ error: 'Failed to load weapon emojis.' });
   }
 });
 
@@ -545,7 +548,6 @@ async function fetchDahaloMembersRaw() {
               id: m.user.id,
               username: m.nick || m.user.global_name || m.user.username,
               avatar: m.user.avatar || null,
-              joinedAt: m.joined_at || null, // ISO string, straight from Discord — powers "member since" on the profile page
             });
           }
         }
@@ -726,74 +728,23 @@ function attendanceBucketFor(type) {
   return LEGACY_EVENT_TYPE_BUCKET[type] || null;
 }
 
-// Which category (Tank/Support/DPS/Healer/Battlemount) a user is signed up
-// under in a given event — mirrors the two sign-up shapes events-store.js
-// itself understands (quota categories keep a flat signups array of
-// {userId, weapon}; item categories keep one signup per row).
-function findUserCategory(event, userId) {
-  for (const [catName, cat] of Object.entries(event.categories || {})) {
-    if (cat.mode === 'quota') {
-      if ((cat.signups || []).some((s) => s.userId === userId)) return catName;
-    } else {
-      for (const item of cat.items || []) {
-        if (item.signups && item.signups[0] === userId) return catName;
-      }
-    }
-  }
-  return null;
-}
-
 // Attendance only counts CLOSED events — `noShows` is only known once an
 // event is closed, so an open event's sign-up is just intent, not
 // attendance yet. A no-show on a closed event doesn't count either, per
-// its name. This single pass also derives:
-//  - favoriteRole: the category (Tank/Support/DPS/Healer/Battlemount) the
-//    member has actually played most across every closed event they
-//    attended, all-time — not just what they're signed up as right now.
-//    Ties keep whichever category comes first in CATEGORY_ORDER.
-//  - recentCampaigns: their 5 most recently attended closed events, newest
-//    first, for the profile page's "Recent campaigns" list.
-async function computeMemberActivity(userId) {
+// its name.
+async function computeAttendance(userId) {
   const events = await eventsStore.loadEvents();
-  const attendance = { PVP: 0, PVE: 0, Economy: 0 };
-  const roleCounts = {};
-  const campaigns = [];
-
+  const counts = { PVP: 0, PVE: 0, Economy: 0 };
   for (const event of Object.values(events)) {
     if (!event.closed) continue;
     if (!eventsStore.getSignedUpUserIds(event).includes(userId)) continue;
     const noShows = new Set(event.noShows || []);
     if (noShows.has(userId)) continue;
-
     const bucket = attendanceBucketFor(event.type);
-    if (bucket) attendance[bucket] += 1;
-
-    const category = findUserCategory(event, userId);
-    if (category) roleCounts[category] = (roleCounts[category] || 0) + 1;
-
-    campaigns.push({
-      id: event.id,
-      title: event.title,
-      type: event.type,
-      category: category || null,
-      createdAt: event.createdAt,
-    });
+    if (bucket) counts[bucket] += 1;
   }
-
-  let favoriteRole = null;
-  let bestCount = 0;
-  for (const cat of eventsStore.CATEGORY_ORDER) {
-    if ((roleCounts[cat] || 0) > bestCount) {
-      bestCount = roleCounts[cat];
-      favoriteRole = cat;
-    }
-  }
-
-  campaigns.sort((a, b) => b.createdAt - a.createdAt);
-
-  return { attendance, favoriteRole, recentCampaigns: campaigns.slice(0, 5) };
+  return counts;
 }
-
 
 // One member's profile — role, attendance, and loot earned. Gated the
 // same way events/loot data already is (auth.requireMember): the roster
@@ -812,7 +763,7 @@ router.get('/api/profile/:userId', auth.requireMember, async (req, res) => {
     const totals = await lootStore.getTotals();
     const lootRecord = totals.perMember[userId];
 
-    const { attendance, favoriteRole, recentCampaigns } = await computeMemberActivity(userId);
+    const attendance = await computeAttendance(userId);
 
     res.json({
       id: userId,
@@ -821,11 +772,8 @@ router.get('/api/profile/:userId', auth.requireMember, async (req, res) => {
       tier: entry.tier,
       inactive: entry.inactive,
       inGuild: Boolean(found),
-      memberSince: (found && found.joinedAt) || null,
-      favoriteRole,
       attendance,
       totalLootEarned: lootRecord ? lootRecord.totalReceived : 0,
-      recentCampaigns,
     });
   } catch (err) {
     console.error(err);
