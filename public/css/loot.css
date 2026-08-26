@@ -15,8 +15,7 @@
    only) reveals the rest by adding .expanded to the grid. */
 .stat-extra { display: none; }
 .loot-stats-grid.expanded .stat-extra { display: block; }
-#toggle-loot-stats-btn { display: none; margin-top: 14px; }
-#toggle-loot-stats-btn.visible { display: inline-flex; }
+#toggle-loot-stats-btn { margin-top: 14px; }
 
 /* ---------- top layout: totals (left) + leaderboard (right) ---------- */
 .loot-top-grid {

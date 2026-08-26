@@ -139,8 +139,8 @@ img { max-width: 100%; display: block; }
 .site-nav a.officer-only.visible { display: inline-flex; }
 .site-nav a.logged-in-only { display: none; }
 .site-nav a.logged-in-only.visible { display: inline-flex; }
-.officer-only { display: none; }
-.officer-only.visible { display: inline-flex; }
+.officer-only { display: none !important; }
+.officer-only.visible { display: inline-flex !important; }
 .admin-only { display: none !important; }
 .admin-only.visible { display: inline-flex !important; }
 .roster-admin-only { display: none !important; }
