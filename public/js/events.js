@@ -739,10 +739,13 @@ async function showPlayerPanel(cat, itemIndexStr, userId) {
 
   // A multi-choice row has no weapon name of its own — the actual pick
   // lives at options[signedOptionIndex] instead (same lookup renderInfoCol
-  // uses for "You're signed up as…").
-  const signedWeapon = row
-    ? (row.options ? (row.options[row.signedOptionIndex] && row.options[row.signedOptionIndex].name) : row.name)
+  // uses for "You're signed up as…"). Keep the resolved option/row object
+  // itself too (not just its name) — it's what carries buildTab/buildId
+  // for the build-icon lookup below.
+  const signedTarget = row
+    ? (row.options ? row.options[row.signedOptionIndex] : row)
     : null;
+  const signedWeapon = signedTarget ? signedTarget.name : null;
 
   col.innerHTML = `
     <div class="event-details-head">Details</div>
@@ -759,12 +762,27 @@ async function showPlayerPanel(cat, itemIndexStr, userId) {
       <p class="event-details-empty">Loading profile…</p>
     </div>`;
 
-  let profile = null;
-  try {
-    profile = await api(`/api/profile/${encodeURIComponent(userId)}`);
-  } catch (err) {
-    // Swallow and fall back below — a player snippet failing to load
-    // shouldn't be louder than the rest of the (already-rendered) panel.
+  // Profile stats and the linked-build lookup (for this specific role's
+  // weapon icon) don't depend on each other, so run them side by side
+  // instead of one after the other.
+  const [profileResult, buildResult] = await Promise.allSettled([
+    api(`/api/profile/${encodeURIComponent(userId)}`),
+    (signedTarget && signedTarget.buildTab && signedTarget.buildId != null)
+      ? ensureAllBuildsLoaded()
+      : Promise.resolve(null),
+  ]);
+
+  const profile = profileResult.status === 'fulfilled' ? profileResult.value : null;
+
+  // If this role has a build linked to it, that build's own weapon (which
+  // can be a more specific pick than the row's generic weapon name — e.g.
+  // "Realmbreaker" for a "Great Axe" slot) is what shows up as the icon
+  // for the "playing this event" chip, same as the gear grid uses
+  // build.weapon for its Weapon slot icon.
+  let buildWeaponIcon = null;
+  if (buildResult && buildResult.status === 'fulfilled' && buildResult.value && signedTarget) {
+    const build = (buildResult.value[signedTarget.buildTab] || [])[signedTarget.buildId];
+    if (build && build.weapon) buildWeaponIcon = build.weapon;
   }
 
   const empty = col.querySelector('.event-player-panel > .event-details-empty');
@@ -789,16 +807,20 @@ async function showPlayerPanel(cat, itemIndexStr, userId) {
   const attendanceCount = (profile.attendance && profile.attendance[eventType]) || 0;
   const attendanceLine = `${attendanceCount} ${escapeHtml(eventType)} event${attendanceCount === 1 ? '' : 's'} attended`;
 
-  // Full all-time weapon history (not capped), highlighted if it's the one
-  // they're playing for this event. The row scrolls horizontally rather
-  // than wrapping/truncating — see .event-player-weapon-row in events.css.
-  // If today's weapon isn't in that history yet (a first-time pick), it's
-  // appended as an extra chip so what they're actually playing right now
-  // is always visible, not just past events.
+  // Full all-time weapon history (not capped — the row scrolls
+  // horizontally rather than wrapping/truncating, see
+  // .event-player-weapon-row in events.css), with the weapon they're
+  // playing for this event pulled to the front of the list regardless of
+  // its play count, then the rest in most-played-first order. If today's
+  // weapon isn't in that history yet (a first-time pick), it's added as
+  // that first chip with no count rather than dropped.
   const topWeapons = profile.topWeapons || [];
   const chips = topWeapons.slice();
-  if (signedWeapon && !chips.some(w => w.name === signedWeapon)) {
-    chips.push({ name: signedWeapon, count: null, isCurrent: true });
+  let currentChipData = null;
+  if (signedWeapon) {
+    const idx = chips.findIndex(w => w.name === signedWeapon);
+    currentChipData = idx !== -1 ? chips.splice(idx, 1)[0] : { name: signedWeapon, count: null };
+    chips.unshift({ ...currentChipData, isCurrent: true });
   }
 
   const weaponsHtml = chips.length
@@ -806,10 +828,17 @@ async function showPlayerPanel(cat, itemIndexStr, userId) {
         <div class="section-label">Weapons played</div>
         <div class="event-player-weapon-row">
           ${chips.map(w => {
-            const url = typeof imgUrl === 'function' ? imgUrl(w.name) : null;
-            const isCurrent = w.isCurrent || w.name === signedWeapon;
+            const isCurrent = Boolean(w.isCurrent);
+            // The linked build's weapon (if any) only overrides the icon
+            // for the current chip — history chips keep showing whatever
+            // that past event's own weapon actually was.
+            const iconName = (isCurrent && buildWeaponIcon) ? buildWeaponIcon : w.name;
+            const url = typeof imgUrl === 'function' ? imgUrl(iconName) : null;
+            const titleBits = [w.name];
+            if (isCurrent && buildWeaponIcon && buildWeaponIcon !== w.name) titleBits.push(`linked build: ${buildWeaponIcon}`);
+            if (isCurrent) titleBits.push('playing this event');
             return `
-              <div class="event-player-weapon-chip${isCurrent ? ' is-current' : ''}" title="${escapeHtml(w.name)}${isCurrent ? ' — playing this event' : ''}">
+              <div class="event-player-weapon-chip${isCurrent ? ' is-current' : ''}" title="${escapeHtml(titleBits.join(' — '))}">
                 ${url
                   ? `<img src="${escapeHtml(url)}" alt="" loading="lazy" onerror="this.style.opacity='0.15'">`
                   : `<div class="slot-empty-icon"></div>`}
@@ -823,12 +852,6 @@ async function showPlayerPanel(cat, itemIndexStr, userId) {
   empty.outerHTML = `
     <div class="event-player-attendance">${attendanceLine}</div>
     ${weaponsHtml}`;
-
-  // The row can run long (a veteran's full weapon history), so scroll the
-  // highlighted "playing this event" chip into view instead of leaving it
-  // wherever it happened to land in playcount order.
-  const currentChip = col.querySelector('.event-player-weapon-chip.is-current');
-  if (currentChip) currentChip.scrollIntoView({ inline: 'center', block: 'nearest' });
 }
 
 // Roster-col listeners only — safe to re-run after a partial roster-col
