@@ -63,6 +63,11 @@ async function init() {
     document.getElementById('toggle-loot-closed-btn').classList.toggle('active', showClaimedSplits);
     renderList();
   });
+  document.getElementById('toggle-loot-stats-btn').addEventListener('click', () => {
+    const grid = document.getElementById('loot-stats-grid');
+    const expanded = grid.classList.toggle('expanded');
+    document.getElementById('toggle-loot-stats-btn').textContent = expanded ? 'Hide extra stats' : 'Show more stats';
+  });
   wireModalOverlay();
 
   await loadLoot();
@@ -109,9 +114,9 @@ function renderStats() {
   const grid = document.getElementById('loot-stats-grid');
   grid.innerHTML = `
     <div class="stat"><div class="stat-num">${formatSilver(lootTotals.totalLootValue)}</div><div class="stat-label">Total loot</div></div>
-    <div class="stat"><div class="stat-num">${formatSilver(lootTotals.totalGuildTax)}</div><div class="stat-label">Guild tax</div></div>
-    <div class="stat"><div class="stat-num">${formatSilver(lootTotals.totalMemberShare)}</div><div class="stat-label">Paid to members</div></div>
-    <div class="stat"><div class="stat-num">${formatSilver(lootTotals.totalDonated || 0)}</div><div class="stat-label">Donated to guild</div></div>
+    <div class="stat stat-extra"><div class="stat-num">${formatSilver(lootTotals.totalGuildTax)}</div><div class="stat-label">Guild tax</div></div>
+    <div class="stat stat-extra"><div class="stat-num">${formatSilver(lootTotals.totalMemberShare)}</div><div class="stat-label">Paid to members</div></div>
+    <div class="stat stat-extra"><div class="stat-num">${formatSilver(lootTotals.totalDonated || 0)}</div><div class="stat-label">Donated to guild</div></div>
     <div class="stat"><div class="stat-num">${lootTotals.splitCount}</div><div class="stat-label">Splits recorded</div></div>`;
 }
 
