@@ -13,6 +13,13 @@ const EVENT_ROLE_ORDER = ['Tank', 'Support', 'DPS', 'Healer', 'Battlemount'];
 const EVENT_TYPES = ['PVP', 'PVE', 'Economy'];
 const EVENT_TYPE_EMOJI = { PVP: '⚔️', PVE: '🐉', Economy: '💰' };
 
+// Same tier dicts as profile.js's "Field Dossier" — kept as a separate
+// small copy here (rather than a shared import) since this file has no
+// module system, just like item-map.js's server-side duplicate.
+const EVENT_TIER_LABELS = { gm: 'Guild Master', right_hand: 'Right Hand', officer: 'Officer', member: 'Dahalo' };
+const EVENT_TIER_RING_CLASS = { gm: 'ring-gold', right_hand: 'ring-silver', officer: 'ring-bronze', member: 'ring-member' };
+const EVENT_TIER_TEXT_CLASS = { gm: 'tier-gold', right_hand: 'tier-silver', officer: 'tier-bronze', member: 'tier-member' };
+
 let allEvents = [];        // list summaries from GET /api/events
 let typeFilter = 'all';
 let searchStr = '';
@@ -722,21 +729,106 @@ async function showBuildPanel(cat, itemIndexStr, optionIndexStr) {
   }
 }
 
-function showPlayerPanel(cat, itemIndexStr, userId) {
+async function showPlayerPanel(cat, itemIndexStr, userId) {
   const col = document.getElementById('event-details-col');
   const itemIndex = itemIndexStr === '' ? undefined : Number(itemIndexStr);
   const row = currentDetail.rows.find(r => r.category === cat && r.itemIndex === itemIndex);
   const avatarUrl = (row && row.signedAvatarUrl) || window.discordAvatarUrl(userId, null, 128);
+  const profileHref = `profile.html?id=${encodeURIComponent(userId)}`;
+  const displayName = row ? row.signedUsername : userId;
+
+  // A multi-choice row has no weapon name of its own — the actual pick
+  // lives at options[signedOptionIndex] instead (same lookup renderInfoCol
+  // uses for "You're signed up as…").
+  const signedWeapon = row
+    ? (row.options ? (row.options[row.signedOptionIndex] && row.options[row.signedOptionIndex].name) : row.name)
+    : null;
+
   col.innerHTML = `
     <div class="event-details-head">Details</div>
     <div class="event-player-panel">
       <div class="event-player-head">
-        <img class="event-player-avatar" src="${escapeHtml(avatarUrl)}" alt="" loading="lazy">
-        <div class="event-player-name">${escapeHtml(row ? row.signedUsername : userId)}</div>
+        <a href="${profileHref}" class="event-player-avatar-wrap">
+          <img class="event-player-avatar" src="${escapeHtml(avatarUrl)}" alt="" loading="lazy">
+        </a>
+        <div class="event-player-id">
+          <a href="${profileHref}" class="event-player-name">${escapeHtml(displayName)}</a>
+        </div>
       </div>
-      ${row ? `<div class="event-player-role"><span class="role-pill role-${cat.toLowerCase()}">${escapeHtml(cat)}</span> ${escapeHtml(row.name || 'Any')}</div>` : ''}
-      <p class="event-details-empty">Full player profiles are coming soon — this is just a placeholder for now.</p>
+      ${row ? `<div class="event-player-role"><span class="role-pill role-${cat.toLowerCase()}">${escapeHtml(cat)}</span> ${escapeHtml(signedWeapon || 'Any')}</div>` : ''}
+      <p class="event-details-empty">Loading profile…</p>
     </div>`;
+
+  let profile = null;
+  try {
+    profile = await api(`/api/profile/${encodeURIComponent(userId)}`);
+  } catch (err) {
+    // Swallow and fall back below — a player snippet failing to load
+    // shouldn't be louder than the rest of the (already-rendered) panel.
+  }
+
+  const empty = col.querySelector('.event-player-panel > .event-details-empty');
+  if (!empty) return; // panel was replaced by another click while this was in flight
+  if (!profile) {
+    empty.textContent = 'Failed to load this player\u2019s profile.';
+    return;
+  }
+
+  const ringClass = EVENT_TIER_RING_CLASS[profile.tier] || 'ring-member';
+  const textClass = EVENT_TIER_TEXT_CLASS[profile.tier] || 'tier-member';
+  const tierLabel = EVENT_TIER_LABELS[profile.tier] || 'Dahalo';
+  const avatarWrap = col.querySelector('.event-player-avatar-wrap');
+  if (avatarWrap) avatarWrap.classList.add(ringClass);
+
+  const idBlock = col.querySelector('.event-player-id');
+  if (idBlock) {
+    idBlock.insertAdjacentHTML('beforeend', `<span class="event-player-tier ${textClass}">${escapeHtml(tierLabel)}</span>`);
+  }
+
+  const eventType = currentDetail.type;
+  const attendanceCount = (profile.attendance && profile.attendance[eventType]) || 0;
+  const attendanceLine = `${attendanceCount} ${escapeHtml(eventType)} event${attendanceCount === 1 ? '' : 's'} attended`;
+
+  // Full all-time weapon history (not capped), highlighted if it's the one
+  // they're playing for this event. The row scrolls horizontally rather
+  // than wrapping/truncating — see .event-player-weapon-row in events.css.
+  // If today's weapon isn't in that history yet (a first-time pick), it's
+  // appended as an extra chip so what they're actually playing right now
+  // is always visible, not just past events.
+  const topWeapons = profile.topWeapons || [];
+  const chips = topWeapons.slice();
+  if (signedWeapon && !chips.some(w => w.name === signedWeapon)) {
+    chips.push({ name: signedWeapon, count: null, isCurrent: true });
+  }
+
+  const weaponsHtml = chips.length
+    ? `<div class="event-player-weapons">
+        <div class="section-label">Weapons played</div>
+        <div class="event-player-weapon-row">
+          ${chips.map(w => {
+            const url = typeof imgUrl === 'function' ? imgUrl(w.name) : null;
+            const isCurrent = w.isCurrent || w.name === signedWeapon;
+            return `
+              <div class="event-player-weapon-chip${isCurrent ? ' is-current' : ''}" title="${escapeHtml(w.name)}${isCurrent ? ' — playing this event' : ''}">
+                ${url
+                  ? `<img src="${escapeHtml(url)}" alt="" loading="lazy" onerror="this.style.opacity='0.15'">`
+                  : `<div class="slot-empty-icon"></div>`}
+                ${w.count != null ? `<span class="event-player-weapon-count">${w.count}</span>` : ''}
+              </div>`;
+          }).join('')}
+        </div>
+      </div>`
+    : '';
+
+  empty.outerHTML = `
+    <div class="event-player-attendance">${attendanceLine}</div>
+    ${weaponsHtml}`;
+
+  // The row can run long (a veteran's full weapon history), so scroll the
+  // highlighted "playing this event" chip into view instead of leaving it
+  // wherever it happened to land in playcount order.
+  const currentChip = col.querySelector('.event-player-weapon-chip.is-current');
+  if (currentChip) currentChip.scrollIntoView({ inline: 'center', block: 'nearest' });
 }
 
 // Roster-col listeners only — safe to re-run after a partial roster-col
