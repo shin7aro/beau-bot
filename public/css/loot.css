@@ -10,6 +10,14 @@
 @media (max-width: 900px) { .loot-stats-grid { grid-template-columns: repeat(3, 1fr); } }
 @media (max-width: 700px) { .loot-stats-grid { grid-template-columns: repeat(2, 1fr); } }
 
+/* Guild tax / paid to members / donated start hidden — only Total loot and
+   Splits recorded show by default. #toggle-loot-stats-btn (officer/admin
+   only) reveals the rest by adding .expanded to the grid. */
+.stat-extra { display: none; }
+.loot-stats-grid.expanded .stat-extra { display: block; }
+#toggle-loot-stats-btn { display: none; margin-top: 14px; }
+#toggle-loot-stats-btn.visible { display: inline-flex; }
+
 /* ---------- top layout: totals (left) + leaderboard (right) ---------- */
 .loot-top-grid {
   display: grid; grid-template-columns: 1fr 1fr; align-items: start;
@@ -20,7 +28,13 @@
    regardless of viewport width, instead of relying on the width-based
    breakpoints above (which assumed the grid spanned the full page). */
 .loot-top-grid .loot-stats-grid { grid-template-columns: repeat(2, 1fr); }
-.loot-leaderboard-panel .history-table-wrap { margin-top: 16px; }
+
+/* Smaller text than the admin history table this is borrowed from, and
+   capped to roughly 5 rows + header — anyone with more entries scrolls
+   for the rest instead of the panel growing to fit everyone. */
+.loot-leaderboard-panel .history-table-wrap { margin-top: 16px; max-height: 190px; overflow-y: auto; }
+.loot-leaderboard-panel .history-table thead th { font-size: 9px; padding: 8px 14px; }
+.loot-leaderboard-panel .history-table td { font-size: 11.5px; padding: 8px 14px; }
 
 @media (max-width: 900px) {
   .loot-top-grid { grid-template-columns: 1fr; gap: 28px; padding: 28px 0 24px; }
