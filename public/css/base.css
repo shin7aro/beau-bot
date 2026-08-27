@@ -1,0 +1,249 @@
+/* ─────────────────────────────────────────
+   BASE — shared across every page
+   tokens · reset · site header/nav · footer
+───────────────────────────────────────── */
+@import url('https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@600;700;800&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&display=swap');
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+
+:root {
+  --bg:        #120e1c;
+  --surface:   #1e1730;
+  --surface-2: #271f3d;
+  --surface-3: #332a4d;
+  --line:      rgba(164,144,194,0.16);
+  --line-2:    rgba(164,144,194,0.30);
+  --ink:       #e6e6fa;
+  --ink-dim:   #b9b0d4;
+  --ink-faint: #847a9c;
+
+  --accent:     #a490c2;
+  --accent-dim: rgba(164,144,194,0.18);
+  --accent-ink: #1c1428;
+  --cosmic:     #4a4e8f;
+
+  --moss:      #8fae5c;
+  --moss-dim:  rgba(143,174,92,0.16);
+
+  --healer:  #6bab7a; --healer-bg:  rgba(107,171,122,0.14);
+  --support: #cf9d3f; --support-bg: rgba(207,157,63,0.14);
+  --dps:     #c75847; --dps-bg:     rgba(199,88,71,0.14);
+  --tank:    #5d8fc9; --tank-bg:    rgba(93,143,201,0.14);
+  --gank:    #9b72c4; --gank-bg:    rgba(155,114,196,0.14);
+
+  --header-h: 64px;
+}
+
+/* ── SCROLLBARS — themed instead of each browser's default (light-grey
+   on this dark background looks out of place). scrollbar-width/-color
+   covers Firefox; the ::-webkit-scrollbar pseudo-elements cover
+   Chrome/Edge/Safari. Applied broadly (*) so any scrollable element —
+   the page itself, a horizontally-scrolling row, a modal's overflow
+   list — picks this up automatically without its own rule. A more
+   specific selector elsewhere (e.g. .tab-nav's scrollbar-width: none)
+   still wins over this on purpose, for spots that want no visible
+   scrollbar at all. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--line-2) transparent;
+}
+*::-webkit-scrollbar { width: 10px; height: 10px; }
+*::-webkit-scrollbar-track { background: transparent; }
+*::-webkit-scrollbar-thumb {
+  background-color: var(--line-2); border-radius: 999px;
+  border: 2px solid transparent; background-clip: padding-box;
+}
+*::-webkit-scrollbar-thumb:hover { background-color: var(--accent); }
+*::-webkit-scrollbar-corner { background: transparent; }
+
+html { background: var(--bg); }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.001ms !important; transition-duration: 0.001ms !important; scroll-behavior: auto !important; }
+}
+
+body {
+  background-image:
+    linear-gradient(180deg, rgba(14,10,22,0.58), rgba(14,10,22,0.50) 40%, rgba(14,10,22,0.66)),
+    url('../assets/bg.jpg');
+  background-size: cover;
+  background-position: center 30%;
+  background-repeat: no-repeat;
+  background-attachment: fixed;
+  background-color: var(--bg);
+  color: var(--ink);
+  font-family: 'Inter', system-ui, sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+  min-height: 100vh;
+}
+@media (max-width: 880px) {
+  /* fixed attachment is unreliable / janky on mobile browsers */
+  body { background-attachment: scroll; }
+}
+
+a { color: inherit; text-decoration: none; }
+img { max-width: 100%; display: block; }
+
+::selection { background: var(--accent-dim); color: var(--ink); }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+
+/* ── SITE HEADER ── */
+.site-header {
+  border-bottom: 1px solid var(--line);
+  padding: 0 28px;
+  height: var(--header-h);
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-shrink: 0;
+  position: sticky; top: 0; z-index: 100;
+  background: rgba(18,14,28,0.82);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+.guild-mark {
+  width: 38px; height: 38px;
+  background: linear-gradient(155deg, var(--accent), var(--cosmic));
+  border-radius: 10px;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+  box-shadow: 0 0 0 1px rgba(230,230,250,0.12) inset, 0 6px 18px -6px rgba(164,144,194,0.55);
+}
+.guild-mark svg { width: 19px; height: 19px; fill: var(--accent-ink); }
+.brand { display: flex; align-items: center; gap: 12px; min-width: 0; flex-shrink: 1; }
+.header-text { display: flex; flex-direction: column; gap: 1px; min-width: 0; overflow: hidden; }
+.header-text h1 {
+  font-family: 'Big Shoulders Display', sans-serif;
+  font-size: 21px; font-weight: 800;
+  color: var(--ink); letter-spacing: 0.02em;
+  line-height: 1;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.header-text .eyebrow {
+  font-size: 10px; font-weight: 600; color: var(--ink-faint);
+  text-transform: uppercase; letter-spacing: 0.14em;
+  white-space: nowrap;
+}
+
+.site-nav { display: flex; align-items: center; gap: 2px; margin-left: 18px; flex-shrink: 0; }
+.site-nav a {
+  font-size: 13px; font-weight: 600; color: var(--ink-dim);
+  padding: 9px 13px; border-radius: 7px;
+  transition: color 0.15s, background 0.15s;
+}
+.site-nav a:hover { color: var(--ink); background: var(--surface-2); }
+.site-nav a.active { color: var(--accent); }
+
+.site-nav a.officer-only { display: none; }
+.site-nav a.officer-only.visible { display: inline-flex; }
+.site-nav a.logged-in-only { display: none; }
+.site-nav a.logged-in-only.visible { display: inline-flex; }
+.officer-only { display: none !important; }
+.officer-only.visible { display: inline-flex !important; }
+.admin-only { display: none !important; }
+.admin-only.visible { display: inline-flex !important; }
+.roster-admin-only { display: none !important; }
+.roster-admin-only.visible { display: inline-flex !important; }
+
+.header-actions { margin-left: auto; flex-shrink: 0; display: flex; align-items: center; gap: 10px; }
+#auth-control { display: flex; align-items: center; gap: 10px; }
+
+/* ── AUTH DROPDOWN MENU ── */
+.auth-menu { position: relative; }
+.auth-menu-trigger {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 6px 12px; border-radius: 8px;
+  border: 1px solid var(--line-2); background: var(--surface-2);
+  color: var(--ink); font: inherit; font-size: 12.5px; font-weight: 600;
+  cursor: pointer; transition: background 0.15s, border-color 0.15s;
+  min-height: 44px;
+}
+.auth-menu-trigger:hover { background: var(--surface-3); border-color: var(--accent); }
+/* Discord profile picture — the ring color still carries the role signal
+   the old plain dot used to (admin/officer/member), just around a real
+   avatar instead of next to one. */
+.auth-avatar { width: 24px; height: 24px; border-radius: 50%; object-fit: cover; flex-shrink: 0; border: 2px solid var(--ink-faint); background: var(--surface-3); }
+.auth-avatar.auth-role-admin { border-color: var(--dps); }
+.auth-avatar.auth-role-officer { border-color: var(--tank); }
+.auth-avatar.auth-role-member { border-color: var(--ink-faint); }
+.auth-menu-name { white-space: nowrap; }
+.auth-menu-caret { flex-shrink: 0; transition: transform 0.15s; }
+.auth-menu-dropdown.open + .auth-menu-trigger .auth-menu-caret,
+.auth-menu-trigger[aria-expanded="true"] .auth-menu-caret { transform: rotate(180deg); }
+.auth-menu-dropdown {
+  display: none; position: absolute; top: calc(100% + 8px); right: 0; z-index: 200;
+  min-width: 190px; padding: 6px;
+  background: var(--surface); border: 1px solid var(--line-2); border-radius: 10px;
+  box-shadow: 0 14px 34px -12px rgba(0,0,0,0.55);
+  flex-direction: column; gap: 2px;
+}
+.auth-menu-dropdown.open { display: flex; }
+.auth-menu-item {
+  display: block; padding: 9px 10px; border-radius: 7px;
+  font-size: 13px; font-weight: 600; color: var(--ink-dim);
+  transition: background 0.12s, color 0.12s;
+}
+.auth-menu-item:hover { background: var(--surface-2); color: var(--ink); }
+.auth-menu-item.auth-menu-danger:hover { color: #e0685a; }
+.auth-menu-divider { height: 1px; background: var(--line); margin: 4px 2px; }
+@media (max-width: 700px) { .auth-menu-name { display: none; } }
+.btn {
+  display: inline-flex; align-items: center; gap: 7px;
+  padding: 8px 14px; border-radius: 8px;
+  font-size: 12.5px; font-weight: 600; cursor: pointer;
+  border: 1px solid var(--line-2);
+  background: var(--surface-2); color: var(--ink);
+  transition: background 0.15s, border-color 0.15s, color 0.15s, transform 0.1s;
+  font-family: inherit;
+  min-height: 44px;
+}
+.btn svg { transition: stroke 0.15s; flex-shrink: 0; }
+.btn:hover { background: var(--surface-3); border-color: var(--accent); color: var(--accent); }
+.btn:hover svg { stroke: var(--accent); }
+.btn:active { transform: scale(0.97); }
+.btn .btn-label { white-space: nowrap; }
+
+#toast {
+  position: fixed; bottom: 24px; left: 50%;
+  transform: translateX(-50%) translateY(8px);
+  background: var(--surface-2); border: 1px solid var(--line-2);
+  border-radius: 8px; padding: 9px 18px;
+  font-size: 13px; color: var(--ink);
+  display: flex; align-items: center; gap: 8px;
+  opacity: 0; transition: opacity 0.2s, transform 0.2s;
+  pointer-events: none; z-index: 9999; white-space: nowrap;
+}
+#toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+#toast svg { width: 14px; height: 14px; stroke: var(--accent); flex-shrink: 0; }
+
+/* ── SITE FOOTER ── */
+.site-footer { border-top: 1px solid var(--line); padding: 36px 28px; }
+.footer-inner {
+  max-width: 1180px; margin: 0 auto;
+  display: flex; justify-content: space-between; align-items: center;
+  flex-wrap: wrap; gap: 18px;
+}
+.footer-brand { display: flex; align-items: center; gap: 10px; }
+.footer-brand .guild-mark { width: 28px; height: 28px; border-radius: 7px; }
+.footer-brand .guild-mark svg { width: 14px; height: 14px; }
+.footer-brand span { font-family: 'Big Shoulders Display', sans-serif; font-weight: 800; font-size: 14px; letter-spacing: 0.02em; }
+.footer-links { display: flex; gap: 22px; flex-wrap: wrap; }
+.footer-links a { font-size: 13px; color: var(--ink-dim); transition: color 0.15s; }
+.footer-links a:hover { color: var(--accent); }
+.footer-copy { font-size: 11px; color: var(--ink-faint); width: 100%; padding-top: 18px; margin-top: 18px; border-top: 1px solid var(--line); }
+
+@media (max-width: 880px) {
+  .site-header { padding: 0 16px; }
+  .header-text .eyebrow { display: none; }
+  .btn .btn-label { display: none; }
+  .btn { padding: 0; width: 44px; justify-content: center; }
+  .site-footer { padding: 28px 16px; }
+}
+@media (max-width: 560px) {
+  .site-header { padding: 0 14px; gap: 10px; }
+  .header-text h1 { font-size: 16px; }
+  .guild-mark { width: 32px; height: 32px; }
+  .site-nav { margin-left: 4px; gap: 0; }
+  .site-nav a { padding: 8px 7px; font-size: 12px; }
+}

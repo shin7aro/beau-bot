@@ -1,0 +1,182 @@
+/* ─────────────────────────────────────────
+   COMPS PAGE — composition editor
+   (builds on tokens + shared classes from
+   base.css / builds.css)
+───────────────────────────────────────── */
+.role-battlemount { color: var(--gank); background: var(--gank-bg); }
+
+/* ---------- comp picker dropdown (replaces the old search + table list) ---------- */
+.comp-select-wrap { flex: 1; min-width: 200px; max-width: 360px; }
+.comp-select-wrap select {
+  width: 100%; background: var(--surface-2); border: 1px solid var(--line-2); border-radius: 8px;
+  color: var(--ink); font: inherit; font-size: 13px; padding: 9px 11px; cursor: pointer;
+}
+.comp-select-wrap select:focus { outline: none; border-color: var(--accent); }
+
+/* ---------- editor wrap (single full-width pane, no more list/detail split) ---------- */
+.comp-editor-wrap {
+  flex: 1; overflow-y: auto; min-height: 0;
+  display: flex; flex-direction: column;
+}
+.comp-editor-wrap .detail-placeholder {
+  flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px;
+}
+.comp-editor-wrap .detail-card {
+  width: 100%; max-width: 1400px; margin: 0 auto; padding: 32px 36px;
+}
+
+.comp-label-input {
+  font-size: 20px; font-weight: 700; font-family: 'Big Shoulders Display', sans-serif;
+  background: transparent; border: none; color: var(--ink);
+  border-bottom: 1px dashed var(--line-2); padding: 4px 0; flex: 1; min-width: 0;
+}
+.comp-label-input:focus { outline: none; border-color: var(--accent); }
+
+/* ---------- party columns ---------- */
+.comp-parties-toolbar { display: flex; justify-content: flex-end; padding: 4px 0 14px; }
+.comp-parties-row {
+  display: flex; gap: 16px; align-items: flex-start;
+  overflow-x: auto; padding-bottom: 8px;
+}
+.comp-party-col {
+  flex: 1 0 320px; min-width: 320px; max-width: 420px;
+  background: var(--surface-2); border: 1px solid var(--line); border-radius: 12px;
+  padding: 14px; display: flex; flex-direction: column; gap: 16px;
+}
+.comp-party-head {
+  display: flex; align-items: center; justify-content: space-between;
+  font-size: 13px; font-weight: 700; color: var(--ink-dim); text-transform: uppercase; letter-spacing: 0.03em;
+  padding-bottom: 10px; border-bottom: 1px solid var(--line);
+}
+.comp-party-remove-btn {
+  background: transparent; border: 1px solid var(--line-2); border-radius: 6px;
+  color: var(--ink-faint); cursor: pointer; width: 26px; height: 26px;
+  display: flex; align-items: center; justify-content: center;
+}
+.comp-party-remove-btn:hover { color: var(--dps); border-color: var(--dps); }
+
+.comp-category-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; gap: 8px; }
+.comp-items-list { display: flex; flex-direction: column; gap: 6px; }
+
+/* Item row: emoji picker, name, build select, remove — the numeric party
+   field and the typed emoji-code box are gone; party is now which column
+   the row lives in, and the emoji can only be set via the picker below. */
+.comp-item-row {
+  display: grid;
+  grid-template-columns: 34px 1.3fr 1.5fr auto auto;
+  gap: 8px; align-items: center;
+}
+.comp-item-add-choice-btn { white-space: nowrap; font-size: 11.5px; padding: 0 10px; height: 32px; }
+.comp-item-row input, .comp-item-row select {
+  background: var(--surface); border: 1px solid var(--line-2); border-radius: 7px;
+  color: var(--ink); font: inherit; font-size: 12.5px; padding: 7px 9px; min-width: 0;
+}
+.comp-item-row input:focus, .comp-item-row select:focus { outline: none; border-color: var(--accent); }
+.comp-item-remove {
+  background: transparent; border: 1px solid var(--line-2); border-radius: 7px;
+  color: var(--ink-faint); cursor: pointer; width: 30px; height: 30px;
+  display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+}
+.comp-item-remove:hover { color: var(--dps); border-color: var(--dps); }
+
+.comp-item-emoji-pick {
+  background: var(--surface); border: 1px solid var(--line-2); border-radius: 7px;
+  width: 34px; height: 32px; display: flex; align-items: center; justify-content: center;
+  cursor: pointer; padding: 0; flex-shrink: 0;
+}
+.comp-item-emoji-pick:hover { border-color: var(--accent); }
+.emoji-preview-img { width: 18px; height: 18px; object-fit: contain; }
+.emoji-preview-char { font-size: 15px; line-height: 1; }
+.emoji-preview-empty { color: var(--ink-faint); font-size: 14px; }
+
+/* Weapon picker button — replaces what used to be a free-text
+   <input class="comp-item-name">. Styled to match that input/select look
+   (see ".comp-item-row input, .comp-item-row select" below) but it's a
+   button that opens the searchable popover (.weapon-popover further
+   down), never a typed field — see openWeaponPopover(). */
+.comp-item-weapon-btn {
+  background: var(--surface); border: 1px solid var(--line-2); border-radius: 7px;
+  color: var(--ink); font: inherit; font-size: 12.5px; padding: 7px 9px; min-width: 0;
+  display: flex; align-items: center; gap: 7px; cursor: pointer; text-align: left; width: 100%;
+}
+.comp-item-weapon-btn:hover, .comp-item-weapon-btn:focus { outline: none; border-color: var(--accent); }
+.weapon-preview-icon { width: 18px; height: 18px; object-fit: contain; flex-shrink: 0; }
+.weapon-preview-icon-blank { border-radius: 3px; background: var(--surface-2); }
+.weapon-preview-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.weapon-preview-empty { color: var(--ink-faint); }
+
+/* Multi-choice line — a role line that accepts more than one weapon (see
+   comps.js's item.options). Each option gets its own mini-row (emoji +
+   name + build select + remove-this-choice), stacked under a shared
+   "+ Add choice" link, with the normal "remove whole line" button still
+   on the far right — each option can link its own build, same as a
+   single-choice line's build select. */
+.comp-item-row-multi { display: flex; align-items: flex-start; gap: 8px; }
+.comp-item-options { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+.comp-item-option {
+  display: grid; grid-template-columns: 34px 1fr 1.3fr auto; gap: 8px; align-items: center;
+}
+.comp-item-option-remove {
+  background: transparent; border: 1px solid var(--line-2); border-radius: 7px;
+  color: var(--ink-faint); cursor: pointer; width: 30px; height: 30px;
+  display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+}
+.comp-item-option-remove:hover { color: var(--dps); border-color: var(--dps); }
+.comp-item-add-option-btn { align-self: flex-start; font-size: 11.5px; padding: 0 10px; height: 30px; }
+
+.emoji-popover {
+  position: absolute; z-index: 50; width: 220px; max-height: 300px;
+  background: var(--surface-2); border: 1px solid var(--line-2); border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(0,0,0,.35); padding: 8px; display: flex; flex-direction: column; gap: 6px;
+}
+.emoji-popover-search {
+  background: var(--surface); border: 1px solid var(--line-2); border-radius: 6px;
+  color: var(--ink); font: inherit; font-size: 12px; padding: 6px 8px;
+}
+.emoji-popover-grid {
+  display: grid; grid-template-columns: repeat(6, 1fr); gap: 4px; overflow-y: auto; max-height: 200px;
+}
+.emoji-popover-item {
+  background: transparent; border: 1px solid transparent; border-radius: 6px;
+  width: 30px; height: 30px; display: flex; align-items: center; justify-content: center; cursor: pointer;
+}
+.emoji-popover-item:hover { border-color: var(--accent); background: var(--surface); }
+.emoji-popover-item img { width: 20px; height: 20px; object-fit: contain; }
+.emoji-popover-clear { color: var(--ink-faint); font-size: 13px; font-weight: 700; }
+.emoji-popover-clear:hover { color: var(--dps); }
+
+/* Weapon picker popover — same shell as .emoji-popover above, but a
+   scrollable list instead of an icon grid since weapon names need room
+   to actually be read while searching. */
+.weapon-popover {
+  position: absolute; z-index: 50; width: 260px; max-height: 320px;
+  background: var(--surface-2); border: 1px solid var(--line-2); border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(0,0,0,.35); padding: 8px; display: flex; flex-direction: column; gap: 6px;
+}
+.weapon-popover-search {
+  background: var(--surface); border: 1px solid var(--line-2); border-radius: 6px;
+  color: var(--ink); font: inherit; font-size: 12px; padding: 6px 8px;
+}
+.weapon-popover-list { display: flex; flex-direction: column; gap: 2px; overflow-y: auto; max-height: 260px; }
+.weapon-popover-item {
+  background: transparent; border: 1px solid transparent; border-radius: 6px;
+  display: flex; align-items: center; gap: 8px; padding: 6px 7px; cursor: pointer;
+  color: var(--ink); font: inherit; font-size: 12.5px; text-align: left;
+}
+.weapon-popover-item:hover { border-color: var(--accent); background: var(--surface); }
+.weapon-popover-item img { width: 20px; height: 20px; object-fit: contain; flex-shrink: 0; }
+.weapon-popover-empty { color: var(--ink-faint); font-size: 12px; padding: 6px 4px; }
+
+.comp-add-item-btn {
+  background: transparent; border: 1px dashed var(--line-2); border-radius: 7px;
+  color: var(--ink-dim); font: inherit; font-size: 12px; padding: 6px 10px; cursor: pointer; white-space: nowrap;
+}
+.comp-add-item-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+.comp-save-row { padding: 20px 0 0; border-top: 1px solid var(--line); margin-top: 20px; display: flex; justify-content: flex-end; }
+
+@media (max-width: 900px) {
+  .comp-editor-wrap .detail-card { padding: 20px 16px; }
+  .comp-parties-row { flex-direction: column; }
+  .comp-party-col { max-width: none; }
+}

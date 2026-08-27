@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Loot Manager — Rise of Dahalo</title>
+<meta name="description" content="Automated loot splitting for Rise of Dahalo — 5% guild tax, even split, tracked in Discord.">
+<link rel="stylesheet" href="css/base.css">
+<link rel="stylesheet" href="css/home.css">
+<link rel="stylesheet" href="css/builds.css">
+<link rel="stylesheet" href="css/events.css">
+<link rel="stylesheet" href="css/history.css">
+<link rel="stylesheet" href="css/loot.css">
+</head>
+<body class="app-shell">
+
+<!-- HEADER -->
+<header class="site-header">
+  <a href="index.html" class="brand">
+    <div class="guild-mark">
+      <svg viewBox="0 0 24 24"><path d="M12 2L4 6v6c0 5.5 3.4 9.7 8 11 4.6-1.3 8-5.5 8-11V6l-8-4z"/><path d="M12 7v9M9 10l3-3 3 3" stroke="#0d0d0f" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>
+    </div>
+    <div class="header-text">
+      <h1>RISE OF DAHALO</h1>
+      <span class="eyebrow">Loot Manager</span>
+    </div>
+  </a>
+  <nav class="site-nav">
+    <a href="index.html">Home</a>
+    <a href="builds.html">Builds</a>
+    <a href="roster.html">Roster</a>
+    <a href="events.html" class="logged-in-only" id="events-nav-link">Events</a>
+    <a href="loot.html" class="logged-in-only active" id="loot-nav-link">Loot Manager</a>
+    <a href="comps.html" class="officer-only" id="comps-nav-link">Compositions</a>
+  </nav>
+  <div class="header-actions">
+    <div id="auth-control"></div>
+  </div>
+</header>
+
+<!-- GATE: shown until we know the visitor is at least a logged-in Discord member -->
+<div class="wrap section" id="gate-message" style="display:none">
+  <div class="section-head">
+    <h2 class="section-title">Members only</h2>
+    <p class="section-sub">Loot Manager is for guild members — log in with your Discord account to split a loot run.</p>
+  </div>
+  <a class="cta-primary" href="/auth/login?returnTo=/loot.html" style="display:inline-flex">Log in with Discord</a>
+</div>
+
+<!-- MAIN VIEW -->
+<div class="app-main" id="loot-view" style="display:none">
+
+  <div class="wrap loot-top-grid">
+    <div class="loot-totals-panel">
+      <div class="section-head">
+        <h2 class="section-title">All-time totals</h2>
+        <p class="section-sub">Updated the moment a split is posted — not when people get around to claiming it.</p>
+      </div>
+      <button class="comp-reset-btn officer-only" id="toggle-loot-stats-btn" type="button">Show more stats</button>
+      <div class="stats-grid loot-stats-grid" id="loot-stats-grid"></div>
+    </div>
+
+    <div class="loot-leaderboard-panel" id="loot-leaderboard-section" style="display:none">
+      <div class="section-head">
+        <h2 class="section-title">Top earners</h2>
+        <p class="section-sub">Lifetime silver received across every split.</p>
+      </div>
+      <div class="history-table-wrap">
+        <table class="history-table">
+          <thead><tr><th>#</th><th>Member</th><th>Total received</th><th>Splits</th></tr></thead>
+          <tbody id="loot-leaderboard-body"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="controls">
+    <span class="count-label" id="loot-count-label">0 splits</span>
+    <button class="comp-reset-btn" id="toggle-loot-closed-btn">Show claimed splits</button>
+    <button class="comp-add-btn" id="new-loot-btn"><span class="btn-label">+ New split</span></button>
+  </div>
+
+  <div class="loot-card-grid" id="loot-card-grid"></div>
+  <div class="empty-state" id="loot-empty" style="display:none">No loot splits yet — post the first one.</div>
+</div>
+
+<!-- CREATE SPLIT FORM -->
+<div class="modal-overlay" id="loot-form-overlay" style="display:none">
+  <div class="modal-card" id="loot-form-card"></div>
+</div>
+
+<div id="toast"></div>
+
+<script src="js/auth.js"></script>
+<script src="js/loot.js"></script>
+<script src="js/site.js"></script>
+</body>
+</html>
