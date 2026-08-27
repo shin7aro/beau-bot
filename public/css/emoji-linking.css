@@ -11,10 +11,18 @@
 }
 .weapon-search-input:focus { outline: none; border-color: var(--accent); }
 
-.el-intro { max-width: 68ch; padding: 0 28px 14px; }
+/* .main is `display:flex` (row) by default (builds.css), which put el-intro
+   and el-list side by side and let el-list's height run off the bottom of
+   the fixed-height .app-shell with no way to scroll to it — the only fix
+   was zooming the browser out. Stack them in a column instead and let
+   el-list own the scrolling. */
+#emoji-linking-app .main { display: flex; flex-direction: column; }
+
+.el-intro { max-width: 68ch; padding: 0 28px 14px; flex-shrink: 0; }
 .el-list {
-  max-width: 1180px; margin: 0 auto; padding: 0 28px 40px;
-  display: flex; flex-direction: column; gap: 6px;
+  max-width: 1400px; margin: 0 auto; padding: 0 28px 40px; width: 100%;
+  display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px 12px;
+  flex: 1; overflow-y: auto; min-height: 0;
 }
 
 .el-row {
@@ -40,7 +48,13 @@
 
 .el-empty { color: var(--ink-faint); font-size: 13px; padding: 20px 28px; }
 
+@media (max-width: 1080px) {
+  .el-list { grid-template-columns: repeat(3, 1fr); }
+}
+@media (max-width: 820px) {
+  .el-list { grid-template-columns: repeat(2, 1fr); }
+}
 @media (max-width: 640px) {
-  .el-list { padding: 0 16px 32px; }
+  .el-list { padding: 0 16px 32px; grid-template-columns: 1fr; }
   .el-intro { padding: 0 16px 14px; }
 }
