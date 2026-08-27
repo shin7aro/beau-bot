@@ -70,27 +70,28 @@ function roleChipHtml(role, { small } = {}) {
     </span>`;
 }
 
-// Same "weapons played" rectangle as the events-page player snippet —
-// full all-time history, most-played first, horizontally-scrolling row
-// of icon chips (see .event-player-weapon-row in events.css). Reuses
-// those classes as-is rather than duplicating them in profile.css.
+// Same all-time weapon history as the events-page player snippet, but
+// with its own (larger) classes in profile.css rather than reusing
+// events.css's .event-player-weapon-* — that class is shared with the
+// events page snippet, so resizing it here would resize it there too.
+// No label, just the icon row, sitting between the username and the
+// main-role chip in the banner (see .profile-id/.profile-weapon-row
+// flex-basis in profile.css for how that middle slot is carved out).
 function weaponsRowHtml(topWeapons) {
   if (!topWeapons || !topWeapons.length) return '';
   return `
-    <div class="event-player-weapons">
-      <div class="section-label">Weapons played</div>
-      <div class="event-player-weapon-row">
-        ${topWeapons.map(w => {
-          const url = typeof window.imgUrl === 'function' ? window.imgUrl(w.name) : null;
-          return `
-            <div class="event-player-weapon-chip" title="${escapeHtml(w.name)}">
-              ${url
-                ? `<img src="${escapeHtml(url)}" alt="" loading="lazy" onerror="this.style.opacity='0.15'">`
-                : `<div class="slot-empty-icon"></div>`}
-              ${w.count != null ? `<span class="event-player-weapon-count">${w.count}</span>` : ''}
-            </div>`;
-        }).join('')}
-      </div>
+    <div class="profile-weapon-row">
+      ${topWeapons.map(w => {
+        const url = typeof window.imgUrl === 'function' ? window.imgUrl(w.name) : null;
+        if (!url) console.warn(`No item-map icon for weapon "${w.name}" — check public/js/item-map.js`);
+        return `
+          <div class="profile-weapon-chip" title="${escapeHtml(w.name)}">
+            ${url
+              ? `<img src="${escapeHtml(url)}" alt="" loading="lazy" onerror="this.style.opacity='0.15'">`
+              : `<div class="profile-weapon-chip-empty"></div>`}
+            ${w.count != null ? `<span class="profile-weapon-count">${w.count}</span>` : ''}
+          </div>`;
+      }).join('')}
     </div>`;
 }
 

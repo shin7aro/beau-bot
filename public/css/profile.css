@@ -61,11 +61,40 @@
 }
 .profile-avatar { width: 100%; height: 100%; border-radius: 50%; object-fit: cover; background: var(--surface-2); }
 
-.profile-id { flex: 1; min-width: 200px; }
+/* Not flex:1 anymore — the weapon row (below) takes the growing middle
+   slot instead, so the id block stays name-sized instead of stretching
+   and pushing everything after it toward the far right. */
+.profile-id { flex: 0 1 auto; min-width: 200px; }
 .profile-name { font-family: 'Big Shoulders Display', sans-serif; font-weight: 800; font-size: 26px; line-height: 1; color: var(--ink); }
 .profile-tier-line { display: flex; align-items: center; gap: 10px; margin-top: 8px; flex-wrap: wrap; }
 .profile-tier { font-size: 11.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; }
 .profile-since { font-size: 11.5px; color: var(--ink-faint); font-family: 'JetBrains Mono', monospace; }
+
+/* ---------- weapon history row (all-time, larger than the events-page
+   snippet's version — its own classes so resizing here doesn't touch
+   that shared component) ---------- */
+.profile-weapon-row {
+  display: flex; align-items: center; justify-content: center; gap: 12px;
+  flex: 1 1 160px; min-width: 160px; overflow-x: auto; overflow-y: hidden; padding: 4px 2px;
+  scroll-snap-type: x proximity;
+}
+.profile-weapon-row { scrollbar-width: thin; scrollbar-color: var(--line-2) transparent; }
+.profile-weapon-row::-webkit-scrollbar { height: 6px; }
+.profile-weapon-row::-webkit-scrollbar-thumb { background: var(--line-2); border-radius: 999px; }
+.profile-weapon-row::-webkit-scrollbar-track { background: transparent; }
+.profile-weapon-chip {
+  position: relative; width: 62px; height: 62px; border-radius: 12px;
+  background: var(--surface-2); border: 1px solid var(--line-2);
+  display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+  scroll-snap-align: start;
+}
+.profile-weapon-chip img { width: 44px; height: 44px; object-fit: contain; }
+.profile-weapon-chip-empty { width: 44px; height: 44px; border-radius: 8px; border: 1px dashed var(--line-2); background: var(--bg); }
+.profile-weapon-count {
+  position: absolute; bottom: -6px; right: -6px; min-width: 19px; height: 19px; padding: 0 4px;
+  border-radius: 999px; background: var(--surface-3); border: 1px solid var(--line-2);
+  font-size: 11px; font-weight: 700; color: var(--ink); line-height: 17px; text-align: center;
+}
 
 .profile-flag {
   margin-top: 10px; font-size: 11px; font-weight: 600;
@@ -109,3 +138,4 @@
 @media (max-width: 700px) {
   .profile-ledger { grid-template-columns: 1fr; }
 }
+
