@@ -130,6 +130,14 @@ function renderList(filter = '') {
   }));
 }
 
+/* el-list now scrolls internally (see emoji-linking.css) instead of the
+   whole page scrolling, so an open popover's saved position would drift
+   out from under its anchor button as the list scrolls. Just close it. */
+document.addEventListener('DOMContentLoaded', () => {
+  const list = document.getElementById('weapon-emoji-list');
+  if (list) list.addEventListener('scroll', closeEmojiPopover, { passive: true });
+});
+
 async function init() {
   await window.SITE_AUTH_READY;
   if (!isEmojiAdmin()) {
