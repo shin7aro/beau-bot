@@ -155,6 +155,81 @@ function openEmojiPopover(anchorBtn, cat, i, optionIndex) {
   setTimeout(() => document.addEventListener('mousedown', handleEmojiPopoverOutsideClick, true), 0);
 }
 
+/* ---------- weapon picker (searchable — replaces free-text weapon entry) ----------
+   Same shape as the emoji picker above: a small popover with a search box
+   over a filtered, clickable list. The list is sourced straight from
+   item-map.js's own ITEM_MAP, so a selection is always a real item — the
+   free-text field this replaces was the actual root cause of names that
+   never resolved to an icon or that forked a weapon's play-count history
+   into two entries over a casing slip (see api.js's computeProfileStats
+   and the events-page player snippet). Picking from this list makes that
+   whole class of mistake structurally impossible from the site editor. */
+function weaponPreviewHtml(name) {
+  if (!name) return '<span class="weapon-preview-empty">Pick a weapon…</span>';
+  const url = window.imgUrl ? window.imgUrl(name) : null;
+  return `
+    ${url ? `<img class="weapon-preview-icon" src="${url}" alt="">` : '<span class="weapon-preview-icon weapon-preview-icon-blank"></span>'}
+    <span class="weapon-preview-name">${escapeHtml(name)}</span>`;
+}
+
+function closeWeaponPopover() {
+  const pop = document.getElementById('weapon-popover');
+  if (pop) pop.remove();
+  document.removeEventListener('mousedown', handleWeaponPopoverOutsideClick, true);
+}
+
+function handleWeaponPopoverOutsideClick(e) {
+  const pop = document.getElementById('weapon-popover');
+  if (pop && !pop.contains(e.target)) closeWeaponPopover();
+}
+
+function openWeaponPopover(anchorBtn, cat, i, optionIndex) {
+  closeWeaponPopover();
+  const pop = document.createElement('div');
+  pop.id = 'weapon-popover';
+  pop.className = 'weapon-popover';
+  pop.innerHTML = `
+    <input type="text" class="weapon-popover-search" placeholder="Search weapons…" autocomplete="off">
+    <div class="weapon-popover-list"></div>`;
+  document.body.appendChild(pop);
+
+  const rect = anchorBtn.getBoundingClientRect();
+  pop.style.top = `${window.scrollY + rect.bottom + 6}px`;
+  pop.style.left = `${window.scrollX + rect.left}px`;
+
+  const allNames = Object.keys(window.ITEM_MAP || {}).sort((a, b) => a.localeCompare(b));
+  const list = pop.querySelector('.weapon-popover-list');
+  const renderList = (filter = '') => {
+    const q = filter.toLowerCase();
+    const matches = q ? allNames.filter(n => n.toLowerCase().includes(q)) : allNames;
+    if (matches.length === 0) {
+      list.innerHTML = '<p class="weapon-popover-empty">No matches</p>';
+      return;
+    }
+    // Capped — the full ~300-item list only ever needs to render fully
+    // once someone actually scrolls that far; anything typed narrows it
+    // down immediately anyway.
+    list.innerHTML = matches.slice(0, 60).map(n => `
+      <button type="button" class="weapon-popover-item" data-name="${escapeHtml(n)}">
+        <img src="${window.imgUrl(n)}" alt="">
+        <span>${escapeHtml(n)}</span>
+      </button>`).join('');
+
+    list.querySelectorAll('.weapon-popover-item').forEach(btn => btn.addEventListener('click', () => {
+      const item = draft.categories[cat].items[i];
+      const target = optionIndex !== undefined ? item.options[optionIndex] : item;
+      target.name = btn.dataset.name;
+      closeWeaponPopover();
+      renderDetail();
+    }));
+  };
+  renderList();
+  pop.querySelector('.weapon-popover-search').addEventListener('input', e => renderList(e.target.value));
+  pop.querySelector('.weapon-popover-search').focus();
+
+  setTimeout(() => document.addEventListener('mousedown', handleWeaponPopoverOutsideClick, true), 0);
+}
+
 /* ---------- build dropdown, filtered to the row's own role ---------- */
 function buildOptionsHtml(selectedTab, selectedIndex, cat) {
   let html = `<option value=""${selectedTab == null ? ' selected' : ''}>No build yet</option>`;
@@ -185,7 +260,7 @@ function renderMultiChoiceRow(cat, i, item) {
   const optionsHtml = item.options.map((opt, oi) => `
     <div class="comp-item-option" data-cat="${cat}" data-i="${i}" data-oi="${oi}">
       <button type="button" class="comp-item-emoji-pick comp-item-option-emoji-pick" title="Pick a server emoji">${emojiPreviewHtml(opt.emoji)}</button>
-      <input type="text" class="comp-item-name comp-item-option-name" value="${escapeHtml(opt.name)}" placeholder="Weapon name">
+      <button type="button" class="comp-item-weapon-btn comp-item-option-weapon-btn">${weaponPreviewHtml(opt.name)}</button>
       <select class="comp-item-build comp-item-option-build">${buildOptionsHtml(opt.buildTab, opt.buildId, cat)}</select>
       <button type="button" class="comp-item-option-remove" title="Remove this choice">${TRASH_ICON}</button>
     </div>`).join('');
@@ -208,7 +283,7 @@ function renderPartyColumn(p) {
       .map(({ item, i }) => item.options ? renderMultiChoiceRow(cat, i, item) : `
         <div class="comp-item-row" data-cat="${cat}" data-i="${i}">
           <button type="button" class="comp-item-emoji-pick" title="Pick a server emoji">${emojiPreviewHtml(item.emoji)}</button>
-          <input type="text" class="comp-item-name" value="${escapeHtml(item.name)}" placeholder="Weapon / role name">
+          <button type="button" class="comp-item-weapon-btn">${weaponPreviewHtml(item.name)}</button>
           <select class="comp-item-build">${buildOptionsHtml(item.buildTab, item.buildId, cat)}</select>
           <button type="button" class="btn comp-item-add-choice-btn" data-cat="${cat}" data-i="${i}" title="Give this line more than one acceptable weapon">+ Choice</button>
           <button type="button" class="comp-item-remove" title="Remove">${TRASH_ICON}</button>
@@ -280,9 +355,9 @@ function renderDetail() {
     const row = e.target.closest('.comp-item-row');
     openEmojiPopover(btn, row.dataset.cat, +row.dataset.i);
   }));
-  card.querySelectorAll('.comp-item-name:not(.comp-item-option-name)').forEach(inp => inp.addEventListener('input', e => {
-    const row = e.target.closest('.comp-item-row');
-    draft.categories[row.dataset.cat].items[+row.dataset.i].name = e.target.value;
+  card.querySelectorAll('.comp-item-weapon-btn:not(.comp-item-option-weapon-btn)').forEach(btn => btn.addEventListener('click', () => {
+    const row = btn.closest('.comp-item-row');
+    openWeaponPopover(btn, row.dataset.cat, +row.dataset.i);
   }));
   card.querySelectorAll('.comp-item-build:not(.comp-item-option-build)').forEach(sel => sel.addEventListener('change', e => {
     const row = e.target.closest('.comp-item-row');
@@ -322,9 +397,9 @@ function renderDetail() {
     const opt = e.target.closest('.comp-item-option');
     openEmojiPopover(btn, opt.dataset.cat, +opt.dataset.i, +opt.dataset.oi);
   }));
-  card.querySelectorAll('.comp-item-option-name').forEach(inp => inp.addEventListener('input', e => {
-    const opt = e.target.closest('.comp-item-option');
-    draft.categories[opt.dataset.cat].items[+opt.dataset.i].options[+opt.dataset.oi].name = e.target.value;
+  card.querySelectorAll('.comp-item-option-weapon-btn').forEach(btn => btn.addEventListener('click', () => {
+    const opt = btn.closest('.comp-item-option');
+    openWeaponPopover(btn, opt.dataset.cat, +opt.dataset.i, +opt.dataset.oi);
   }));
   card.querySelectorAll('.comp-item-option-build').forEach(sel => sel.addEventListener('change', e => {
     const opt = e.target.closest('.comp-item-option');

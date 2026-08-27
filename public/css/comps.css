@@ -89,6 +89,22 @@
 .emoji-preview-char { font-size: 15px; line-height: 1; }
 .emoji-preview-empty { color: var(--ink-faint); font-size: 14px; }
 
+/* Weapon picker button — replaces what used to be a free-text
+   <input class="comp-item-name">. Styled to match that input/select look
+   (see ".comp-item-row input, .comp-item-row select" below) but it's a
+   button that opens the searchable popover (.weapon-popover further
+   down), never a typed field — see openWeaponPopover(). */
+.comp-item-weapon-btn {
+  background: var(--surface); border: 1px solid var(--line-2); border-radius: 7px;
+  color: var(--ink); font: inherit; font-size: 12.5px; padding: 7px 9px; min-width: 0;
+  display: flex; align-items: center; gap: 7px; cursor: pointer; text-align: left; width: 100%;
+}
+.comp-item-weapon-btn:hover, .comp-item-weapon-btn:focus { outline: none; border-color: var(--accent); }
+.weapon-preview-icon { width: 18px; height: 18px; object-fit: contain; flex-shrink: 0; }
+.weapon-preview-icon-blank { border-radius: 3px; background: var(--surface-2); }
+.weapon-preview-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.weapon-preview-empty { color: var(--ink-faint); }
+
 /* Multi-choice line — a role line that accepts more than one weapon (see
    comps.js's item.options). Each option gets its own mini-row (emoji +
    name + build select + remove-this-choice), stacked under a shared
@@ -128,6 +144,28 @@
 .emoji-popover-item img { width: 20px; height: 20px; object-fit: contain; }
 .emoji-popover-clear { color: var(--ink-faint); font-size: 13px; font-weight: 700; }
 .emoji-popover-clear:hover { color: var(--dps); }
+
+/* Weapon picker popover — same shell as .emoji-popover above, but a
+   scrollable list instead of an icon grid since weapon names need room
+   to actually be read while searching. */
+.weapon-popover {
+  position: absolute; z-index: 50; width: 260px; max-height: 320px;
+  background: var(--surface-2); border: 1px solid var(--line-2); border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(0,0,0,.35); padding: 8px; display: flex; flex-direction: column; gap: 6px;
+}
+.weapon-popover-search {
+  background: var(--surface); border: 1px solid var(--line-2); border-radius: 6px;
+  color: var(--ink); font: inherit; font-size: 12px; padding: 6px 8px;
+}
+.weapon-popover-list { display: flex; flex-direction: column; gap: 2px; overflow-y: auto; max-height: 260px; }
+.weapon-popover-item {
+  background: transparent; border: 1px solid transparent; border-radius: 6px;
+  display: flex; align-items: center; gap: 8px; padding: 6px 7px; cursor: pointer;
+  color: var(--ink); font: inherit; font-size: 12.5px; text-align: left;
+}
+.weapon-popover-item:hover { border-color: var(--accent); background: var(--surface); }
+.weapon-popover-item img { width: 20px; height: 20px; object-fit: contain; flex-shrink: 0; }
+.weapon-popover-empty { color: var(--ink-faint); font-size: 12px; padding: 6px 4px; }
 
 .comp-add-item-btn {
   background: transparent; border: 1px dashed var(--line-2); border-radius: 7px;

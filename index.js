@@ -72,7 +72,6 @@ let events = {};
 
 // Temporary holding areas between a slash command / button and the modal submit
 const pendingCreations = new Map(); // /event create (manual composition path)
-const pendingCompActions = new Map(); // /comp create and /comp edit
 
 // ---------- category metadata ----------
 const CATEGORY_ORDER = comps.CATEGORY_ORDER; // ['Tank', 'Support', 'DPS', 'Healer', 'Battlemount']
@@ -906,35 +905,10 @@ client.on(Events.InteractionCreate, async (interaction) => {
       const sub = interaction.options.getSubcommand();
 
       if (sub === 'create') {
-        const pendingId = `${interaction.user.id}_${Date.now()}`;
-        pendingCompActions.set(pendingId, { mode: 'create' });
-        setTimeout(() => pendingCompActions.delete(pendingId), 15 * 60 * 1000);
-
-        const modal = new ModalBuilder()
-          .setCustomId(`comp_create_modal:${pendingId}`)
-          .setTitle('Create a saved composition');
-
-        const labelInput = new TextInputBuilder()
-          .setCustomId('label')
-          .setLabel('Label (name for this composition)')
-          .setStyle(TextInputStyle.Short)
-          .setPlaceholder('e.g. ZvZ Brawl, Gank 5s, Static Group')
-          .setRequired(true)
-          .setMaxLength(80);
-
-        const compositionInput = new TextInputBuilder()
-          .setCustomId('composition')
-          .setLabel('Composition (one item per line, see guide)')
-          .setStyle(TextInputStyle.Paragraph)
-          .setPlaceholder('Tank\n🛡️ 1H Mace\nDPS\n⚔️ Carving Sword\nHealer\n✨ Hallowfall: 2')
-          .setRequired(true)
-          .setMaxLength(4000);
-
-        modal.addComponents(
-          new ActionRowBuilder().addComponents(labelInput),
-          new ActionRowBuilder().addComponents(compositionInput)
-        );
-        await interaction.showModal(modal);
+        await interaction.reply({
+          content: `Saved compositions are now built on the website, with a searchable weapon picker so nothing gets typed by hand: **${comps.BUILDS_LINK}/comps.html**`,
+          ephemeral: true,
+        });
         return;
       }
 
@@ -955,35 +929,10 @@ client.on(Events.InteractionCreate, async (interaction) => {
           return;
         }
 
-        const pendingId = `${interaction.user.id}_${Date.now()}`;
-        pendingCompActions.set(pendingId, { mode: 'edit', key });
-        setTimeout(() => pendingCompActions.delete(pendingId), 15 * 60 * 1000);
-
-        const modal = new ModalBuilder()
-          .setCustomId(`comp_edit_modal:${pendingId}`)
-          .setTitle(`Edit "${saved.label}"`);
-
-        const labelInput = new TextInputBuilder()
-          .setCustomId('label')
-          .setLabel('Label (name for this composition)')
-          .setStyle(TextInputStyle.Short)
-          .setValue(saved.label)
-          .setRequired(true)
-          .setMaxLength(80);
-
-        const compositionInput = new TextInputBuilder()
-          .setCustomId('composition')
-          .setLabel('Composition (one item per line, see guide)')
-          .setStyle(TextInputStyle.Paragraph)
-          .setValue(comps.stringifyComposition(saved.categories))
-          .setRequired(true)
-          .setMaxLength(4000);
-
-        modal.addComponents(
-          new ActionRowBuilder().addComponents(labelInput),
-          new ActionRowBuilder().addComponents(compositionInput)
-        );
-        await interaction.showModal(modal);
+        await interaction.reply({
+          content: `Saved compositions are now edited on the website, with a searchable weapon picker so nothing gets typed by hand: **${comps.BUILDS_LINK}/comps.html**`,
+          ephemeral: true,
+        });
         return;
       }
 
@@ -1532,65 +1481,6 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
       await interaction.editReply({ embeds: [buildEmbed(event, interaction.guild)], components: buildButtons(event, interaction.guild) });
       await eventRender.createEventThread(message, event);
-      return;
-    }
-
-    // ----- modal submit: /comp create -----
-    if (interaction.isModalSubmit() && interaction.customId.startsWith('comp_create_modal:')) {
-      const pendingId = interaction.customId.split(':')[1];
-      const pending = pendingCompActions.get(pendingId);
-      if (!pending) {
-        await interaction.reply({ content: 'This form expired, please run /comp create again.', ephemeral: true });
-        return;
-      }
-      pendingCompActions.delete(pendingId);
-
-      const label = interaction.fields.getTextInputValue('label');
-      const compositionRaw = interaction.fields.getTextInputValue('composition');
-
-      const created = await comps.createComp({ label, compositionRaw, userId: interaction.user.id, guild: interaction.guild });
-      if (!created) {
-        await interaction.reply({
-          content:
-            "I couldn't find any items under a Tank/DPS/Healer/Support/Battlemount header — please run /comp create again and check the format.",
-          ephemeral: true,
-        });
-        return;
-      }
-
-      await interaction.reply({
-        content: `Saved composition **${created.label}** — use it next time with \`/event create comp:${created.label}\`.`,
-        ephemeral: true,
-      });
-      activityStore.log(logUser(interaction.user), 'comp.create', `Created composition "${created.label}"`);
-      return;
-    }
-
-    // ----- modal submit: /comp edit -----
-    if (interaction.isModalSubmit() && interaction.customId.startsWith('comp_edit_modal:')) {
-      const pendingId = interaction.customId.split(':')[1];
-      const pending = pendingCompActions.get(pendingId);
-      if (!pending) {
-        await interaction.reply({ content: 'This form expired, please run /comp edit again.', ephemeral: true });
-        return;
-      }
-      pendingCompActions.delete(pendingId);
-
-      const label = interaction.fields.getTextInputValue('label');
-      const compositionRaw = interaction.fields.getTextInputValue('composition');
-
-      const updated = await comps.updateComp({ key: pending.key, newLabel: label, compositionRaw, userId: interaction.user.id, guild: interaction.guild });
-      if (!updated) {
-        await interaction.reply({
-          content:
-            "I couldn't find any items under a Tank/DPS/Healer/Support/Battlemount header — please run /comp edit again and check the format.",
-          ephemeral: true,
-        });
-        return;
-      }
-
-      await interaction.reply({ content: `Updated saved composition **${updated.label}**.`, ephemeral: true });
-      activityStore.log(logUser(interaction.user), 'comp.update', `Updated composition "${updated.label}"`);
       return;
     }
 
