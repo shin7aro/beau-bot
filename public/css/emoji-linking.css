@@ -11,6 +11,12 @@
 }
 .weapon-search-input:focus { outline: none; border-color: var(--accent); }
 
+.el-hide-linked-toggle {
+  display: flex; align-items: center; gap: 7px; cursor: pointer;
+  font-size: 12px; color: var(--ink-dim); font-weight: 600; white-space: nowrap;
+}
+.el-hide-linked-toggle input[type="checkbox"] { accent-color: var(--accent); width: 14px; height: 14px; }
+
 /* .main is `display:flex` (row) by default (builds.css), which put el-intro
    and el-list side by side and let el-list's height run off the bottom of
    the fixed-height .app-shell with no way to scroll to it — the only fix

@@ -114,7 +114,10 @@ function weaponRowHtml(name) {
 function renderList(filter = '') {
   const allNames = (window.WEAPON_NAMES || []).slice().sort((a, b) => a.localeCompare(b));
   const q = filter.toLowerCase();
-  const matches = q ? allNames.filter(n => n.toLowerCase().includes(q)) : allNames;
+  let matches = q ? allNames.filter(n => n.toLowerCase().includes(q)) : allNames;
+
+  const hideLinked = document.getElementById('hide-linked-toggle')?.checked;
+  if (hideLinked) matches = matches.filter(n => !weaponEmojiMap[n]);
 
   const linkedCount = allNames.filter(n => weaponEmojiMap[n]).length;
   document.getElementById('linked-count-label').textContent = `${linkedCount} / ${allNames.length} linked`;
@@ -122,7 +125,7 @@ function renderList(filter = '') {
   const list = document.getElementById('weapon-emoji-list');
   list.innerHTML = matches.length
     ? matches.map(weaponRowHtml).join('')
-    : '<p class="el-empty">No matching weapons.</p>';
+    : `<p class="el-empty">${hideLinked ? 'All matching weapons are linked.' : 'No matching weapons.'}</p>`;
 
   list.querySelectorAll('.el-row-emoji-pick').forEach(btn => btn.addEventListener('click', () => {
     const row = btn.closest('.el-row');
@@ -157,6 +160,7 @@ async function init() {
   renderList();
 
   document.getElementById('weapon-search').addEventListener('input', e => renderList(e.target.value));
+  document.getElementById('hide-linked-toggle').addEventListener('change', () => renderList(document.getElementById('weapon-search').value));
 }
 
 init();
