@@ -4,7 +4,7 @@
    exposes window.SITE_AUTH, and renders a
    login/logout control into the header.
 ───────────────────────────────────────── */
-window.SITE_AUTH = { loggedIn: false, role: null, username: null, id: null, avatar: null, rosterAdmin: false };
+window.SITE_AUTH = { loggedIn: false, role: null, username: null, id: null, avatar: null, rosterAdmin: false, emojiAdmin: false };
 
 // Builds a Discord CDN avatar URL from a user id + the avatar hash Discord
 // gave us at login (stored in the session). Falls back to Discord's own
@@ -38,6 +38,7 @@ window.SITE_AUTH_READY = fetch('/auth/me', { credentials: 'same-origin' })
         id: data.user.id,
         avatar: data.user.avatar,
         rosterAdmin: Boolean(data.user.rosterAdmin),
+        emojiAdmin: Boolean(data.user.emojiAdmin),
       };
     }
     renderAuthControl();
@@ -56,6 +57,7 @@ function renderAuthControl() {
   document.querySelectorAll('.admin-only').forEach(el => el.classList.toggle('visible', role === 'admin'));
   document.querySelectorAll('.logged-in-only').forEach(el => el.classList.toggle('visible', loggedIn));
   document.querySelectorAll('.roster-admin-only').forEach(el => el.classList.toggle('visible', window.SITE_AUTH.rosterAdmin));
+  document.querySelectorAll('.emoji-admin-only').forEach(el => el.classList.toggle('visible', window.SITE_AUTH.emojiAdmin));
 
   const mount = document.getElementById('auth-control');
   if (!mount) return;
@@ -83,6 +85,7 @@ function renderAuthControl() {
         <a class="auth-menu-item" href="events.html">Events</a>
         ${(role === 'officer' || role === 'admin') ? '<a class="auth-menu-item" href="comps.html">Compositions</a>' : ''}
         ${role === 'admin' ? '<a class="auth-menu-item" href="history.html">History</a>' : ''}
+        ${window.SITE_AUTH.emojiAdmin ? '<a class="auth-menu-item" href="emoji-linking.html">Emoji Linking</a>' : ''}
         <div class="auth-menu-divider"></div>
         <a class="auth-menu-item auth-menu-danger" href="/auth/logout">Log out</a>
       </div>
@@ -110,3 +113,4 @@ function escapeAttr(s) {
 function isOfficerOrAdmin() { return window.SITE_AUTH.role === 'officer' || window.SITE_AUTH.role === 'admin'; }
 function isAdmin() { return window.SITE_AUTH.role === 'admin'; }
 function isLoggedIn() { return window.SITE_AUTH.loggedIn; }
+function isEmojiAdmin() { return window.SITE_AUTH.emojiAdmin; }

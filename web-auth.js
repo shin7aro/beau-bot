@@ -278,6 +278,37 @@ function requireRosterAdmin(req, res, next) {
   next();
 }
 
+// ── EMOJI LINKING PAGE ──────────────────────────────────────────────────
+// One person, full stop — same shape as ROSTER_ADMIN above (ID list wins if
+// set, name fallback otherwise), but narrower: this gates the secret
+// "Emoji Linking" nav page (public/emoji-linking.html) that maps each of
+// the 136 weapons to a bot emoji, plus the write side of the
+// /api/weapon-emojis route it saves to. Reading that map (so the comp
+// editor can auto-resolve an emoji when a weapon's picked) still only
+// needs requireOfficer — see api.js.
+//
+// Prefer EMOJI_ADMIN_IDS (comma-separated Discord user IDs) once you have
+// them, for the same reason ROSTER_ADMIN_IDS is preferred above.
+const EMOJI_ADMIN_IDS = (process.env.EMOJI_ADMIN_IDS || '')
+  .split(',')
+  .map((s) => s.trim())
+  .filter(Boolean);
+
+const EMOJI_ADMIN_NAMES = ['Shin7aro 👑'];
+
+function isEmojiAdmin(user) {
+  if (!user) return false;
+  if (EMOJI_ADMIN_IDS.length > 0) return EMOJI_ADMIN_IDS.includes(user.id);
+  return EMOJI_ADMIN_NAMES.includes(user.username);
+}
+
+function requireEmojiAdmin(req, res, next) {
+  if (!isEmojiAdmin(req.user)) {
+    return res.status(403).json({ error: 'Only Shin7aro can do that.' });
+  }
+  next();
+}
+
 module.exports = {
   COOKIE_NAME,
   setClient,
@@ -294,4 +325,6 @@ module.exports = {
   requireAdmin,
   isRosterAdmin,
   requireRosterAdmin,
+  isEmojiAdmin,
+  requireEmojiAdmin,
 };

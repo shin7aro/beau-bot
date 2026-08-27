@@ -145,6 +145,8 @@ img { max-width: 100%; display: block; }
 .admin-only.visible { display: inline-flex !important; }
 .roster-admin-only { display: none !important; }
 .roster-admin-only.visible { display: inline-flex !important; }
+.emoji-admin-only { display: none !important; }
+.emoji-admin-only.visible { display: inline-flex !important; }
 
 .header-actions { margin-left: auto; flex-shrink: 0; display: flex; align-items: center; gap: 10px; }
 #auth-control { display: flex; align-items: center; gap: 10px; }

@@ -294,9 +294,18 @@ const ITEM_MAP = {
   "Roasted Puremist Snapper": "T7_MEAL_ROAST_FISH",
 };
 
+// Weapons only (136 entries) — same derivation as public/js/item-map.js's
+// window.WEAPON_NAMES (see that file for why: MAIN_/2H_ codes are weapons,
+// OFF_ is offhands, everything else is armor/potion/food). Used by the
+// /api/weapon-emojis route to reject anything that isn't actually a
+// weapon, since offhands etc. were never meant to have a per-line emoji.
+const WEAPON_NAMES = Object.keys(ITEM_MAP).filter((name) =>
+  /^T\d+_(MAIN|2H)_/.test(ITEM_MAP[name])
+);
+
 function itemImageUrl(name) {
   const id = ITEM_MAP[name];
   return id ? `https://render.albiononline.com/v1/item/${id}.png?quality=1` : null;
 }
 
-module.exports = { ITEM_MAP, itemImageUrl };
+module.exports = { ITEM_MAP, WEAPON_NAMES, itemImageUrl };

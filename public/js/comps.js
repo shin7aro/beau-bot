@@ -8,7 +8,11 @@ const TAB_LABELS = { brawl: 'Brawl', gank: 'Gank', kite: 'Kite & Clap', brawlcla
 
 let allComps = [];       // [{ key, label, categories, updatedAt, ... }]
 let buildOptions = [];   // [{ tab, index, role, weapon }]
-let serverEmojis = [];   // [{ id, name, animated, tag, url }] from /api/discord-emojis
+let weaponEmojiMap = {}; // { "Broadsword": "<:tag:id>", ... } from /api/weapon-emojis —
+                         // maintained on the separate (Shin7aro-only) Emoji Linking
+                         // page, not editable here. A line's emoji is set automatically
+                         // the moment a weapon's picked below (see openWeaponPopover);
+                         // there's no per-line emoji picker in this editor anymore.
 let editingKey = null;   // null = viewing/creating, otherwise the comp being edited
 let draft = null;        // working copy of the comp currently shown in the editor
 
@@ -32,10 +36,10 @@ async function api(path, opts) {
 }
 
 async function loadAll() {
-  [allComps, buildOptions, serverEmojis] = await Promise.all([
+  [allComps, buildOptions, weaponEmojiMap] = await Promise.all([
     api('/api/comps'),
     api('/api/comps-build-options'),
-    api('/api/discord-emojis').catch(() => []),
+    api('/api/weapon-emojis').catch(() => ({})),
   ]);
   renderCompSelect();
 }
@@ -91,73 +95,9 @@ function startNewComp() {
   renderDetail();
 }
 
-/* ---------- emoji picker (picker only — no typed shortcode) ---------- */
-function emojiPreviewHtml(value) {
-  if (!value) return '<span class="emoji-preview-empty">+</span>';
-  const m = value.match(/^<a?:(\w+):(\d+)>$/);
-  if (m) {
-    const known = serverEmojis.find(e => e.id === m[2]);
-    const url = known ? known.url : `https://cdn.discordapp.com/emojis/${m[2]}.${value.startsWith('<a:') ? 'gif' : 'png'}?size=32`;
-    return `<img class="emoji-preview-img" src="${url}" alt="${escapeHtml(m[1])}">`;
-  }
-  return `<span class="emoji-preview-char">${escapeHtml(value)}</span>`;
-}
-
-function closeEmojiPopover() {
-  const pop = document.getElementById('emoji-popover');
-  if (pop) pop.remove();
-  document.removeEventListener('mousedown', handleEmojiPopoverOutsideClick, true);
-}
-
-function handleEmojiPopoverOutsideClick(e) {
-  const pop = document.getElementById('emoji-popover');
-  if (pop && !pop.contains(e.target)) closeEmojiPopover();
-}
-
-function openEmojiPopover(anchorBtn, cat, i, optionIndex) {
-  closeEmojiPopover();
-  const pop = document.createElement('div');
-  pop.id = 'emoji-popover';
-  pop.className = 'emoji-popover';
-  pop.innerHTML = `
-    <input type="text" class="emoji-popover-search" placeholder="Search emoji…" autocomplete="off">
-    <div class="emoji-popover-grid"></div>
-    ${serverEmojis.length === 0 ? '<p class="section-sub" style="padding:0 2px">No custom server emojis found — check the bot has emoji permissions and GUILD_ID is set.</p>' : ''}`;
-  document.body.appendChild(pop);
-
-  const rect = anchorBtn.getBoundingClientRect();
-  pop.style.top = `${window.scrollY + rect.bottom + 6}px`;
-  pop.style.left = `${window.scrollX + rect.left}px`;
-
-  const grid = pop.querySelector('.emoji-popover-grid');
-  const renderGrid = (filter = '') => {
-    const q = filter.toLowerCase();
-    const list = serverEmojis.filter(e => !q || e.name.toLowerCase().includes(q));
-    const clearTile = `<button type="button" class="emoji-popover-item emoji-popover-clear" data-tag="" title="No emoji">✕</button>`;
-    grid.innerHTML = clearTile + list.map(e =>
-      `<button type="button" class="emoji-popover-item" data-tag="${escapeHtml(e.tag)}" title="${escapeHtml(e.name)}">
-         <img src="${e.url}" alt="${escapeHtml(e.name)}">
-       </button>`
-    ).join('');
-
-    grid.querySelectorAll('.emoji-popover-item').forEach(btn => btn.addEventListener('click', () => {
-      const item = draft.categories[cat].items[i];
-      const target = optionIndex !== undefined ? item.options[optionIndex] : item;
-      target.emoji = btn.dataset.tag || null;
-      closeEmojiPopover();
-      renderDetail();
-    }));
-  };
-  renderGrid();
-  pop.querySelector('.emoji-popover-search').addEventListener('input', e => renderGrid(e.target.value));
-  pop.querySelector('.emoji-popover-search').focus();
-
-  setTimeout(() => document.addEventListener('mousedown', handleEmojiPopoverOutsideClick, true), 0);
-}
-
 /* ---------- weapon picker (searchable — replaces free-text weapon entry) ----------
-   Same shape as the emoji picker above: a small popover with a search box
-   over a filtered, clickable list. The list is sourced straight from
+   A small popover with a search box over a filtered, clickable list. The
+   list is sourced straight from
    item-map.js's own ITEM_MAP, so a selection is always a real item — the
    free-text field this replaces was the actual root cause of names that
    never resolved to an icon or that forked a weapon's play-count history
@@ -224,6 +164,11 @@ function openWeaponPopover(anchorBtn, cat, i, optionIndex) {
       const item = draft.categories[cat].items[i];
       const target = optionIndex !== undefined ? item.options[optionIndex] : item;
       target.name = btn.dataset.name;
+      // Auto-linked from the weapon->emoji map the (Shin7aro-only) Emoji
+      // Linking page maintains — no per-line emoji picker here anymore.
+      // A weapon that hasn't been linked yet on that page just saves with
+      // no emoji, same as before that page existed.
+      target.emoji = weaponEmojiMap[btn.dataset.name] || null;
       closeWeaponPopover();
       renderDetail();
     }));
@@ -264,7 +209,6 @@ function buildOptionsHtml(selectedTab, selectedIndex, cat) {
 function renderMultiChoiceRow(cat, i, item) {
   const optionsHtml = item.options.map((opt, oi) => `
     <div class="comp-item-option" data-cat="${cat}" data-i="${i}" data-oi="${oi}">
-      <button type="button" class="comp-item-emoji-pick comp-item-option-emoji-pick" title="Pick a server emoji">${emojiPreviewHtml(opt.emoji)}</button>
       <button type="button" class="comp-item-weapon-btn comp-item-option-weapon-btn">${weaponPreviewHtml(opt.name)}</button>
       <select class="comp-item-build comp-item-option-build">${buildOptionsHtml(opt.buildTab, opt.buildId, cat)}</select>
       <button type="button" class="comp-item-option-remove" title="Remove this choice">${TRASH_ICON}</button>
@@ -287,7 +231,6 @@ function renderPartyColumn(p) {
       .filter(({ item }) => (item.party || 0) === p)
       .map(({ item, i }) => item.options ? renderMultiChoiceRow(cat, i, item) : `
         <div class="comp-item-row" data-cat="${cat}" data-i="${i}">
-          <button type="button" class="comp-item-emoji-pick" title="Pick a server emoji">${emojiPreviewHtml(item.emoji)}</button>
           <button type="button" class="comp-item-weapon-btn">${weaponPreviewHtml(item.name)}</button>
           <select class="comp-item-build">${buildOptionsHtml(item.buildTab, item.buildId, cat)}</select>
           <button type="button" class="btn comp-item-add-choice-btn" data-cat="${cat}" data-i="${i}" title="Give this line more than one acceptable weapon">+ Choice</button>
@@ -352,14 +295,10 @@ function renderDetail() {
       <button class="btn" id="comp-save-btn"><span class="btn-label">${editingKey ? 'Save changes' : 'Create composition'}</span></button>
     </div>`;
 
-  // Line-level controls only (single-choice rows) — option-level emoji/name
+  // Line-level controls only (single-choice rows) — option-level name
   // controls inside a multi-choice row share some of the same classes for
   // consistent styling, so they're explicitly excluded here and wired
   // separately below.
-  card.querySelectorAll('.comp-item-emoji-pick:not(.comp-item-option-emoji-pick)').forEach(btn => btn.addEventListener('click', e => {
-    const row = e.target.closest('.comp-item-row');
-    openEmojiPopover(btn, row.dataset.cat, +row.dataset.i);
-  }));
   card.querySelectorAll('.comp-item-weapon-btn:not(.comp-item-option-weapon-btn)').forEach(btn => btn.addEventListener('click', () => {
     const row = btn.closest('.comp-item-row');
     openWeaponPopover(btn, row.dataset.cat, +row.dataset.i);
@@ -398,10 +337,6 @@ function renderDetail() {
   }));
 
   // Option-level controls inside a multi-choice line.
-  card.querySelectorAll('.comp-item-option-emoji-pick').forEach(btn => btn.addEventListener('click', e => {
-    const opt = e.target.closest('.comp-item-option');
-    openEmojiPopover(btn, opt.dataset.cat, +opt.dataset.i, +opt.dataset.oi);
-  }));
   card.querySelectorAll('.comp-item-option-weapon-btn').forEach(btn => btn.addEventListener('click', () => {
     const opt = btn.closest('.comp-item-option');
     openWeaponPopover(btn, opt.dataset.cat, +opt.dataset.i, +opt.dataset.oi);

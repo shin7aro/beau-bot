@@ -20,6 +20,7 @@ const itemMap = require('./item-map');
 const lootStore = require('./loot-store');
 const lootRender = require('./loot-render');
 const rosterStore = require('./roster-store');
+const weaponEmojiStore = require('./weapon-emoji-store');
 
 const router = express.Router();
 router.use(cookieParser());
@@ -95,11 +96,17 @@ router.get('/auth/logout', (req, res) => {
 
 router.get('/auth/me', (req, res) => {
   if (!req.user) return res.json({ user: null });
-  // Computed fresh from the current ROSTER_ADMIN_IDS/name list on every
-  // call rather than baked into the session JWT, so revoking/granting
-  // roster-admin access takes effect immediately without forcing a
-  // re-login.
-  res.json({ user: { ...req.user, rosterAdmin: auth.isRosterAdmin(req.user) } });
+  // Computed fresh from the current ROSTER_ADMIN_IDS/name list (and same
+  // for EMOJI_ADMIN_IDS/name below) on every call rather than baked into
+  // the session JWT, so revoking/granting access takes effect immediately
+  // without forcing a re-login.
+  res.json({
+    user: {
+      ...req.user,
+      rosterAdmin: auth.isRosterAdmin(req.user),
+      emojiAdmin: auth.isEmojiAdmin(req.user),
+    },
+  });
 });
 
 // ── BUILDS ──────────────────────────────────────────────────────────────
@@ -242,6 +249,28 @@ router.get('/api/discord-emojis', auth.requireOfficer, async (req, res) => {
     console.error(err);
     res.status(500).json({ error: 'Failed to load weapon emojis.' });
   }
+});
+
+// ── WEAPON EMOJI LINKS ──────────────────────────────────────────────────
+// The persistent weapon-name -> emoji map the (Shin7aro-only) Emoji
+// Linking page maintains. Read side is any officer/admin, same as
+// /api/discord-emojis above — the comp editor loads this on every page
+// visit to auto-fill a line's emoji the moment a weapon's picked, so it no
+// longer needs its own per-line emoji picker. Write side is
+// requireEmojiAdmin, not requireAdmin — this is intentionally narrower
+// than the site's admin role.
+
+router.get('/api/weapon-emojis', auth.requireOfficer, async (req, res) => {
+  res.json(await weaponEmojiStore.loadWeaponEmojis());
+});
+
+router.put('/api/weapon-emojis/:weapon', auth.requireEmojiAdmin, async (req, res) => {
+  const weapon = decodeURIComponent(req.params.weapon);
+  if (!itemMap.WEAPON_NAMES.includes(weapon)) return res.status(400).json({ error: 'Unknown weapon.' });
+  const emoji = (req.body && typeof req.body.emoji === 'string' && req.body.emoji.trim()) || null;
+  const map = await weaponEmojiStore.setWeaponEmoji(weapon, emoji);
+  activityStore.log(req.user, 'weapon-emoji.update', `${emoji ? 'Linked' : 'Unlinked'} emoji for "${weapon}"`);
+  res.json(map);
 });
 
 // ── HOME PAGE CONTENT ─────────────────────────────────────────────────────

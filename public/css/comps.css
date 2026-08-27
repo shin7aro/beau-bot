@@ -58,12 +58,13 @@
 .comp-category-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; gap: 8px; }
 .comp-items-list { display: flex; flex-direction: column; gap: 6px; }
 
-/* Item row: emoji picker, name, build select, remove — the numeric party
-   field and the typed emoji-code box are gone; party is now which column
-   the row lives in, and the emoji can only be set via the picker below. */
+/* Item row: name, build select, remove — the numeric party field and the
+   typed emoji-code box are both gone; party is now which column the row
+   lives in, and the emoji is looked up automatically from the weapon name
+   (see comps.js's weaponEmojiMap) rather than picked per line here. */
 .comp-item-row {
   display: grid;
-  grid-template-columns: 34px 1.3fr 1.5fr auto auto;
+  grid-template-columns: 1.3fr 1.5fr auto auto;
   gap: 8px; align-items: center;
 }
 .comp-item-add-choice-btn { white-space: nowrap; font-size: 11.5px; padding: 0 10px; height: 32px; }
@@ -79,12 +80,6 @@
 }
 .comp-item-remove:hover { color: var(--dps); border-color: var(--dps); }
 
-.comp-item-emoji-pick {
-  background: var(--surface); border: 1px solid var(--line-2); border-radius: 7px;
-  width: 34px; height: 32px; display: flex; align-items: center; justify-content: center;
-  cursor: pointer; padding: 0; flex-shrink: 0;
-}
-.comp-item-emoji-pick:hover { border-color: var(--accent); }
 .emoji-preview-img { width: 18px; height: 18px; object-fit: contain; }
 .emoji-preview-char { font-size: 15px; line-height: 1; }
 .emoji-preview-empty { color: var(--ink-faint); font-size: 14px; }
@@ -106,15 +101,15 @@
 .weapon-preview-empty { color: var(--ink-faint); }
 
 /* Multi-choice line — a role line that accepts more than one weapon (see
-   comps.js's item.options). Each option gets its own mini-row (emoji +
-   name + build select + remove-this-choice), stacked under a shared
+   comps.js's item.options). Each option gets its own mini-row (name +
+   build select + remove-this-choice), stacked under a shared
    "+ Add choice" link, with the normal "remove whole line" button still
    on the far right — each option can link its own build, same as a
    single-choice line's build select. */
 .comp-item-row-multi { display: flex; align-items: flex-start; gap: 8px; }
 .comp-item-options { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
 .comp-item-option {
-  display: grid; grid-template-columns: 34px 1fr 1.3fr auto; gap: 8px; align-items: center;
+  display: grid; grid-template-columns: 1fr 1.3fr auto; gap: 8px; align-items: center;
 }
 .comp-item-option-remove {
   background: transparent; border: 1px solid var(--line-2); border-radius: 7px;
@@ -124,6 +119,11 @@
 .comp-item-option-remove:hover { color: var(--dps); border-color: var(--dps); }
 .comp-item-add-option-btn { align-self: flex-start; font-size: 11.5px; padding: 0 10px; height: 30px; }
 
+/* Emoji popover — this comp editor no longer opens it itself (a line's
+   emoji is now auto-filled from the weapon->emoji map on emoji-linking.html
+   the moment a weapon's picked, see comps.js), but emoji-linking.css links
+   this stylesheet to reuse these classes rather than duplicating them, so
+   they stay here. */
 .emoji-popover {
   position: absolute; z-index: 50; width: 220px; max-height: 300px;
   background: var(--surface-2); border: 1px solid var(--line-2); border-radius: 10px;
