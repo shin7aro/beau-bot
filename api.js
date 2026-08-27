@@ -21,6 +21,7 @@ const lootStore = require('./loot-store');
 const lootRender = require('./loot-render');
 const rosterStore = require('./roster-store');
 const weaponEmojiStore = require('./weapon-emoji-store');
+const weaponAliasStore = require('./weapon-alias-store');
 
 const router = express.Router();
 router.use(cookieParser());
@@ -270,6 +271,29 @@ router.put('/api/weapon-emojis/:weapon', auth.requireEmojiAdmin, async (req, res
   const emoji = (req.body && typeof req.body.emoji === 'string' && req.body.emoji.trim()) || null;
   const map = await weaponEmojiStore.setWeaponEmoji(weapon, emoji);
   activityStore.log(req.user, 'weapon-emoji.update', `${emoji ? 'Linked' : 'Unlinked'} emoji for "${weapon}"`);
+  res.json(map);
+});
+
+// ── WEAPON DISPLAY-NAME ALIASES ─────────────────────────────────────────
+// The persistent weapon-name -> short custom display-name map the (same
+// Shin7aro-only) Emoji Linking page maintains — lets a weapon show up as
+// whatever short name guild members actually call it ("GA" for "Great
+// Arcane Staff") wherever its name is shown in the comp editor and on
+// event pages, instead of the official in-game name. Read side is public
+// (no auth) — unlike /api/weapon-emojis, this needs to render correctly
+// on the events page for anyone viewing it, not just officers. Write side
+// is requireEmojiAdmin, same as the emoji map above.
+
+router.get('/api/weapon-aliases', async (req, res) => {
+  res.json(await weaponAliasStore.loadWeaponAliases());
+});
+
+router.put('/api/weapon-aliases/:weapon', auth.requireEmojiAdmin, async (req, res) => {
+  const weapon = decodeURIComponent(req.params.weapon);
+  if (!itemMap.WEAPON_NAMES.includes(weapon)) return res.status(400).json({ error: 'Unknown weapon.' });
+  const alias = (req.body && typeof req.body.alias === 'string' && req.body.alias.trim().slice(0, 24)) || null;
+  const map = await weaponAliasStore.setWeaponAlias(weapon, alias);
+  activityStore.log(req.user, 'weapon-alias.update', alias ? `Renamed "${weapon}" to "${alias}"` : `Cleared custom name for "${weapon}"`);
   res.json(map);
 });
 

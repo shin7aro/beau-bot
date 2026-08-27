@@ -75,6 +75,12 @@ async function init() {
   document.getElementById('event-back-btn').addEventListener('click', closeDetail);
   document.getElementById('new-event-btn').addEventListener('click', () => openEventForm('create'));
 
+  // Weapon short-name aliases from the (Shin7aro-only) Emoji Linking page —
+  // public read, so this loads regardless of role; a weapon with no alias
+  // just falls back to its official name (see item-map.js's
+  // weaponDisplayName).
+  window.WEAPON_ALIASES = await api('/api/weapon-aliases').catch(() => ({}));
+
   await loadEvents();
 
   const hashId = location.hash.startsWith('#e/') ? location.hash.slice(3) : null;
@@ -225,7 +231,7 @@ function renderInfoCol(e, canManage) {
     </div>
     ${mySignedRow ? `
       <div class="event-your-signup">
-        <div>You're signed up as <strong>${escapeHtml(mySignedRow.category)}</strong> — ${emojiToHtml(mySignedChoice && mySignedChoice.emoji, { size: 14 })} ${escapeHtml((mySignedChoice && mySignedChoice.name) || 'Any')}</div>
+        <div>You're signed up as <strong>${escapeHtml(mySignedRow.category)}</strong> — ${emojiToHtml(mySignedChoice && mySignedChoice.emoji, { size: 14 })} ${escapeHtml((mySignedChoice && mySignedChoice.name && window.weaponDisplayName ? window.weaponDisplayName(mySignedChoice.name) : mySignedChoice && mySignedChoice.name) || 'Any')}</div>
         ${!e.closed ? `<button class="event-action-btn danger" id="event-leave-btn">Leave slot</button>` : ''}
       </div>` : ''}
     ${canManage ? `
@@ -276,7 +282,7 @@ function renderRosterCol(e) {
           <span class="role-pill role-${cat.toLowerCase()}">${escapeHtml(cat)}</span>
           <span style="color:var(--ink-faint);font-size:12px">${c.signedCount}/${c.capacity} filled</span>
           ${!e.closed && c.signedCount < c.capacity ? `
-            <select class="event-quota-select">${c.weaponOptions.map(w => `<option value="${escapeHtml(w)}">${escapeHtml(w)}</option>`).join('')}</select>
+            <select class="event-quota-select">${c.weaponOptions.map(w => `<option value="${escapeHtml(w)}">${escapeHtml(window.weaponDisplayName ? window.weaponDisplayName(w) : w)}</option>`).join('')}</select>
             <button class="event-action-btn event-quota-signup-btn">Sign up</button>` : ''}
         </div>`).join('')}
     </div>` : '';
@@ -339,7 +345,7 @@ function renderRosterRow(e, row) {
       const optIcon = o.iconUrl
         ? `<img class="event-row-pill-icon" src="${escapeHtml(o.iconUrl)}" alt="" loading="lazy">`
         : `<span class="event-row-pill-icon-fallback">${emojiToHtml(o.emoji, { size: 15 })}</span>`;
-      const label = `${optIcon}<span class="event-row-name-text">${escapeHtml(o.name)}</span>`;
+      const label = `${optIcon}<span class="event-row-name-text">${escapeHtml(window.weaponDisplayName ? window.weaponDisplayName(o.name) : o.name)}</span>`;
       return `<button type="button" class="event-row-option-pill event-row-build-trigger role-${row.category.toLowerCase()}" data-cat="${escapeHtml(row.category)}" data-item-index="${row.itemIndex}" data-option-index="${oi}" title="View linked build">${label}</button>`;
     }).join('');
     namePill = `<div class="event-row-name-pill-group">${optionPills}</div>`;
@@ -350,7 +356,7 @@ function renderRosterRow(e, row) {
     const icon = row.iconUrl
       ? `<img class="event-row-pill-icon" src="${escapeHtml(row.iconUrl)}" alt="" loading="lazy">`
       : `<span class="event-row-pill-icon-fallback">${emojiToHtml(row.emoji, { size: 15 })}</span>`;
-    const nameLabel = `${icon}<span class="event-row-name-text">${escapeHtml(row.name || 'Any')}</span>`;
+    const nameLabel = `${icon}<span class="event-row-name-text">${escapeHtml((row.name && window.weaponDisplayName ? window.weaponDisplayName(row.name) : row.name) || 'Any')}</span>`;
     namePill = hasItemIndex
       ? `<button type="button" class="event-row-name-pill event-row-build-trigger role-${row.category.toLowerCase()}" data-cat="${escapeHtml(row.category)}" data-item-index="${row.itemIndex}" title="View linked build">${nameLabel}</button>`
       : `<span class="event-row-name-pill role-${row.category.toLowerCase()}">${nameLabel}</span>`;
@@ -758,7 +764,7 @@ async function showPlayerPanel(cat, itemIndexStr, userId) {
           <a href="${profileHref}" class="event-player-name">${escapeHtml(displayName)}</a>
         </div>
       </div>
-      ${row ? `<div class="event-player-role"><span class="role-pill role-${cat.toLowerCase()}">${escapeHtml(cat)}</span> ${escapeHtml(signedWeapon || 'Any')}</div>` : ''}
+      ${row ? `<div class="event-player-role"><span class="role-pill role-${cat.toLowerCase()}">${escapeHtml(cat)}</span> ${escapeHtml((signedWeapon && window.weaponDisplayName ? window.weaponDisplayName(signedWeapon) : signedWeapon) || 'Any')}</div>` : ''}
       <p class="event-details-empty">Loading profile…</p>
     </div>`;
 

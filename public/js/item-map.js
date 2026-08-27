@@ -306,6 +306,19 @@ window.WEAPON_NAMES = Object.keys(window.ITEM_MAP).filter(name =>
   /^T\d+_(MAIN|2H)_/.test(window.ITEM_MAP[name])
 );
 
+// Populated by whichever page needs it (comps.js, events.js,
+// emoji-linking.js) from GET /api/weapon-aliases at load time — a
+// Shin7aro-only "Emoji Linking" page lets each weapon get an optional
+// short custom display name (e.g. "GA" for "Great Arcane Staff"), since
+// that's what guild members actually call it. This never touches
+// ITEM_MAP itself: icon lookups and all stored comp/event data still key
+// off the official name — this only decides what text renders for it.
+// Pages that don't fetch it just get the official name back unchanged.
+window.WEAPON_ALIASES = {};
+window.weaponDisplayName = function weaponDisplayName(name) {
+  return (window.WEAPON_ALIASES && window.WEAPON_ALIASES[name]) || name;
+};
+
 // Assigned directly as a window property (not a bare top-level function
 // declaration) so it doesn't create its own global "imgUrl" binding — that
 // would collide with the `const imgUrl = window.imgUrl;` alias builds.js

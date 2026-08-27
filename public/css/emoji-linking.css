@@ -33,7 +33,7 @@
 
 .el-row {
   display: grid;
-  grid-template-columns: 34px 1fr 34px;
+  grid-template-columns: 34px 1fr 34px 34px;
   gap: 10px; align-items: center;
   padding: 8px 10px; border-radius: 8px;
   background: var(--surface-2); border: 1px solid var(--line);
@@ -44,6 +44,15 @@
 .el-row-icon-blank { border-radius: 3px; background: var(--surface-3); }
 
 .el-row-name { font-size: 13px; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.el-row-alias { color: var(--accent); font-size: 12px; margin-left: 6px; }
+
+.el-row-rename {
+  background: var(--surface); border: 1px solid var(--line-2); border-radius: 7px;
+  width: 34px; height: 32px; display: flex; align-items: center; justify-content: center;
+  cursor: pointer; padding: 0; flex-shrink: 0; color: var(--ink-faint); font-size: 13px;
+}
+.el-row-rename:hover { border-color: var(--accent); color: var(--ink); }
+.el-row-rename.el-row-rename-set { color: var(--accent); border-color: var(--moss-dim); }
 
 .el-row-emoji-pick {
   background: var(--surface); border: 1px solid var(--line-2); border-radius: 7px;
@@ -51,6 +60,28 @@
   cursor: pointer; padding: 0; flex-shrink: 0;
 }
 .el-row-emoji-pick:hover { border-color: var(--accent); }
+
+/* Rename popover — same shell tokens as .emoji-popover / .weapon-popover
+   in comps.css (not loaded on this page, so redeclared here). */
+.rename-popover {
+  position: absolute; z-index: 50; width: 220px;
+  background: var(--surface-2); border: 1px solid var(--line-2); border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(0,0,0,.35); padding: 10px; display: flex; flex-direction: column; gap: 8px;
+}
+.rename-popover-label { font-size: 11px; color: var(--ink-faint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rename-popover-input {
+  background: var(--surface); border: 1px solid var(--line-2); border-radius: 6px;
+  color: var(--ink); font: inherit; font-size: 13px; padding: 7px 9px;
+}
+.rename-popover-input:focus { outline: none; border-color: var(--accent); }
+.rename-popover-actions { display: flex; justify-content: space-between; gap: 8px; }
+.rename-popover-actions button {
+  background: transparent; border: 1px solid var(--line-2); border-radius: 6px;
+  color: var(--ink-dim); font: inherit; font-size: 12px; padding: 6px 10px; cursor: pointer;
+}
+.rename-popover-clear:hover { border-color: var(--dps); color: var(--dps); }
+.rename-popover-save { border-color: var(--moss-dim) !important; color: var(--accent) !important; }
+.rename-popover-save:hover { border-color: var(--accent) !important; }
 
 .el-empty { color: var(--ink-faint); font-size: 13px; padding: 20px 28px; }
 

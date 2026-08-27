@@ -9,6 +9,7 @@
 ───────────────────────────────────────── */
 let serverEmojis = [];   // [{ id, name, animated, tag, url }] from /api/discord-emojis
 let weaponEmojiMap = {}; // { "Broadsword": "<:tag:id>", ... } from /api/weapon-emojis
+let weaponAliasMap = {}; // { "Great Arcane Staff": "GA", ... } from /api/weapon-aliases
 
 function escapeHtml(s) {
   return String(s || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -99,14 +100,76 @@ function openEmojiPopover(anchorBtn, weaponName) {
   setTimeout(() => document.addEventListener('mousedown', handleEmojiPopoverOutsideClick, true), 0);
 }
 
+/* ---------- rename (custom display name) popover ---------- */
+function closeRenamePopover() {
+  const pop = document.getElementById('rename-popover');
+  if (pop) pop.remove();
+  document.removeEventListener('mousedown', handleRenamePopoverOutsideClick, true);
+}
+
+function handleRenamePopoverOutsideClick(e) {
+  const pop = document.getElementById('rename-popover');
+  if (pop && !pop.contains(e.target)) closeRenamePopover();
+}
+
+function openRenamePopover(anchorBtn, weaponName) {
+  closeEmojiPopover();
+  closeRenamePopover();
+  const pop = document.createElement('div');
+  pop.id = 'rename-popover';
+  pop.className = 'rename-popover';
+  const current = weaponAliasMap[weaponName] || '';
+  pop.innerHTML = `
+    <label class="rename-popover-label">Short name for "${escapeHtml(weaponName)}"</label>
+    <input type="text" class="rename-popover-input" placeholder="e.g. GA" maxlength="24" value="${escapeHtml(current)}" autocomplete="off">
+    <div class="rename-popover-actions">
+      <button type="button" class="rename-popover-clear">Clear</button>
+      <button type="button" class="rename-popover-save">Save</button>
+    </div>`;
+  document.body.appendChild(pop);
+
+  const rect = anchorBtn.getBoundingClientRect();
+  pop.style.top = `${window.scrollY + rect.bottom + 6}px`;
+  pop.style.left = `${window.scrollX + rect.left}px`;
+
+  const input = pop.querySelector('.rename-popover-input');
+  const save = async (alias) => {
+    try {
+      weaponAliasMap = await api(`/api/weapon-aliases/${encodeURIComponent(weaponName)}`, {
+        method: 'PUT',
+        body: JSON.stringify({ alias }),
+      });
+      closeRenamePopover();
+      renderList(document.getElementById('weapon-search').value);
+    } catch (err) {
+      alert(err.message);
+    }
+  };
+
+  pop.querySelector('.rename-popover-save').addEventListener('click', () => save(input.value.trim() || null));
+  pop.querySelector('.rename-popover-clear').addEventListener('click', () => save(null));
+  input.addEventListener('keydown', e => {
+    if (e.key === 'Enter') save(input.value.trim() || null);
+    if (e.key === 'Escape') closeRenamePopover();
+  });
+  input.focus();
+  input.select();
+
+  setTimeout(() => document.addEventListener('mousedown', handleRenamePopoverOutsideClick, true), 0);
+}
+
 /* ---------- weapon list ---------- */
 function weaponRowHtml(name) {
   const url = window.imgUrl ? window.imgUrl(name) : null;
   const linked = Boolean(weaponEmojiMap[name]);
+  const alias = weaponAliasMap[name];
   return `
     <div class="el-row${linked ? ' el-row-linked' : ''}" data-name="${escapeHtml(name)}">
       ${url ? `<img class="el-row-icon" src="${url}" alt="">` : '<span class="el-row-icon el-row-icon-blank"></span>'}
-      <span class="el-row-name">${escapeHtml(name)}</span>
+      <span class="el-row-name">
+        ${escapeHtml(name)}${alias ? `<span class="el-row-alias">"${escapeHtml(alias)}"</span>` : ''}
+      </span>
+      <button type="button" class="el-row-rename${alias ? ' el-row-rename-set' : ''}" title="${alias ? 'Edit short name' : 'Set a short name'}">✎</button>
       <button type="button" class="el-row-emoji-pick" title="Pick a server emoji">${emojiPreviewHtml(weaponEmojiMap[name])}</button>
     </div>`;
 }
@@ -114,7 +177,9 @@ function weaponRowHtml(name) {
 function renderList(filter = '') {
   const allNames = (window.WEAPON_NAMES || []).slice().sort((a, b) => a.localeCompare(b));
   const q = filter.toLowerCase();
-  let matches = q ? allNames.filter(n => n.toLowerCase().includes(q)) : allNames;
+  let matches = q
+    ? allNames.filter(n => n.toLowerCase().includes(q) || (weaponAliasMap[n] || '').toLowerCase().includes(q))
+    : allNames;
 
   const hideLinked = document.getElementById('hide-linked-toggle')?.checked;
   if (hideLinked) matches = matches.filter(n => !weaponEmojiMap[n]);
@@ -131,6 +196,10 @@ function renderList(filter = '') {
     const row = btn.closest('.el-row');
     openEmojiPopover(btn, row.dataset.name);
   }));
+  list.querySelectorAll('.el-row-rename').forEach(btn => btn.addEventListener('click', () => {
+    const row = btn.closest('.el-row');
+    openRenamePopover(btn, row.dataset.name);
+  }));
 }
 
 /* el-list now scrolls internally (see emoji-linking.css) instead of the
@@ -138,7 +207,7 @@ function renderList(filter = '') {
    out from under its anchor button as the list scrolls. Just close it. */
 document.addEventListener('DOMContentLoaded', () => {
   const list = document.getElementById('weapon-emoji-list');
-  if (list) list.addEventListener('scroll', closeEmojiPopover, { passive: true });
+  if (list) list.addEventListener('scroll', () => { closeEmojiPopover(); closeRenamePopover(); }, { passive: true });
 });
 
 async function init() {
@@ -150,10 +219,12 @@ async function init() {
   document.getElementById('emoji-linking-app').style.display = '';
 
   try {
-    [serverEmojis, weaponEmojiMap] = await Promise.all([
+    [serverEmojis, weaponEmojiMap, weaponAliasMap] = await Promise.all([
       api('/api/discord-emojis').catch(() => []),
       api('/api/weapon-emojis').catch(() => ({})),
+      api('/api/weapon-aliases').catch(() => ({})),
     ]);
+    window.WEAPON_ALIASES = weaponAliasMap;
   } catch (err) {
     alert('Failed to load emoji data: ' + err.message);
   }

@@ -36,11 +36,14 @@ async function api(path, opts) {
 }
 
 async function loadAll() {
-  [allComps, buildOptions, weaponEmojiMap] = await Promise.all([
+  let weaponAliases;
+  [allComps, buildOptions, weaponEmojiMap, weaponAliases] = await Promise.all([
     api('/api/comps'),
     api('/api/comps-build-options'),
     api('/api/weapon-emojis').catch(() => ({})),
+    api('/api/weapon-aliases').catch(() => ({})),
   ]);
+  window.WEAPON_ALIASES = weaponAliases;
   renderCompSelect();
 }
 
@@ -107,9 +110,10 @@ function startNewComp() {
 function weaponPreviewHtml(name) {
   if (!name) return '<span class="weapon-preview-empty">Pick a weapon…</span>';
   const url = window.imgUrl ? window.imgUrl(name) : null;
+  const display = window.weaponDisplayName ? window.weaponDisplayName(name) : name;
   return `
     ${url ? `<img class="weapon-preview-icon" src="${url}" alt="">` : '<span class="weapon-preview-icon weapon-preview-icon-blank"></span>'}
-    <span class="weapon-preview-name">${escapeHtml(name)}</span>`;
+    <span class="weapon-preview-name">${escapeHtml(display)}</span>`;
 }
 
 function closeWeaponPopover() {
@@ -146,7 +150,9 @@ function openWeaponPopover(anchorBtn, cat, i, optionIndex) {
   const list = pop.querySelector('.weapon-popover-list');
   const renderList = (filter = '') => {
     const q = filter.toLowerCase();
-    const matches = q ? allNames.filter(n => n.toLowerCase().includes(q)) : allNames;
+    const matches = q
+      ? allNames.filter(n => n.toLowerCase().includes(q) || (window.WEAPON_ALIASES?.[n] || '').toLowerCase().includes(q))
+      : allNames;
     if (matches.length === 0) {
       list.innerHTML = '<p class="weapon-popover-empty">No matches</p>';
       return;
@@ -154,11 +160,14 @@ function openWeaponPopover(anchorBtn, cat, i, optionIndex) {
     // Capped — the full ~300-item list only ever needs to render fully
     // once someone actually scrolls that far; anything typed narrows it
     // down immediately anyway.
-    list.innerHTML = matches.slice(0, 60).map(n => `
+    list.innerHTML = matches.slice(0, 60).map(n => {
+      const display = window.weaponDisplayName ? window.weaponDisplayName(n) : n;
+      return `
       <button type="button" class="weapon-popover-item" data-name="${escapeHtml(n)}">
         <img src="${window.imgUrl(n)}" alt="">
-        <span>${escapeHtml(n)}</span>
-      </button>`).join('');
+        <span>${escapeHtml(display)}</span>
+      </button>`;
+    }).join('');
 
     list.querySelectorAll('.weapon-popover-item').forEach(btn => btn.addEventListener('click', () => {
       const item = draft.categories[cat].items[i];
