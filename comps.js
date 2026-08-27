@@ -6,6 +6,7 @@
 
 const path = require('path');
 const storage = require('./storage');
+const weaponAliasStore = require('./weapon-alias-store');
 
 const DB_PATH = path.join(__dirname, 'comps.json'); // local fallback path only
 const REDIS_KEY = 'comps';
@@ -99,10 +100,15 @@ function parseWeaponSegment(segStr, guild) {
 
 // Display label for an item regardless of shape — "Carving Sword" for a
 // normal line, "Carving Sword/Spirithunter" for a multi-choice one. Used
-// anywhere a plain item.name reference used to be safe to assume.
+// anywhere a plain item.name reference used to be safe to assume. Runs
+// each name through weaponAliasStore so a weapon shows under its short
+// custom name (set on the Emoji Linking page) wherever one's been set,
+// falling back to the official name otherwise.
 function itemLabel(item) {
   if (!item) return '';
-  return item.options ? item.options.map((o) => o.name).join('/') : item.name || '';
+  return item.options
+    ? item.options.map((o) => weaponAliasStore.weaponDisplayName(o.name)).join('/')
+    : weaponAliasStore.weaponDisplayName(item.name) || '';
 }
 
 // A stable signature for matching the "same slot" across a comp edit/

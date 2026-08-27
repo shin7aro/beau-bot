@@ -42,6 +42,7 @@ const storage = require('./storage');
 const activityStore = require('./activity-store');
 const buildsStore = require('./builds-store');
 const itemMap = require('./item-map');
+const weaponAliasStore = require('./weapon-alias-store');
 const { weaponEmoji } = require('./live-comps');
 const { renderBuildCard } = require('./build-card-image');
 const lootStore = require('./loot-store');
@@ -500,7 +501,7 @@ client.on(Events.MessageCreate, async (message) => {
               .setCustomId(`event_optionselect_for:${roleMatch}:${event.id}:${onlyIdx}:${targetUser.id}`)
               .setPlaceholder(`Choose ${targetUser.username}'s ${roleMatch} weapon`)
               .addOptions(onlyItem.options.slice(0, 25).map((opt, i) => {
-                const option = { label: opt.name, value: String(i) };
+                const option = { label: weaponAliasStore.weaponDisplayName(opt.name), value: String(i) };
                 if (opt.emoji) option.emoji = opt.emoji;
                 return option;
               }));
@@ -516,7 +517,7 @@ client.on(Events.MessageCreate, async (message) => {
           await saveEvents(events);
           await updateEventMessage(client, event);
           await message.reply(
-            `✅ Added <@${targetUser.id}> to **${roleMatch}** (**${onlyItem.name}**).`
+            `✅ Added <@${targetUser.id}> to **${roleMatch}** (**${weaponAliasStore.weaponDisplayName(onlyItem.name)}**).`
           );
           return;
         }
@@ -778,7 +779,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
         let content = `Event \`${eventId}\` refreshed from **${saved.label}**. Existing sign-ups were kept wherever their slot still exists.`;
         if (dropped.length > 0) {
           const names = dropped
-            .map((d) => `<@${d.userId}> (was **${d.name}**, ${d.category})`)
+            .map((d) => `<@${d.userId}> (was **${weaponAliasStore.weaponDisplayName(d.name)}**, ${d.category})`)
             .join(', ');
           content += `\n⚠️ ${dropped.length} sign-up${
             dropped.length === 1 ? '' : 's'
@@ -857,7 +858,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
         let editContent = `Event \`${eventId}\` updated: ${changes.join(', ')}.`;
         if (dropped.length > 0) {
-          const names = dropped.map((d) => `<@${d.userId}> (was **${d.name}**, ${d.category})`).join(', ');
+          const names = dropped.map((d) => `<@${d.userId}> (was **${weaponAliasStore.weaponDisplayName(d.name)}**, ${d.category})`).join(', ');
           editContent += `\n⚠️ ${dropped.length} sign-up${
             dropped.length === 1 ? '' : 's'
           } no longer had a matching slot and ${dropped.length === 1 ? 'was' : 'were'} removed: ${names}`;
@@ -1006,7 +1007,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
             lastParty = row.party;
           }
           const roleEmoji = roleEmojiText(interaction.guild, row.category);
-          lines.push(`${roleEmoji} - ${row.emoji || '🔹'} - **${row.name}**`);
+          lines.push(`${roleEmoji} - ${row.emoji || '🔹'} - **${weaponAliasStore.weaponDisplayName(row.name)}**`);
         }
 
         let description = lines.join('\n') || '*empty*';
@@ -1548,7 +1549,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
             .setCustomId(`event_optionselect:${category}:${eventId}:${onlyIdx}`)
             .setPlaceholder(`Choose your ${category} weapon`)
             .addOptions(onlyItem.options.slice(0, 25).map((opt, i) => {
-              const option = { label: opt.name, value: String(i) };
+              const option = { label: weaponAliasStore.weaponDisplayName(opt.name), value: String(i) };
               if (opt.emoji) option.emoji = opt.emoji;
               return option;
             }));
@@ -1632,7 +1633,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
           .setCustomId(`event_optionselect:${category}:${eventId}:${Number(chosenValue)}`)
           .setPlaceholder(`Choose your ${category} weapon`)
           .addOptions(item.options.slice(0, 25).map((opt, i) => {
-            const option = { label: opt.name, value: String(i) };
+            const option = { label: weaponAliasStore.weaponDisplayName(opt.name), value: String(i) };
             if (opt.emoji) option.emoji = opt.emoji;
             return option;
           }));
@@ -1653,7 +1654,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
         console.error('Failed to update event message after select', e);
       }
 
-      await interaction.update({ content: `Signed up as **${item.name}** (${category}).`, components: [] });
+      await interaction.update({ content: `Signed up as **${weaponAliasStore.weaponDisplayName(item.name)}** (${category}).`, components: [] });
       return;
     }
 
@@ -1691,7 +1692,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
         console.error('Failed to update event message after option select', e);
       }
 
-      await interaction.update({ content: `Signed up as **${option.name}** (${category}).`, components: [] });
+      await interaction.update({ content: `Signed up as **${weaponAliasStore.weaponDisplayName(option.name)}** (${category}).`, components: [] });
       return;
     }
 
@@ -1752,7 +1753,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
           .setCustomId(`event_optionselect_for:${category}:${eventId}:${Number(chosenValue)}:${targetUserId}`)
           .setPlaceholder(`Choose ${targetUserId}'s ${category} weapon`)
           .addOptions(item.options.slice(0, 25).map((opt, i) => {
-            const option = { label: opt.name, value: String(i) };
+            const option = { label: weaponAliasStore.weaponDisplayName(opt.name), value: String(i) };
             if (opt.emoji) option.emoji = opt.emoji;
             return option;
           }));
@@ -1774,7 +1775,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
       }
 
       await interaction.update({
-        content: `✅ Added <@${targetUserId}> as **${item.name}** (${category}).`,
+        content: `✅ Added <@${targetUserId}> as **${weaponAliasStore.weaponDisplayName(item.name)}** (${category}).`,
         components: [],
       });
       return;
@@ -1825,7 +1826,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
       }
 
       await interaction.update({
-        content: `✅ Added <@${targetUserId}> as **${option.name}** (${category}).`,
+        content: `✅ Added <@${targetUserId}> as **${weaponAliasStore.weaponDisplayName(option.name)}** (${category}).`,
         components: [],
       });
       return;

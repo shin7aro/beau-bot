@@ -12,6 +12,7 @@
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder } = require('discord.js');
 const comps = require('./comps');
 const eventsStore = require('./events-store');
+const weaponAliasStore = require('./weapon-alias-store');
 
 const CATEGORY_ORDER = eventsStore.CATEGORY_ORDER;
 const CATEGORY_META = {
@@ -95,8 +96,8 @@ function buildEmbed(event, guild) {
     // with "/" (no per-option build link, no separate "Any" fallback since
     // a multi-choice line is never nameless).
     const label = row.options
-      ? row.options.map((o) => `${o.emoji || '🔹'} **${o.name}**`).join('/')
-      : `${row.emoji || '🔹'} ${row.name ? `**${row.name}**` : '*Any*'}`;
+      ? row.options.map((o) => `${o.emoji || '🔹'} **${weaponAliasStore.weaponDisplayName(o.name)}**`).join('/')
+      : `${row.emoji || '🔹'} ${row.name ? `**${weaponAliasStore.weaponDisplayName(row.name)}**` : '*Any*'}`;
     rosterLines.push(`${roleEmoji}-${label} : ${status}`);
   }
 
