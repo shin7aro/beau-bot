@@ -735,6 +735,22 @@ async function showBuildPanel(cat, itemIndexStr, optionIndexStr) {
   }
 }
 
+// Profile stats now split "most played weapon" into its own PVP and PVE
+// history (see profile.js's two grids) — pick whichever one matches the
+// event being viewed. Economy events (or anything else) have no weapon
+// grid of their own, so fall back to the two lists merged back together
+// rather than showing nothing.
+function weaponsForEventType(profile, eventType) {
+  if (eventType === 'PVP') return profile.topWeaponsPvp || [];
+  if (eventType === 'PVE') return profile.topWeaponsPve || [];
+  const merged = {};
+  for (const w of (profile.topWeaponsPvp || [])) merged[w.name] = (merged[w.name] || 0) + w.count;
+  for (const w of (profile.topWeaponsPve || [])) merged[w.name] = (merged[w.name] || 0) + w.count;
+  return Object.entries(merged)
+    .map(([name, count]) => ({ name, count }))
+    .sort((a, b) => b.count - a.count);
+}
+
 async function showPlayerPanel(cat, itemIndexStr, userId) {
   const col = document.getElementById('event-details-col');
   const itemIndex = itemIndexStr === '' ? undefined : Number(itemIndexStr);
@@ -813,14 +829,15 @@ async function showPlayerPanel(cat, itemIndexStr, userId) {
   const attendanceCount = (profile.attendance && profile.attendance[eventType]) || 0;
   const attendanceLine = `${attendanceCount} ${escapeHtml(eventType)} event${attendanceCount === 1 ? '' : 's'} attended`;
 
-  // Full all-time weapon history (not capped — the row scrolls
-  // horizontally rather than wrapping/truncating, see
-  // .event-player-weapon-row in events.css), with the weapon they're
-  // playing for this event pulled to the front of the list regardless of
-  // its play count, then the rest in most-played-first order. If today's
-  // weapon isn't in that history yet (a first-time pick), it's added as
-  // that first chip with no count rather than dropped.
-  const topWeapons = profile.topWeapons || [];
+  // Full all-time weapon history for the bucket that matches this event
+  // (not capped — the row scrolls horizontally rather than
+  // wrapping/truncating, see .event-player-weapon-row in events.css),
+  // with the weapon they're playing for this event pulled to the front
+  // of the list regardless of its play count, then the rest in
+  // most-played-first order. If today's weapon isn't in that history yet
+  // (a first-time pick), it's added as that first chip with no count
+  // rather than dropped.
+  const topWeapons = weaponsForEventType(profile, eventType);
   const chips = topWeapons.slice();
   let currentChipData = null;
   if (signedWeapon) {

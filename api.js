@@ -793,12 +793,16 @@ function attendanceBucketFor(type) {
 //     often — ties keep whichever role was seen first.
 //   - recentCampaigns: every closed event they attended (not a no-show
 //     on), newest first.
-//   - topWeapons: every weapon they've actually signed up and played
-//     across that same closed-event history, sorted by play count desc
-//     (ties keep whichever weapon was seen first) — the full history, not
-//     capped, since the events-page snippet scrolls this list rather than
-//     truncating it. A multi-choice row (options) has no name of its own —
-//     the weapon actually played lives at options[signedOptionIndex], same
+//   - topWeaponsPvp / topWeaponsPve: every weapon they've actually signed
+//     up and played across that same closed-event history, tallied
+//     separately per bucket (a PVP signup only ever feeds topWeaponsPvp,
+//     a PVE one only topWeaponsPve — Economy signups don't have a weapon
+//     grid of their own and are left out of both), each sorted by play
+//     count desc (ties keep whichever weapon was seen first) — the full
+//     history, not capped, since both the profile page's grids and the
+//     events-page snippet scroll/wrap this list rather than truncating
+//     it. A multi-choice row (options) has no name of its own — the
+//     weapon actually played lives at options[signedOptionIndex], same
 //     lookup renderInfoCol's mySignedChoice uses on the events page.
 // profile.js (the frontend) renders both of these directly, so they need
 // to always be present — an empty roleCounts/campaigns list still
@@ -807,7 +811,7 @@ async function computeProfileStats(userId) {
   const events = await eventsStore.loadEvents();
   const attendance = { PVP: 0, PVE: 0, Economy: 0 };
   const roleCounts = {};
-  const weaponCounts = {};
+  const weaponCountsByBucket = { PVP: {}, PVE: {} };
   const campaigns = [];
 
   for (const event of Object.values(events)) {
@@ -827,7 +831,8 @@ async function computeProfileStats(userId) {
         const weaponName = row.options
           ? (row.options[row.signedOptionIndex] && row.options[row.signedOptionIndex].name)
           : row.name;
-        if (weaponName) weaponCounts[weaponName] = (weaponCounts[weaponName] || 0) + 1;
+        const weaponCounts = weaponCountsByBucket[bucket];
+        if (weaponName && weaponCounts) weaponCounts[weaponName] = (weaponCounts[weaponName] || 0) + 1;
       }
     }
 
@@ -846,11 +851,14 @@ async function computeProfileStats(userId) {
     }
   }
 
-  const topWeapons = Object.entries(weaponCounts)
+  const topWeaponsFrom = (counts) => Object.entries(counts)
     .map(([name, count]) => ({ name, count }))
     .sort((a, b) => b.count - a.count);
 
-  return { attendance, favoriteRole, recentCampaigns: campaigns, topWeapons };
+  const topWeaponsPvp = topWeaponsFrom(weaponCountsByBucket.PVP);
+  const topWeaponsPve = topWeaponsFrom(weaponCountsByBucket.PVE);
+
+  return { attendance, favoriteRole, recentCampaigns: campaigns, topWeaponsPvp, topWeaponsPve };
 }
 
 // One member's profile — role, attendance, and loot earned. Gated the
@@ -870,7 +878,7 @@ router.get('/api/profile/:userId', auth.requireMember, async (req, res) => {
     const totals = await lootStore.getTotals();
     const lootRecord = totals.perMember[userId];
 
-    const { attendance, favoriteRole, recentCampaigns, topWeapons } = await computeProfileStats(userId);
+    const { attendance, favoriteRole, recentCampaigns, topWeaponsPvp, topWeaponsPve } = await computeProfileStats(userId);
 
     res.json({
       id: userId,
@@ -883,7 +891,8 @@ router.get('/api/profile/:userId', auth.requireMember, async (req, res) => {
       attendance,
       favoriteRole,
       recentCampaigns,
-      topWeapons,
+      topWeaponsPvp,
+      topWeaponsPve,
       totalLootEarned: lootRecord ? lootRecord.totalReceived : 0,
     });
   } catch (err) {

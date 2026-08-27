@@ -74,24 +74,35 @@ function roleChipHtml(role, { small } = {}) {
 // with its own (larger) classes in profile.css rather than reusing
 // events.css's .event-player-weapon-* — that class is shared with the
 // events page snippet, so resizing it here would resize it there too.
-// No label, just the icon row, sitting between the username and the
-// main-role chip in the banner (see .profile-id/.profile-weapon-row
-// flex-basis in profile.css for how that middle slot is carved out).
-function weaponsRowHtml(topWeapons) {
-  if (!topWeapons || !topWeapons.length) return '';
+// Renders just the chip row for one bucket (PVP or PVE) — wrapped into a
+// titled panel by weaponGridPanelHtml below, not scrolled horizontally
+// like the events-page version, since this one is a proper wrapping grid.
+function weaponChipsHtml(weapons) {
+  return weapons.map(w => {
+    const url = typeof window.imgUrl === 'function' ? window.imgUrl(w.name) : null;
+    if (!url) console.warn(`No item-map icon for weapon "${w.name}" — check public/js/item-map.js`);
+    return `
+      <div class="profile-weapon-chip" title="${escapeHtml(w.name)}">
+        ${url
+          ? `<img src="${escapeHtml(url)}" alt="" loading="lazy" onerror="this.style.opacity='0.15'">`
+          : `<div class="profile-weapon-chip-empty"></div>`}
+        ${w.count != null ? `<span class="profile-weapon-count">${w.count}</span>` : ''}
+      </div>`;
+  }).join('');
+}
+
+// One "Most played in PVP/PVE" panel — same visual language as the
+// ledger-panel above it (title + content), so the two weapon grids read
+// as a matching pair sitting right below the service-record/campaigns
+// pair rather than a bolted-on extra.
+function weaponGridPanelHtml(title, weapons, emptyLabel) {
+  const body = (weapons && weapons.length)
+    ? `<div class="weapon-grid">${weaponChipsHtml(weapons)}</div>`
+    : `<p class="empty-state-inline">${escapeHtml(emptyLabel)}</p>`;
   return `
-    <div class="profile-weapon-row">
-      ${topWeapons.map(w => {
-        const url = typeof window.imgUrl === 'function' ? window.imgUrl(w.name) : null;
-        if (!url) console.warn(`No item-map icon for weapon "${w.name}" — check public/js/item-map.js`);
-        return `
-          <div class="profile-weapon-chip" title="${escapeHtml(w.name)}">
-            ${url
-              ? `<img src="${escapeHtml(url)}" alt="" loading="lazy" onerror="this.style.opacity='0.15'">`
-              : `<div class="profile-weapon-chip-empty"></div>`}
-            ${w.count != null ? `<span class="profile-weapon-count">${w.count}</span>` : ''}
-          </div>`;
-      }).join('')}
+    <div class="weapon-grid-panel">
+      <div class="weapon-grid-title">${escapeHtml(title)}</div>
+      ${body}
     </div>`;
 }
 
@@ -137,7 +148,6 @@ function renderBanner(profile) {
       ${!profile.inGuild ? '<div class="profile-flag">No longer in the Discord server</div>' : ''}
       ${profile.inactive ? '<div class="profile-flag">Marked inactive on the roster</div>' : ''}
     </div>
-    ${weaponsRowHtml(profile.topWeapons)}
     ${profile.favoriteRole ? roleChipHtml(profile.favoriteRole) : ''}
   `;
 }
@@ -170,9 +180,22 @@ function renderLedger(profile) {
   `;
 }
 
+// Two separated grids below the ledger — most-played weapon in PVP on
+// top, PVE on the bottom — sized to the same combined width as the
+// service-record/recent-campaigns squares above via .profile-weapons in
+// profile.css, rather than living inline in the banner.
+function renderWeaponGrids(profile) {
+  const weapons = document.getElementById('profile-weapons');
+  weapons.innerHTML = `
+    ${weaponGridPanelHtml('Most played in PVP', profile.topWeaponsPvp, 'No PVP weapon history yet.')}
+    ${weaponGridPanelHtml('Most played in PVE', profile.topWeaponsPve, 'No PVE weapon history yet.')}
+  `;
+}
+
 function renderProfile(profile) {
   renderBanner(profile);
   renderLedger(profile);
+  renderWeaponGrids(profile);
 }
 
 function resolveProfileId() {
