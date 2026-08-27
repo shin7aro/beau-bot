@@ -70,6 +70,30 @@ function roleChipHtml(role, { small } = {}) {
     </span>`;
 }
 
+// Same "weapons played" rectangle as the events-page player snippet —
+// full all-time history, most-played first, horizontally-scrolling row
+// of icon chips (see .event-player-weapon-row in events.css). Reuses
+// those classes as-is rather than duplicating them in profile.css.
+function weaponsRowHtml(topWeapons) {
+  if (!topWeapons || !topWeapons.length) return '';
+  return `
+    <div class="event-player-weapons">
+      <div class="section-label">Weapons played</div>
+      <div class="event-player-weapon-row">
+        ${topWeapons.map(w => {
+          const url = typeof window.imgUrl === 'function' ? window.imgUrl(w.name) : null;
+          return `
+            <div class="event-player-weapon-chip" title="${escapeHtml(w.name)}">
+              ${url
+                ? `<img src="${escapeHtml(url)}" alt="" loading="lazy" onerror="this.style.opacity='0.15'">`
+                : `<div class="slot-empty-icon"></div>`}
+              ${w.count != null ? `<span class="event-player-weapon-count">${w.count}</span>` : ''}
+            </div>`;
+        }).join('')}
+      </div>
+    </div>`;
+}
+
 async function api(path, opts) {
   const res = await fetch(path, {
     credentials: 'same-origin',
@@ -112,6 +136,7 @@ function renderBanner(profile) {
       ${!profile.inGuild ? '<div class="profile-flag">No longer in the Discord server</div>' : ''}
       ${profile.inactive ? '<div class="profile-flag">Marked inactive on the roster</div>' : ''}
     </div>
+    ${weaponsRowHtml(profile.topWeapons)}
     ${profile.favoriteRole ? roleChipHtml(profile.favoriteRole) : ''}
   `;
 }
@@ -182,3 +207,4 @@ async function init() {
 }
 
 init();
+
