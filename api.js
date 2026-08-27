@@ -1016,6 +1016,46 @@ router.post('/api/loot/:id/claim', auth.requireMember, async (req, res) => {
   res.json({ split });
 });
 
+// Manual "mark this person donated" — the site-side equivalent of the
+// Discord "Donate my share to the guild" button, for when someone told
+// the organizer/an officer they wanted to donate but never pressed it
+// themselves. Same organizer-or-officer/admin gate as the claim route
+// above, and same mutual-exclusivity rules (lootStore.donateShare handles
+// both the participant flag and folding the share into totalDonated).
+router.post('/api/loot/:id/donate', auth.requireMember, async (req, res) => {
+  const client = requireDiscordClient(res);
+  if (!client) return;
+
+  const split = await lootStore.findSplit(req.params.id);
+  if (!split) return res.status(404).json({ error: 'Loot split not found.' });
+
+  const isCreator = split.createdBy && split.createdBy.id === req.user.id;
+  const isManager = req.user.role === 'officer' || req.user.role === 'admin';
+  if (!isCreator && !isManager) {
+    return res.status(403).json({ error: 'Only the person who posted this split (or an officer/admin) can mark someone as donated.' });
+  }
+
+  const { userId } = req.body || {};
+  if (!userId) return res.status(400).json({ error: 'userId is required.' });
+
+  const result = await lootStore.donateShare(split, userId);
+  if (result.error === 'not_participant') return res.status(400).json({ error: 'That person is not a participant on this split.' });
+  if (result.error === 'already_claimed') return res.status(400).json({ error: 'That share was already claimed by that person.' });
+  if (result.alreadyDonated) return res.json({ split, alreadyDonated: true });
+
+  await lootRender.updateSplitMessage(client, split);
+  if (result.allResolved) await lootRender.celebrateCompletedThread(client, split);
+
+  const donatedParticipant = split.participants.find((p) => p.userId === userId);
+  activityStore.log(
+    { id: req.user.id, username: req.user.username },
+    'loot.mark_donated',
+    `Marked ${donatedParticipant?.username || userId} as having donated their split of "${split.lootName}" to the guild`
+  );
+
+  res.json({ split });
+});
+
 // Manual "ping unclaimed now" — same organizer-or-server-manager gate the
 // bot's /loot remind command uses, checked here via the site's officer/admin
 // roles instead of a live Discord permission check (the site doesn't have

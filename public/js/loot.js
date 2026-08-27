@@ -140,8 +140,11 @@ function renderList() {
   grid.querySelectorAll('[data-remind-id]').forEach(btn => {
     btn.addEventListener('click', () => sendReminder(btn.dataset.remindId));
   });
-  grid.querySelectorAll('.mark-claim-btn').forEach(btn => {
-    btn.addEventListener('click', () => markParticipantClaimed(btn.dataset.splitId, btn.dataset.userId, btn.dataset.username));
+  grid.querySelectorAll('.resolve-participant-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      openResolvePopover(btn, btn.dataset.splitId, btn.dataset.userId, btn.dataset.username);
+    });
   });
   grid.querySelectorAll('[data-delete-id]').forEach(btn => {
     btn.addEventListener('click', () => deleteSplit(btn.dataset.deleteId, btn.dataset.deleteName));
@@ -182,7 +185,7 @@ function renderLootCard(s) {
           const glyph = p.claimed ? '✅' : p.donated ? '🎁' : '⏳';
           const label = `${glyph} ${escapeHtml(p.username || p.userId)}`;
           if (!p.claimed && !p.donated && canManageSplit) {
-            return `<button type="button" class="loot-participant-chip mark-claim-btn" data-split-id="${escapeHtml(s.id)}" data-user-id="${escapeHtml(p.userId)}" data-username="${escapeHtml(p.username || p.userId)}" title="Mark as claimed — they took it but forgot to use the button">${label}</button>`;
+            return `<button type="button" class="loot-participant-chip resolve-participant-btn" data-split-id="${escapeHtml(s.id)}" data-user-id="${escapeHtml(p.userId)}" data-username="${escapeHtml(p.username || p.userId)}" title="Mark this share resolved — for when someone forgot to use the Discord buttons">${label}</button>`;
           }
           return `<span class="loot-participant-chip ${p.claimed ? 'claimed' : ''} ${p.donated ? 'donated' : ''}">${label}</span>`;
         }).join('')}
@@ -197,17 +200,81 @@ function renderLootCard(s) {
     </div>`;
 }
 
+// Clicking a still-pending participant's name (organizer/officer/admin
+// only, see canManageSplit above) opens a small "how did they resolve
+// this" popover instead of assuming — someone forgetting to press the
+// Discord button could mean either "they took it" or "they told me to
+// give it to the guild", and those move totals in opposite directions
+// (see loot-store.js's claimed/donated split), so it isn't safe to guess.
+// Same floating-popover chrome as the events page's assign/option
+// popovers (.event-assign-popover*, from events.css — already loaded on
+// loot.html).
+function closeResolvePopover() {
+  const pop = document.getElementById('loot-resolve-popover');
+  if (pop) pop.remove();
+  document.removeEventListener('mousedown', handleResolvePopoverOutsideClick, true);
+}
+
+function handleResolvePopoverOutsideClick(e) {
+  const pop = document.getElementById('loot-resolve-popover');
+  if (pop && !pop.contains(e.target)) closeResolvePopover();
+}
+
+function openResolvePopover(anchorEl, splitId, userId, username) {
+  closeResolvePopover();
+  const pop = document.createElement('div');
+  pop.id = 'loot-resolve-popover';
+  pop.className = 'event-assign-popover';
+  pop.innerHTML = `
+    <div class="event-assign-popover-list">
+      <button type="button" class="event-assign-popover-item" data-action="claim">
+        <span>✅ Took their split</span>
+      </button>
+      <button type="button" class="event-assign-popover-item" data-action="donate">
+        <span>🎁 Donated their split</span>
+      </button>
+    </div>`;
+  document.body.appendChild(pop);
+
+  const rect = anchorEl.getBoundingClientRect();
+  pop.style.top = `${window.scrollY + rect.bottom + 6}px`;
+  pop.style.left = `${window.scrollX + rect.left}px`;
+
+  pop.querySelectorAll('.event-assign-popover-item').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      closeResolvePopover();
+      if (btn.dataset.action === 'claim') markParticipantClaimed(splitId, userId, username);
+      else donateParticipantShare(splitId, userId, username);
+    });
+  });
+
+  setTimeout(() => document.addEventListener('mousedown', handleResolvePopoverOutsideClick, true), 0);
+}
+
 async function markParticipantClaimed(splitId, userId, username) {
-  if (!confirm(`Mark ${username} as having taken their share? Use this if they already took it but forgot to use the button.`)) return;
   try {
     await api(`/api/loot/${encodeURIComponent(splitId)}/claim`, {
       method: 'POST',
       body: JSON.stringify({ userId }),
     });
-    showToast(`Marked ${username} as claimed.`);
+    showToast(`Marked ${username} as having taken their split.`);
     await loadLoot();
   } catch (err) {
     showToast('Failed to mark as claimed: ' + err.message);
+  }
+}
+
+async function donateParticipantShare(splitId, userId, username) {
+  try {
+    await api(`/api/loot/${encodeURIComponent(splitId)}/donate`, {
+      method: 'POST',
+      body: JSON.stringify({ userId }),
+    });
+    showToast(`Marked ${username} as having donated their split to the guild.`);
+    await loadLoot();
+  } catch (err) {
+    showToast('Failed to mark as donated: ' + err.message);
   }
 }
 
