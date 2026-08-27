@@ -197,7 +197,12 @@ function openWeaponPopover(anchorBtn, cat, i, optionIndex) {
   pop.style.top = `${window.scrollY + rect.bottom + 6}px`;
   pop.style.left = `${window.scrollX + rect.left}px`;
 
-  const allNames = Object.keys(window.ITEM_MAP || {}).sort((a, b) => a.localeCompare(b));
+  // Weapons only — window.WEAPON_NAMES (item-map.js) excludes offhands and
+  // everything else in ITEM_MAP. Falls back to the full map only if that
+  // list somehow isn't loaded, so the picker never just goes empty.
+  const allNames = (window.WEAPON_NAMES || Object.keys(window.ITEM_MAP || {}))
+    .slice()
+    .sort((a, b) => a.localeCompare(b));
   const list = pop.querySelector('.weapon-popover-list');
   const renderList = (filter = '') => {
     const q = filter.toLowerCase();

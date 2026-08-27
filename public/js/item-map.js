@@ -296,6 +296,16 @@ window.ITEM_MAP = {
   "Roasted Puremist Snapper": "T7_MEAL_ROAST_FISH",
 };
 
+// Weapons only (136 entries) — used by the comp-maker weapon picker, which
+// should only ever offer a weapon, never an offhand/armor/potion/food line
+// from the same map. Derived straight from ITEM_MAP by slot code rather than
+// hardcoded, so it can't drift out of sync when weapons are added above:
+// MAIN_/2H_ codes are weapons, OFF_ is offhands, everything else (HEAD_,
+// ARMOR_, SHOES_, CAPEITEM_, POTION_, MEAL_) is neither.
+window.WEAPON_NAMES = Object.keys(window.ITEM_MAP).filter(name =>
+  /^T\d+_(MAIN|2H)_/.test(window.ITEM_MAP[name])
+);
+
 // Assigned directly as a window property (not a bare top-level function
 // declaration) so it doesn't create its own global "imgUrl" binding — that
 // would collide with the `const imgUrl = window.imgUrl;` alias builds.js
