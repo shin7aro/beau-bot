@@ -1535,14 +1535,8 @@ router.post('/api/events/:id/ping', auth.requireOfficer, async (req, res) => {
       return res.status(400).json({ error: 'No #event-reminders channel found in this server — create one first.' });
     }
 
-    const pingContent = eventRender.dahaloPingContent(guild);
-    const missingText = missing.map((m) => `**${m.category}** (${m.missing} open)`).join(', ');
     await eventRender.deletePreviousReminder(remindersChannel, event.lastReminderMessageId);
-    const sent = await remindersChannel.send(
-      `⏰ Reminder for **${event.title}** (${event.time}) — still missing: ${missingText}. ${eventRender.eventJumpLink(event)}${
-        pingContent ? ` ${pingContent}` : ''
-      } *(pinged from the site by ${req.user.username})*`
-    );
+    const sent = await remindersChannel.send(eventRender.buildReminderMessage(event, guild, missing, req.user.username));
     event.lastReminderMessageId = sent.id;
     await eventsStore.saveEvents(events);
     res.json({ ok: true });

@@ -275,16 +275,9 @@ client.once(Events.ClientReady, async (c) => {
       const remindersChannel = eventRender.findEventRemindersChannel(guild);
       if (!remindersChannel) continue; // #event-reminders doesn't exist in this guild
 
-      const pingContent = eventRender.dahaloPingContent(guild);
-      const missingText = missing.map((m) => `**${m.category}** (${m.missing} open)`).join(', ');
-
       try {
         await eventRender.deletePreviousReminder(remindersChannel, event.lastReminderMessageId);
-        const sent = await remindersChannel.send(
-          `⏰ Reminder for **${event.title}** (${event.time}) — still missing: ${missingText}. ${eventRender.eventJumpLink(event)}${
-            pingContent ? ` ${pingContent}` : ''
-          }`
-        );
+        const sent = await remindersChannel.send(eventRender.buildReminderMessage(event, guild, missing));
         event.lastReminderMessageId = sent.id;
         await saveEvents(events);
       } catch (e) {

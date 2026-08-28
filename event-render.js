@@ -212,6 +212,27 @@ function eventJumpLink(event) {
   return `https://discord.com/channels/${event.guildId}/${event.channelId}/${event.id}`;
 }
 
+// Builds the #event-reminders message content — shared by the 30-minute
+// auto reminder and the manual "Ping" button so both stay in sync. `missing`
+// is getMissingRolesSummary(event)'s result. Pass `pingedBy` (a username)
+// only for the manual, site-triggered ping — it adds one extra trailing
+// line, omitted for the automatic reminder.
+function buildReminderMessage(event, guild, missing, pingedBy) {
+  const role = findDahaloRole(guild);
+  const missingText = missing.map((m) => `${m.missing} ${m.category}`).join(', ');
+  const lines = [
+    role ? `<@&${role.id}> ⏰` : '⏰',
+    '',
+    `Reminder for **${event.title}** - ${event.time}`,
+    '',
+    `Still missing: ${missingText}`,
+    '',
+    `GO SIGN UP HERE ---> ${eventJumpLink(event)}`,
+  ];
+  if (pingedBy) lines.push('', `(pinged from the site by ${pingedBy})`);
+  return lines.join('\n');
+}
+
 // Best-effort cleanup of the posted message (and its thread, if one was
 // created) when an event is deleted outright — used by both /event delete
 // and the site's delete button. Never throws: if the message or thread was
@@ -292,4 +313,5 @@ module.exports = {
   dahaloPingContent,
   findEventRemindersChannel,
   eventJumpLink,
+  buildReminderMessage,
 };
