@@ -30,7 +30,6 @@ let compOptionsCache = null; // officer only, lazy-loaded
 let allBuildsCache = null;      // public, lazy-loaded — full builds by tab, for the details panel
 let buildLinkOptionsCache = null; // officer only, lazy-loaded — flat [{tab,index,role,weapon}] for the "link a build" picker
 let dahaloMembersCache = null; // officer only, lazy-loaded — [{id,username,avatar}] for the "assign a player" picker
-let formCompSource = 'comp'; // 'comp' | 'manual', for the create/edit form
 
 function escapeHtml(s) {
   return String(s || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -1099,7 +1098,6 @@ async function ensureCompOptionsLoaded() {
 async function openEventForm(mode) {
   const isEdit = mode === 'edit';
   const e = isEdit ? currentDetail : null;
-  formCompSource = isEdit && !e.compKey ? 'manual' : 'comp';
 
   let channels = [];
   let comps = [];
@@ -1148,19 +1146,9 @@ async function openEventForm(mode) {
       </div>` : `<p class="modal-hint">The channel can't be changed after an event is posted — close this one and create a new one if you need a different channel.</p>`}
 
     <div class="modal-field">
-      <label>Composition</label>
-      <div class="modal-source-toggle">
-        <button type="button" id="ef-src-comp" class="${formCompSource === 'comp' ? 'active' : ''}">Use a saved comp</button>
-        <button type="button" id="ef-src-manual" class="${formCompSource === 'manual' ? 'active' : ''}">Type manually</button>
-      </div>
-    </div>
-    <div class="modal-field" id="ef-comp-wrap" style="display:${formCompSource === 'comp' ? '' : 'none'}">
+      <label>Choose a comp</label>
       <select id="ef-comp">${comps.map(c => `<option value="${escapeHtml(c.key)}" ${e && e.compKey === c.key ? 'selected' : ''}>${escapeHtml(c.label)}</option>`).join('')}</select>
       ${isEdit ? '<p class="modal-hint">Switching comps keeps sign-ups whose slot still matches; anyone else is dropped and shown to you after saving.</p>' : ''}
-    </div>
-    <div class="modal-field" id="ef-manual-wrap" style="display:${formCompSource === 'manual' ? '' : 'none'}">
-      <textarea id="ef-manual" placeholder="Tank&#10;🛡️ 1H Mace&#10;DPS&#10;⚔️ Carving Sword&#10;Healer&#10;✨ Hallowfall: 2"></textarea>
-      <p class="modal-hint">One role per line (Tank / DPS / Healer / Support / Battlemount), then one weapon per line under it — same format as the Discord modal. Add ": N" after a line for an unnamed slot with N open spots.</p>
     </div>
 
     <div class="modal-actions">
@@ -1170,17 +1158,7 @@ async function openEventForm(mode) {
 
   overlay.style.display = 'flex';
   document.getElementById('ef-cancel').addEventListener('click', closeModal);
-  document.getElementById('ef-src-comp').addEventListener('click', () => setFormSource('comp'));
-  document.getElementById('ef-src-manual').addEventListener('click', () => setFormSource('manual'));
   document.getElementById('ef-submit').addEventListener('click', () => submitEventForm(isEdit));
-}
-
-function setFormSource(src) {
-  formCompSource = src;
-  document.getElementById('ef-src-comp').classList.toggle('active', src === 'comp');
-  document.getElementById('ef-src-manual').classList.toggle('active', src === 'manual');
-  document.getElementById('ef-comp-wrap').style.display = src === 'comp' ? '' : 'none';
-  document.getElementById('ef-manual-wrap').style.display = src === 'manual' ? '' : 'none';
 }
 
 async function submitEventForm(isEdit) {
@@ -1194,13 +1172,8 @@ async function submitEventForm(isEdit) {
 
   const body = { type, time, title, mass, sets };
   if (!isEdit) body.channelId = document.getElementById('ef-channel').value;
-  if (formCompSource === 'comp') {
-    body.compKey = document.getElementById('ef-comp').value;
-    if (!body.compKey) { showToast('Pick a saved composition, or switch to "Type manually".'); return; }
-  } else {
-    body.compositionRaw = document.getElementById('ef-manual').value;
-    if (!body.compositionRaw.trim()) { showToast('Type a composition first.'); return; }
-  }
+  body.compKey = document.getElementById('ef-comp').value;
+  if (!body.compKey) { showToast('Pick a saved composition.'); return; }
 
   try {
     let result;

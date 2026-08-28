@@ -26,8 +26,8 @@ const commands = [
         .addStringOption((opt) =>
           opt
             .setName('comp')
-            .setDescription('Saved composition to use (leave blank to type one manually)')
-            .setRequired(false)
+            .setDescription('Saved composition to use')
+            .setRequired(true)
             .setAutocomplete(true)
         )
         .addStringOption((opt) =>

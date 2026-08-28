@@ -14,17 +14,14 @@ app.listen(process.env.PORT || 3000, () => console.log('Web server running'));
 // Albion Event Bot - index.js
 // Posts sign-up forms for guild activities (CTA, Group Dungeon, Tracking, Ava
 // Dungeon, Other). Compositions now come from your own saved /comp entries
-// (see comps.js) instead of being pulled live from the guild website — pick a
-// saved comp when creating an event, or leave it blank to type one manually.
+// (see comps.js) instead of being pulled live from the guild website — you
+// must pick a saved comp when creating an event, no manual typing.
 
 require('dotenv').config();
 const {
   Client,
   GatewayIntentBits,
   Events,
-  ModalBuilder,
-  TextInputBuilder,
-  TextInputStyle,
   ActionRowBuilder,
   ButtonBuilder,
   ButtonStyle,
@@ -70,9 +67,6 @@ function logUser(discordUser) {
 
 // Populated by the bootstrap at the bottom of this file, before login.
 let events = {};
-
-// Temporary holding areas between a slash command / button and the modal submit
-const pendingCreations = new Map(); // /event create (manual composition path)
 
 // ---------- category metadata ----------
 const CATEGORY_ORDER = comps.CATEGORY_ORDER; // ['Tank', 'Support', 'DPS', 'Healer', 'Battlemount']
@@ -614,55 +608,31 @@ client.on(Events.InteractionCreate, async (interaction) => {
           createdAt: Date.now(),
         };
 
-        // ----- path 1: build from a saved comp -----
-        if (compKey) {
-          const saved = (await comps.loadComps())[compKey];
-          if (!saved) {
-            await interaction.reply({
-              content: "I couldn't find that saved composition — it may have been deleted. Try /comp list.",
-              ephemeral: true,
-            });
-            return;
-          }
-
-          const event = {
-            id: null,
-            ...baseMeta,
-            categories: comps.cloneCategories(saved.categories),
-            compLabel: saved.label,
-            compKey: compKey,
-          };
-
-          await interaction.reply({ embeds: [buildEmbed(event, interaction.guild)], components: buildButtons(event, interaction.guild) });
-          const message = await interaction.fetchReply();
-          event.id = message.id;
-          events[event.id] = event;
-          await saveEvents(events);
-          activityStore.log(logUser(interaction.user), 'event.create', `Created event "${event.title}" (${event.type}) from comp "${saved.label}"`);
-          await interaction.editReply({ embeds: [buildEmbed(event, interaction.guild)], components: buildButtons(event, interaction.guild) });
-          await eventRender.createEventThread(message, event);
+        const saved = (await comps.loadComps())[compKey];
+        if (!saved) {
+          await interaction.reply({
+            content: "I couldn't find that saved composition — it may have been deleted. Try /comp list.",
+            ephemeral: true,
+          });
           return;
         }
 
-        // ----- path 2: manual composition (no comp selected) -----
-        const pendingId = `${interaction.user.id}_${Date.now()}`;
-        pendingCreations.set(pendingId, baseMeta);
-        setTimeout(() => pendingCreations.delete(pendingId), 15 * 60 * 1000);
+        const event = {
+          id: null,
+          ...baseMeta,
+          categories: comps.cloneCategories(saved.categories),
+          compLabel: saved.label,
+          compKey: compKey,
+        };
 
-        const modal = new ModalBuilder()
-          .setCustomId(`event_create_modal:${pendingId}`)
-          .setTitle(`New ${type} event`);
-
-        const compositionInput = new TextInputBuilder()
-          .setCustomId('composition')
-          .setLabel('Composition (one item per line, see guide)')
-          .setStyle(TextInputStyle.Paragraph)
-          .setPlaceholder('Tank\n🛡️ 1H Mace\nDPS\n⚔️ Carving Sword\nHealer\n✨ Hallowfall: 2')
-          .setRequired(true)
-          .setMaxLength(4000);
-
-        modal.addComponents(new ActionRowBuilder().addComponents(compositionInput));
-        await interaction.showModal(modal);
+        await interaction.reply({ embeds: [buildEmbed(event, interaction.guild)], components: buildButtons(event, interaction.guild) });
+        const message = await interaction.fetchReply();
+        event.id = message.id;
+        events[event.id] = event;
+        await saveEvents(events);
+        activityStore.log(logUser(interaction.user), 'event.create', `Created event "${event.title}" (${event.type}) from comp "${saved.label}"`);
+        await interaction.editReply({ embeds: [buildEmbed(event, interaction.guild)], components: buildButtons(event, interaction.guild) });
+        await eventRender.createEventThread(message, event);
         return;
       }
 
@@ -1437,51 +1407,6 @@ client.on(Events.InteractionCreate, async (interaction) => {
         content: `🎁 Thank you — your split of **${split.lootName}** was donated to the guild.`,
         ephemeral: true,
       });
-      return;
-    }
-
-    // ----- modal submit: create the event (manual path) -----
-    if (interaction.isModalSubmit() && interaction.customId.startsWith('event_create_modal:')) {
-      const pendingId = interaction.customId.split(':')[1];
-      const pending = pendingCreations.get(pendingId);
-      if (!pending) {
-        await interaction.reply({
-          content: 'This form expired, please run /event create again.',
-          ephemeral: true,
-        });
-        return;
-      }
-      pendingCreations.delete(pendingId);
-
-      const compositionRaw = interaction.fields.getTextInputValue('composition');
-      const categories = comps.parseComposition(compositionRaw, interaction.guild);
-
-      if (Object.keys(categories).length === 0) {
-        await interaction.reply({
-          content:
-            "I couldn't find any items under a Tank/DPS/Healer/Support/Battlemount header — please run /event create again and check the format.",
-          ephemeral: true,
-        });
-        return;
-      }
-
-      const event = {
-        id: null,
-        ...pending,
-        categories,
-        closed: false,
-      };
-
-      await interaction.reply({ embeds: [buildEmbed(event, interaction.guild)], components: buildButtons(event, interaction.guild) });
-      const message = await interaction.fetchReply();
-
-      event.id = message.id;
-      events[event.id] = event;
-      await saveEvents(events);
-      activityStore.log(logUser(interaction.user), 'event.create', `Created event "${event.title}" (${event.type}, manual composition)`);
-
-      await interaction.editReply({ embeds: [buildEmbed(event, interaction.guild)], components: buildButtons(event, interaction.guild) });
-      await eventRender.createEventThread(message, event);
       return;
     }
 
