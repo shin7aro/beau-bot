@@ -1510,7 +1510,12 @@ router.delete('/api/events/:id', auth.requireOfficer, async (req, res) => {
 });
 
 // Manual, immediate version of the bot's 30-minute auto-reminder — same
-// "still missing" summary, posted to the event's linked thread right away.
+// "still missing" summary. Posted to the dedicated #event-reminders
+// channel with a jump link back to the event's embed message — a role
+// mention dropped inside a thread only notifies members already in that
+// thread once the role passes ~100 members (see dahaloPingContent in
+// event-render.js), which silently breaks the ping for a guild-wide role
+// like Dahalo.
 router.post('/api/events/:id/ping', auth.requireOfficer, async (req, res) => {
   const client = requireDiscordClient(res);
   if (!client) return;
@@ -1524,22 +1529,18 @@ router.post('/api/events/:id/ping', auth.requireOfficer, async (req, res) => {
     const missing = eventsStore.getMissingRolesSummary(event);
     if (missing.length === 0) return res.status(400).json({ error: 'Every slot is already filled.' });
 
-    let thread;
-    try {
-      thread = await client.channels.fetch(event.id);
-    } catch {
-      thread = null;
-    }
-    if (!thread || !thread.isThread || !thread.isThread()) {
-      return res.status(400).json({ error: 'No Discord thread exists for this event yet — create one from the event message first.' });
+    const guild = client.guilds.cache.get(event.guildId);
+    const remindersChannel = eventRender.findEventRemindersChannel(guild);
+    if (!remindersChannel) {
+      return res.status(400).json({ error: 'No #event-reminders channel found in this server — create one first.' });
     }
 
-    const roleMention = eventRender.findDahaloRole(thread.guild);
+    const pingContent = eventRender.dahaloPingContent(guild);
     const missingText = missing.map((m) => `**${m.category}** (${m.missing} open)`).join(', ');
-    await eventRender.deletePreviousReminder(thread, event.lastReminderMessageId);
-    const sent = await thread.send(
-      `⏰ Reminder for **${event.title}** (${event.time}) — still missing: ${missingText}.${
-        roleMention ? ` <@&${roleMention.id}>` : ''
+    await eventRender.deletePreviousReminder(remindersChannel, event.lastReminderMessageId);
+    const sent = await remindersChannel.send(
+      `⏰ Reminder for **${event.title}** (${event.time}) — still missing: ${missingText}. ${eventRender.eventJumpLink(event)}${
+        pingContent ? ` ${pingContent}` : ''
       } *(pinged from the site by ${req.user.username})*`
     );
     event.lastReminderMessageId = sent.id;

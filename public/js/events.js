@@ -237,7 +237,7 @@ function renderInfoCol(e, canManage) {
       <div class="event-action-row">
         <button class="event-action-btn" id="event-edit-btn">✏️ Edit event</button>
         ${e.compKey ? `<button class="event-action-btn" id="event-refresh-btn">🔄 Refresh from comp</button>` : ''}
-        ${!e.closed ? `<button class="event-action-btn" id="event-ping-btn">⏰ Ping thread</button>` : ''}
+        ${!e.closed ? `<button class="event-action-btn" id="event-ping-btn">⏰ Ping reminder</button>` : ''}
         ${!e.closed ? `<button class="event-action-btn danger" id="event-close-btn">🔒 Close event</button>` : ''}
         ${isOfficerOrAdmin() ? `<button class="event-action-btn danger" id="event-delete-btn">🗑️ Delete event</button>` : ''}
       </div>` : ''}

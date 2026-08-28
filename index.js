@@ -51,7 +51,7 @@ const lootRender = require('./loot-render');
 // refresh from either side behaves identically. Destructured under their
 // original names so nothing else in this file has to change.
 const { loadEvents, saveEvents, removeUserFromEvent, getSignedUpUserIds, getMissingRolesSummary } = eventsStore;
-const { buildEmbed, buildButtons, updateEventMessage, findDahaloRole } = eventRender;
+const { buildEmbed, buildButtons, updateEventMessage } = eventRender;
 
 // Shapes a Discord user into the { id, username, role } shape activity-store
 // expects — "role" here is just a label for the log (Discord doesn't have
@@ -255,12 +255,15 @@ client.once(Events.ClientReady, async (c) => {
     console.error('Failed to fetch application emojis on startup:', err);
   }
 
-  // Every 30 minutes, ping the Dahalo role in each open event's thread with
-  // whatever roles are still missing. Only fires if the organizer actually
-  // created a thread from the event message (its ID has to match the
-  // event's message ID — see the mention-based sign-up management below for
-  // why that's how a thread gets linked to an event), and only if there's
-  // actually something missing (no point pinging a fully-staffed event).
+  // Every 30 minutes, ping the Dahalo role with whatever roles are still
+  // missing on each open event. Posted to the dedicated #event-reminders
+  // channel — not the event's own channel or thread — with a jump link
+  // back to the event's embed message, since a role mention dropped inside
+  // a thread only notifies members already in that thread once the role
+  // passes ~100 members (see dahaloPingContent in event-render.js), which
+  // silently breaks the ping for a guild-wide role like Dahalo. Only fires
+  // if there's actually something missing (no point pinging a
+  // fully-staffed event) and if #event-reminders exists in the guild.
   setInterval(async () => {
     for (const event of Object.values(events)) {
       if (event.closed) continue;
@@ -268,22 +271,18 @@ client.once(Events.ClientReady, async (c) => {
       const missing = getMissingRolesSummary(event);
       if (missing.length === 0) continue;
 
-      let thread;
-      try {
-        thread = await client.channels.fetch(event.id);
-      } catch {
-        continue; // no thread created for this event yet
-      }
-      if (!thread || !thread.isThread || !thread.isThread()) continue;
+      const guild = client.guilds.cache.get(event.guildId);
+      const remindersChannel = eventRender.findEventRemindersChannel(guild);
+      if (!remindersChannel) continue; // #event-reminders doesn't exist in this guild
 
-      const roleMention = findDahaloRole(thread.guild);
+      const pingContent = eventRender.dahaloPingContent(guild);
       const missingText = missing.map((m) => `**${m.category}** (${m.missing} open)`).join(', ');
 
       try {
-        await eventRender.deletePreviousReminder(thread, event.lastReminderMessageId);
-        const sent = await thread.send(
-          `⏰ Reminder for **${event.title}** (${event.time}) — still missing: ${missingText}.${
-            roleMention ? ` <@&${roleMention.id}>` : ''
+        await eventRender.deletePreviousReminder(remindersChannel, event.lastReminderMessageId);
+        const sent = await remindersChannel.send(
+          `⏰ Reminder for **${event.title}** (${event.time}) — still missing: ${missingText}. ${eventRender.eventJumpLink(event)}${
+            pingContent ? ` ${pingContent}` : ''
           }`
         );
         event.lastReminderMessageId = sent.id;

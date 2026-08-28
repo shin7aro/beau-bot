@@ -191,6 +191,27 @@ function dahaloPingContent(guild) {
   return role ? `📢 <@&${role.id}>` : null;
 }
 
+// Finds the dedicated reminders channel (named "event-reminders", loosely
+// matched so decorative prefixes like "╏📢╏" don't need to match exactly)
+// that every event reminder — the 30-minute auto reminder and the manual
+// "Ping" button — gets posted to instead of the event's own channel or
+// thread. Returns null if no such channel exists in the guild yet.
+function findEventRemindersChannel(guild) {
+  if (!guild) return null;
+  return (
+    guild.channels.cache.find(
+      (c) => c.isTextBased && c.isTextBased() && !(c.isThread && c.isThread()) && c.name.toLowerCase().includes('event-reminders')
+    ) || null
+  );
+}
+
+// Jump link straight to an event's posted embed message, so a reminder
+// sent elsewhere (e.g. #event-reminders) can link back to where the actual
+// sign-up buttons live.
+function eventJumpLink(event) {
+  return `https://discord.com/channels/${event.guildId}/${event.channelId}/${event.id}`;
+}
+
 // Best-effort cleanup of the posted message (and its thread, if one was
 // created) when an event is deleted outright — used by both /event delete
 // and the site's delete button. Never throws: if the message or thread was
@@ -239,15 +260,16 @@ async function createEventThread(message, event) {
 }
 
 // Deletes the previous reminder message (if any) right before a new one
-// gets posted, so a thread doesn't accumulate a stack of stale reminders —
-// used by both the auto reminder loop and the manual "Ping" button (site +
-// bot). Best-effort: the message may already be gone (deleted manually, or
-// from before the bot could see it), which isn't a reason to skip sending
-// the new reminder.
-async function deletePreviousReminder(thread, messageId) {
+// gets posted, so an event's channel/thread doesn't accumulate a stack of
+// stale reminders — used by both the auto reminder loop and the manual
+// "Ping" button (site + bot). `channel` can be any text-based channel or
+// thread. Best-effort: the message may already be gone (deleted manually,
+// or from before the bot could see it), which isn't a reason to skip
+// sending the new reminder.
+async function deletePreviousReminder(channel, messageId) {
   if (!messageId) return;
   try {
-    const message = await thread.messages.fetch(messageId);
+    const message = await channel.messages.fetch(messageId);
     await message.delete();
   } catch {
     // already gone, or unreachable — fine, just move on
@@ -268,4 +290,6 @@ module.exports = {
   deletePreviousReminder,
   findDahaloRole,
   dahaloPingContent,
+  findEventRemindersChannel,
+  eventJumpLink,
 };
