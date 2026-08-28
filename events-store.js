@@ -20,17 +20,18 @@ const REDIS_KEY = 'events';
 const CATEGORY_ORDER = comps.CATEGORY_ORDER;
 
 // Event "type" — top-level bucket used to separate PVP activities (CTAs,
-// ganks, group dungeons, ...), PVE activities (Ava dungeons, HCE, ...), and
-// Economy activities (gathering, refining, transport, ...). This replaces
-// the old fixed CTA/Group Dungeon/Tracking/Ava Dungeon/Other list — the
-// specific activity now goes in the event's title instead.
+// group dungeons, ...), PVE activities (Ava dungeons, HCE, ...), and Gank
+// activities (small-scale roams/ganks). This replaces the old fixed
+// CTA/Group Dungeon/Tracking/Ava Dungeon/Other list — the specific activity
+// now goes in the event's title instead.
 //
-// Events saved before this change carry one of the old values in `type`.
-// They keep working exactly as before (EVENT_TYPE_EMOJI below just falls
-// back to a generic icon for anything it doesn't recognize) — no migration
-// needed, nothing breaks on old data.
-const EVENT_TYPES = ['PVP', 'PVE', 'Economy'];
-const EVENT_TYPE_EMOJI = { PVP: '⚔️', PVE: '🐉', Economy: '💰' };
+// Events saved before this change carry one of the old values in `type`
+// (including the retired "Economy" type). They keep working exactly as
+// before (EVENT_TYPE_EMOJI below just falls back to a generic icon for
+// anything it doesn't recognize) — no migration needed, nothing breaks on
+// old data.
+const EVENT_TYPES = ['PVP', 'PVE', 'Gank'];
+const EVENT_TYPE_EMOJI = { PVP: '⚔️', PVE: '🐉', Gank: '🗡️' };
 
 // The bot (index.js) loads events into a long-lived in-memory object ONCE
 // at startup and mutates that same object directly for every interaction

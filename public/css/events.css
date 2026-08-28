@@ -18,7 +18,7 @@
 }
 .event-type-badge.type-PVP { color: var(--dps); background: var(--dps-bg); border-color: var(--dps); }
 .event-type-badge.type-PVE { color: var(--healer); background: var(--healer-bg); border-color: var(--healer); }
-.event-type-badge.type-Economy { color: var(--support); background: var(--support-bg); border-color: var(--support); }
+.event-type-badge.type-Gank { color: var(--gank); background: var(--gank-bg); border-color: var(--gank); }
 
 /* ---------- LIST VIEW: event cards ---------- */
 .event-card-grid {

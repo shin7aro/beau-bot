@@ -10,8 +10,8 @@
 ───────────────────────────────────────── */
 
 const EVENT_ROLE_ORDER = ['Tank', 'Support', 'DPS', 'Healer', 'Battlemount'];
-const EVENT_TYPES = ['PVP', 'PVE', 'Economy'];
-const EVENT_TYPE_EMOJI = { PVP: '⚔️', PVE: '🐉', Economy: '💰' };
+const EVENT_TYPES = ['PVP', 'PVE', 'Gank'];
+const EVENT_TYPE_EMOJI = { PVP: '⚔️', PVE: '🐉', Gank: '🗡️' };
 
 // Same tier dicts as profile.js's "Field Dossier" — kept as a separate
 // small copy here (rather than a shared import) since this file has no
@@ -737,7 +737,7 @@ async function showBuildPanel(cat, itemIndexStr, optionIndexStr) {
 
 // Profile stats now split "most played weapon" into its own PVP and PVE
 // history (see profile.js's two grids) — pick whichever one matches the
-// event being viewed. Economy events (or anything else) have no weapon
+// event being viewed. Gank events (or anything else) have no weapon
 // grid of their own, so fall back to the two lists merged back together
 // rather than showing nothing.
 function weaponsForEventType(profile, eventType) {

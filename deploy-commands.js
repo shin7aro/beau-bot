@@ -12,12 +12,12 @@ const commands = [
         .addStringOption((opt) =>
           opt
             .setName('type')
-            .setDescription('Type of activity — PVP, PVE, or Economy')
+            .setDescription('Type of activity — PVP, PVE, or Gank')
             .setRequired(true)
             .addChoices(
               { name: 'PVP', value: 'PVP' },
               { name: 'PVE', value: 'PVE' },
-              { name: 'Economy', value: 'Economy' }
+              { name: 'Gank', value: 'Gank' }
             )
         )
         .addStringOption((opt) =>
@@ -68,11 +68,11 @@ const commands = [
         .addStringOption((opt) =>
           opt
             .setName('type')
-            .setDescription('New activity type — PVP, PVE, or Economy')
+            .setDescription('New activity type — PVP, PVE, or Gank')
             .addChoices(
               { name: 'PVP', value: 'PVP' },
               { name: 'PVE', value: 'PVE' },
-              { name: 'Economy', value: 'Economy' }
+              { name: 'Gank', value: 'Gank' }
             )
         )
         .addStringOption((opt) => opt.setName('mass').setDescription('New meeting point / portal (leave a single space to clear)'))

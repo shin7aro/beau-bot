@@ -11,7 +11,7 @@
        Healer/Battlemount), derived server-side
        from what they've actually played most
        across every closed event they attended
-     - PVP/PVE/Economy attendance, counted
+     - PVP/PVE/Gank attendance, counted
        from closed events they signed up for
        and did NOT no-show
      - total loot earned + where that ranks
@@ -36,7 +36,7 @@ const ROLE_ICONS = {
   Healer: '<path d="M12 21s-7-4.5-9.5-9C.5 8 2 4 6 4c2 0 3.5 1.2 4 2.5C10.5 5.2 12 4 14 4c4 0 5.5 4 3.5 8-2.5 4.5-9.5 9-9.5 9z"/>',
   Battlemount: '<path d="M4 18c0-4 2-7 5-9M20 18c0-4-2-7-5-9M9 9c0-3 1.5-5 3-5s3 2 3 5M7 18h10"/>',
 };
-const EVENT_TYPE_EMOJI = { PVP: '⚔️', PVE: '🐉', Economy: '💰' };
+const EVENT_TYPE_EMOJI = { PVP: '⚔️', PVE: '🐉', Gank: '🗡️' };
 
 function escapeHtml(s) {
   return String(s || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -154,7 +154,7 @@ function renderBanner(profile) {
 
 function renderLedger(profile) {
   const ledger = document.getElementById('profile-ledger');
-  const totalEvents = profile.attendance.PVP + profile.attendance.PVE + profile.attendance.Economy;
+  const totalEvents = profile.attendance.PVP + profile.attendance.PVE + profile.attendance.Gank;
 
   const campaignsHtml = profile.recentCampaigns.length
     ? profile.recentCampaigns.map(c => `
@@ -169,7 +169,7 @@ function renderLedger(profile) {
       <div class="ledger-panel-title">Service record</div>
       <div class="ledger-row"><span class="ledger-lbl">PVP attendance</span><span class="ledger-val">${profile.attendance.PVP}</span></div>
       <div class="ledger-row"><span class="ledger-lbl">PVE attendance</span><span class="ledger-val">${profile.attendance.PVE}</span></div>
-      <div class="ledger-row"><span class="ledger-lbl">Economy attendance</span><span class="ledger-val">${profile.attendance.Economy}</span></div>
+      <div class="ledger-row"><span class="ledger-lbl">Gank attendance</span><span class="ledger-val">${profile.attendance.Gank}</span></div>
       <div class="ledger-row"><span class="ledger-lbl">Total events</span><span class="ledger-val">${totalEvents}</span></div>
       <div class="ledger-row"><span class="ledger-lbl">Total loot earned</span><span class="ledger-val ledger-gold">${formatSilver(profile.totalLootEarned)}</span></div>
     </div>

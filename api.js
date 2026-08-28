@@ -765,16 +765,16 @@ router.get('/api/loot/members', auth.requireMember, async (req, res) => {
 });
 
 // ── PROFILE ──────────────────────────────────────────────────────────────
-// Maps the old, pre-PVP/PVE/Economy event "type" values (see
-// events-store.js's EVENT_TYPES comment) onto the three attendance
-// buckets below, so events created before that change still count toward
-// attendance instead of being silently dropped. "Other" has no sensible
-// bucket and is intentionally left uncounted.
+// Maps the old, pre-PVP/PVE/Gank event "type" values (see events-store.js's
+// EVENT_TYPES comment) onto the three attendance buckets below, so events
+// created before that change still count toward attendance instead of
+// being silently dropped. "Other" has no sensible bucket and is
+// intentionally left uncounted — same as the retired "Economy" type
+// (and its old "Tracking" alias), which no longer has a bucket to land in.
 const LEGACY_EVENT_TYPE_BUCKET = {
   CTA: 'PVP',
   'Group Dungeon': 'PVE',
   'Ava Dungeon': 'PVE',
-  Tracking: 'Economy',
 };
 
 function attendanceBucketFor(type) {
@@ -796,7 +796,7 @@ function attendanceBucketFor(type) {
 //   - topWeaponsPvp / topWeaponsPve: every weapon they've actually signed
 //     up and played across that same closed-event history, tallied
 //     separately per bucket (a PVP signup only ever feeds topWeaponsPvp,
-//     a PVE one only topWeaponsPve — Economy signups don't have a weapon
+//     a PVE one only topWeaponsPve — Gank signups don't have a weapon
 //     grid of their own and are left out of both), each sorted by play
 //     count desc (ties keep whichever weapon was seen first) — the full
 //     history, not capped, since both the profile page's grids and the
@@ -809,7 +809,7 @@ function attendanceBucketFor(type) {
 // resolves to `null`/`[]` rather than `undefined`.
 async function computeProfileStats(userId) {
   const events = await eventsStore.loadEvents();
-  const attendance = { PVP: 0, PVE: 0, Economy: 0 };
+  const attendance = { PVP: 0, PVE: 0, Gank: 0 };
   const roleCounts = {};
   const weaponCountsByBucket = { PVP: {}, PVE: {} };
   const campaigns = [];
@@ -1131,7 +1131,7 @@ router.post('/api/events', auth.requireOfficer, async (req, res) => {
 
   const { type, title, time, mass, sets, channelId, compKey, categories, compositionRaw } = req.body || {};
   if (!type || !eventsStore.EVENT_TYPES.includes(type)) {
-    return res.status(400).json({ error: 'type must be PVP, PVE, or Economy.' });
+    return res.status(400).json({ error: 'type must be PVP, PVE, or Gank.' });
   }
   if (!time || !String(time).trim()) return res.status(400).json({ error: 'time is required.' });
   if (!channelId) return res.status(400).json({ error: 'channelId is required.' });
@@ -1208,7 +1208,7 @@ router.put('/api/events/:id', auth.requireOfficer, async (req, res) => {
 
     const { title, time, type, mass, sets, compKey, categories, compositionRaw } = req.body || {};
     if (type && !eventsStore.EVENT_TYPES.includes(type)) {
-      return res.status(400).json({ error: 'type must be PVP, PVE, or Economy.' });
+      return res.status(400).json({ error: 'type must be PVP, PVE, or Gank.' });
     }
 
     const patch = { title, time, type };
