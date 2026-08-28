@@ -1179,6 +1179,7 @@ router.post('/api/events', auth.requireOfficer, async (req, res) => {
     // the sent message, then edit it in place so the id is finally correct
     // everywhere it's referenced.
     message = await channel.send({
+      content: eventRender.dahaloPingContent(channel.guild) || undefined,
       embeds: [eventRender.buildEmbed(event, channel.guild)],
       components: eventRender.buildButtons(event, channel.guild),
     });

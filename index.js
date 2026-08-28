@@ -625,7 +625,11 @@ client.on(Events.InteractionCreate, async (interaction) => {
           compKey: compKey,
         };
 
-        await interaction.reply({ embeds: [buildEmbed(event, interaction.guild)], components: buildButtons(event, interaction.guild) });
+        await interaction.reply({
+          content: eventRender.dahaloPingContent(interaction.guild) || undefined,
+          embeds: [buildEmbed(event, interaction.guild)],
+          components: buildButtons(event, interaction.guild),
+        });
         const message = await interaction.fetchReply();
         event.id = message.id;
         events[event.id] = event;

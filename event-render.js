@@ -178,6 +178,19 @@ function findDahaloRole(guild) {
   return guild.roles.cache.find((r) => r.name.toLowerCase() === 'dahalo') || null;
 }
 
+// Content string for pinging @Dahalo — used on the event's own channel
+// message (see api.js / index.js's /event create), not inside its thread.
+// Discord only auto-adds/notifies a role's members from a mention made
+// *inside a thread* when that role has fewer than 100 members; past that,
+// the mention still renders but silently notifies nobody who isn't already
+// in the thread. A normal channel message has no such cap, so the ping
+// belongs on the embed post itself. Returns null if the server has no
+// "Dahalo" role.
+function dahaloPingContent(guild) {
+  const role = findDahaloRole(guild);
+  return role ? `📢 <@&${role.id}>` : null;
+}
+
 // Best-effort cleanup of the posted message (and its thread, if one was
 // created) when an event is deleted outright — used by both /event delete
 // and the site's delete button. Never throws: if the message or thread was
@@ -205,17 +218,17 @@ async function deleteEventMessage(client, event) {
 // instead of waiting for someone to manually right-click → Create Thread
 // on the event message (which used to be the only way reminders could ever
 // work at all — see the "No Discord thread exists yet" error elsewhere).
-// Also drops one immediate "📢 @Dahalo" ping in the new thread — just the
-// ping, no other text — so members notice a new event thread exists,
-// separate from (and before) any "still missing" reminders that show up
-// there later. Best-effort: thread creation can fail (rate limits,
+// The actual @Dahalo ping happens on the channel message itself (see
+// dahaloPingContent above) rather than in here — a role ping dropped
+// inside a thread only notifies members already in that thread once the
+// role passes ~100 members, which silently breaks the ping for a
+// guild-wide role. Best-effort: thread creation can fail (rate limits,
 // permission hiccups, an unboosted guild rejecting a longer archive
 // duration) without stopping the event itself from existing — callers just
 // don't get an auto-thread yet and can still create one manually.
 async function createEventThread(message, event) {
-  let thread;
   try {
-    thread = await message.startThread({
+    return await message.startThread({
       name: (event.title || 'Event').slice(0, 100),
       autoArchiveDuration: 1440,
     });
@@ -223,13 +236,6 @@ async function createEventThread(message, event) {
     console.error('Failed to auto-create event thread', event.id, e);
     return null;
   }
-  try {
-    const role = findDahaloRole(thread.guild);
-    if (role) await thread.send(`📢 <@&${role.id}>`);
-  } catch (e) {
-    console.error('Failed to send thread-creation ping', event.id, e);
-  }
-  return thread;
 }
 
 // Deletes the previous reminder message (if any) right before a new one
@@ -261,4 +267,5 @@ module.exports = {
   createEventThread,
   deletePreviousReminder,
   findDahaloRole,
+  dahaloPingContent,
 };
