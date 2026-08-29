@@ -149,21 +149,20 @@ function renderCompGrid() {
 
     const eventTypeLabel = c.eventType ? EVENT_TYPE_LABELS[c.eventType] || c.eventType : 'Untagged';
     const eventTypeBadgeClass = c.eventType ? `type-${c.eventType}` : 'type-untagged';
+    const creatorName = c.createdBy || 'Unknown';
 
     return `
       <div class="comp-card event-card" data-key="${escapeHtml(c.key)}">
-        <div class="event-card-top">
+        <div class="comp-card-header">
+          <h3 class="comp-card-title">${escapeHtml(c.label)}</h3>
           <span class="event-type-badge ${eventTypeBadgeClass}">${eventTypeLabel}</span>
-          <span class="event-card-progress-label">${totalSlots} slot${totalSlots === 1 ? '' : 's'}</span>
         </div>
-        <h3 class="event-card-title comp-card-title">${escapeHtml(c.label)}</h3>
         <div class="event-card-meta comp-card-meta">
           <span>Total slots: <strong>${totalSlots}</strong></span>
           <div class="comp-card-roles">${rolePillsHtml || '<span style="color:var(--ink-faint)">No roles added</span>'}</div>
         </div>
-        <div class="event-card-progress-wrap">
-          <div class="event-card-progress-bar"><div class="event-card-progress-fill" style="width:100%"></div></div>
-          <span class="event-card-progress-label">Click to inspect</span>
+        <div class="comp-card-footer">
+          <span class="comp-card-creator">Created by ${escapeHtml(creatorName)}</span>
         </div>
       </div>`;
   }).join('');
