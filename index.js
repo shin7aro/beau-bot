@@ -600,11 +600,17 @@ client.on(Events.InteractionCreate, async (interaction) => {
           createdAt: Date.now(),
         };
 
+        // Defer before the Redis read below (comps.loadComps) — everything
+        // up to here was synchronous option parsing, so this is the first
+        // point that risks outliving Discord's 3-second window. Not
+        // ephemeral, since the normal (successful) outcome here is the
+        // public event post itself.
+        await interaction.deferReply();
+
         const saved = (await comps.loadComps())[compKey];
         if (!saved) {
-          await interaction.reply({
+          await interaction.editReply({
             content: "I couldn't find that saved composition — it may have been deleted. Try /comp list.",
-            ephemeral: true,
           });
           return;
         }
@@ -617,7 +623,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
           compKey: compKey,
         };
 
-        await interaction.reply({
+        await interaction.editReply({
           content: eventRender.dahaloPingContent(interaction.guild) || undefined,
           embeds: [buildEmbed(event, interaction.guild)],
           components: buildButtons(event, interaction.guild),
@@ -633,24 +639,30 @@ client.on(Events.InteractionCreate, async (interaction) => {
       }
 
       if (sub === 'close') {
+        // Defer immediately — the "everyone attended" path below does a
+        // Redis write + Discord message posts (finalizeEventClose), and the
+        // no-shows path fetches up to 25 Discord users, either of which can
+        // outlive Discord's 3-second window. Every reply in this branch is
+        // ephemeral, so it's safe to commit to that up front.
+        await interaction.deferReply({ ephemeral: true });
+
         const eventId = interaction.options.getString('event_id');
         const event = events[eventId];
         if (!event) {
-          await interaction.reply({ content: 'No event found with that ID.', ephemeral: true });
+          await interaction.editReply({ content: 'No event found with that ID.' });
           return;
         }
         const isOrganizer = event.organizerId === interaction.user.id;
         const canManage = interaction.memberPermissions?.has(PermissionFlagsBits.ManageGuild);
         if (!isOrganizer && !canManage) {
-          await interaction.reply({
+          await interaction.editReply({
             content: 'Only the organizer or a server manager can close this event.',
-            ephemeral: true,
           });
           return;
         }
 
         if (event.closed) {
-          await interaction.reply({ content: 'This event is already closed.', ephemeral: true });
+          await interaction.editReply({ content: 'This event is already closed.' });
           return;
         }
 
@@ -663,7 +675,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
         if (signedUpIds.length === 0) {
           // nobody signed up at all — nothing to pick from, just close
           await finalizeEventClose(client, event, [], interaction.user);
-          await interaction.reply({ content: `Event \`${eventId}\` closed. Nobody had signed up.`, ephemeral: true });
+          await interaction.editReply({ content: `Event \`${eventId}\` closed. Nobody had signed up.` });
           return;
         }
 
@@ -685,47 +697,48 @@ client.on(Events.InteractionCreate, async (interaction) => {
           .setMaxValues(users.length)
           .addOptions(users.map((u) => ({ label: u.name, value: u.id })));
 
-        await interaction.reply({
+        await interaction.editReply({
           content: `Closing **${event.title}** — select any no-shows, or press the button if everyone attended.`,
           components: [new ActionRowBuilder().addComponents(select), new ActionRowBuilder().addComponents(noShowButton)],
-          ephemeral: true,
         });
         return;
       }
 
       if (sub === 'refresh') {
+        // Defer immediately — the comps.loadComps() read plus the Redis
+        // write below can outlive Discord's 3-second window. Every reply
+        // in this branch is ephemeral, so it's safe to commit to that now.
+        await interaction.deferReply({ ephemeral: true });
+
         const eventId = interaction.options.getString('event_id');
         const event = events[eventId];
         if (!event) {
-          await interaction.reply({ content: 'No event found with that ID.', ephemeral: true });
+          await interaction.editReply({ content: 'No event found with that ID.' });
           return;
         }
 
         const isOrganizer = event.organizerId === interaction.user.id;
         const canManage = interaction.memberPermissions?.has(PermissionFlagsBits.ManageGuild);
         if (!isOrganizer && !canManage) {
-          await interaction.reply({
+          await interaction.editReply({
             content: 'Only the organizer or a server manager can refresh this event.',
-            ephemeral: true,
           });
           return;
         }
 
         if (!event.compKey) {
-          await interaction.reply({
+          await interaction.editReply({
             content:
               "This event wasn't created from a saved comp (its composition was typed manually), so there's nothing to refresh it against.",
-            ephemeral: true,
           });
           return;
         }
 
         const saved = (await comps.loadComps())[event.compKey];
         if (!saved) {
-          await interaction.reply({
+          await interaction.editReply({
             content:
               "I couldn't find the linked saved composition anymore — it may have been renamed or deleted. Check `/comp list`, or recreate the event from the current comp.",
-            ephemeral: true,
           });
           return;
         }
@@ -752,24 +765,28 @@ client.on(Events.InteractionCreate, async (interaction) => {
           } no longer had a matching slot and ${dropped.length === 1 ? 'was' : 'were'} removed: ${names}`;
         }
 
-        await interaction.reply({ content, ephemeral: true });
+        await interaction.editReply({ content });
         return;
       }
 
       if (sub === 'edit') {
+        // Defer immediately — relinkComp (Redis) and saveEvents below can
+        // outlive Discord's 3-second window. Every reply in this branch is
+        // ephemeral, so it's safe to commit to that now.
+        await interaction.deferReply({ ephemeral: true });
+
         const eventId = interaction.options.getString('event_id');
         const event = events[eventId];
         if (!event) {
-          await interaction.reply({ content: 'No event found with that ID.', ephemeral: true });
+          await interaction.editReply({ content: 'No event found with that ID.' });
           return;
         }
 
         const isOrganizer = event.organizerId === interaction.user.id;
         const canManage = interaction.memberPermissions?.has(PermissionFlagsBits.ManageGuild);
         if (!isOrganizer && !canManage) {
-          await interaction.reply({
+          await interaction.editReply({
             content: 'Only the organizer or a server manager can edit this event.',
-            ephemeral: true,
           });
           return;
         }
@@ -798,9 +815,8 @@ client.on(Events.InteractionCreate, async (interaction) => {
         if (compKey) {
           const result = await eventsStore.relinkComp(event, compKey);
           if (result.error === 'comp_not_found') {
-            await interaction.reply({
+            await interaction.editReply({
               content: "I couldn't find that saved composition — it may have been deleted. Try /comp list.",
-              ephemeral: true,
             });
             return;
           }
@@ -809,7 +825,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
         }
 
         if (changes.length === 0) {
-          await interaction.reply({ content: 'Nothing to change — pass at least one field to edit.', ephemeral: true });
+          await interaction.editReply({ content: 'Nothing to change — pass at least one field to edit.' });
           return;
         }
 
@@ -830,24 +846,28 @@ client.on(Events.InteractionCreate, async (interaction) => {
           } no longer had a matching slot and ${dropped.length === 1 ? 'was' : 'were'} removed: ${names}`;
         }
 
-        await interaction.reply({ content: editContent, ephemeral: true });
+        await interaction.editReply({ content: editContent });
         return;
       }
 
       if (sub === 'delete') {
+        // Defer immediately — saveEvents + deleteEventMessage below can
+        // outlive Discord's 3-second window. Every reply in this branch is
+        // ephemeral, so it's safe to commit to that now.
+        await interaction.deferReply({ ephemeral: true });
+
         const eventId = interaction.options.getString('event_id');
         const event = events[eventId];
         if (!event) {
-          await interaction.reply({ content: 'No event found with that ID.', ephemeral: true });
+          await interaction.editReply({ content: 'No event found with that ID.' });
           return;
         }
 
         const isOrganizer = event.organizerId === interaction.user.id;
         const canManage = interaction.memberPermissions?.has(PermissionFlagsBits.ManageGuild);
         if (!isOrganizer && !canManage) {
-          await interaction.reply({
+          await interaction.editReply({
             content: 'Only the organizer or a server manager can delete this event.',
-            ephemeral: true,
           });
           return;
         }
@@ -862,7 +882,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
           console.error('Failed to delete event message', e);
         }
 
-        await interaction.reply({ content: `Event \`${eventId}\` ("${event.title}") deleted.`, ephemeral: true });
+        await interaction.editReply({ content: `Event \`${eventId}\` ("${event.title}") deleted.` });
         return;
       }
     }
@@ -880,59 +900,66 @@ client.on(Events.InteractionCreate, async (interaction) => {
       }
 
       if (sub === 'edit') {
+        // Defer immediately — comps.loadComps() below is a Redis read that
+        // can outlive Discord's 3-second window. Every reply in this
+        // branch is ephemeral, so it's safe to commit to that now.
+        await interaction.deferReply({ ephemeral: true });
+
         const key = interaction.options.getString('comp');
         const saved = (await comps.loadComps())[key];
         if (!saved) {
-          await interaction.reply({ content: "I couldn't find that saved composition.", ephemeral: true });
+          await interaction.editReply({ content: "I couldn't find that saved composition." });
           return;
         }
 
         const canManage = interaction.memberPermissions?.has(PermissionFlagsBits.ManageGuild);
         if (saved.createdBy !== interaction.user.id && !canManage) {
-          await interaction.reply({
+          await interaction.editReply({
             content: 'Only the person who created this comp, or a server manager, can edit it.',
-            ephemeral: true,
           });
           return;
         }
 
-        await interaction.reply({
+        await interaction.editReply({
           content: `Saved compositions are now edited on the website, with a searchable weapon picker so nothing gets typed by hand: **${comps.BUILDS_LINK}/comps.html**`,
-          ephemeral: true,
         });
         return;
       }
 
       if (sub === 'delete') {
+        // Same reasoning as edit above.
+        await interaction.deferReply({ ephemeral: true });
+
         const key = interaction.options.getString('comp');
         const saved = (await comps.loadComps())[key];
         if (!saved) {
-          await interaction.reply({ content: "I couldn't find that saved composition.", ephemeral: true });
+          await interaction.editReply({ content: "I couldn't find that saved composition." });
           return;
         }
 
         const canManage = interaction.memberPermissions?.has(PermissionFlagsBits.ManageGuild);
         if (saved.createdBy !== interaction.user.id && !canManage) {
-          await interaction.reply({
+          await interaction.editReply({
             content: 'Only the person who created this comp, or a server manager, can delete it.',
-            ephemeral: true,
           });
           return;
         }
 
         await comps.deleteComp(key);
         activityStore.log(logUser(interaction.user), 'comp.delete', `Deleted composition "${saved.label}"`);
-        await interaction.reply({ content: `Deleted saved composition **${saved.label}**.`, ephemeral: true });
+        await interaction.editReply({ content: `Deleted saved composition **${saved.label}**.` });
         return;
       }
 
     if (sub === 'list') {
+        // Same reasoning as edit above.
+        await interaction.deferReply({ ephemeral: true });
+
         const saved = await comps.loadComps();
         const keys = Object.keys(saved);
         if (keys.length === 0) {
-          await interaction.reply({
+          await interaction.editReply({
             content: 'No saved compositions yet — create one with `/comp create`.',
-            ephemeral: true,
           });
           return;
         }
@@ -950,15 +977,18 @@ client.on(Events.InteractionCreate, async (interaction) => {
           .setDescription(nameLines.join('\n'))
           .setFooter({ text: 'Use /comp view to see the full roster for one composition.' });
 
-        await interaction.reply({ embeds: [embed], ephemeral: true });
+        await interaction.editReply({ embeds: [embed] });
         return;
       }
 
       if (sub === 'view') {
+        // Same reasoning as edit above.
+        await interaction.deferReply({ ephemeral: true });
+
         const key = interaction.options.getString('comp');
         const saved = (await comps.loadComps())[key];
         if (!saved) {
-          await interaction.reply({ content: "I couldn't find that saved composition.", ephemeral: true });
+          await interaction.editReply({ content: "I couldn't find that saved composition." });
           return;
         }
 
@@ -986,7 +1016,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
           .setTitle(`📋 ${saved.label}`)
           .setDescription(description);
 
-        await interaction.reply({ embeds: [embed], ephemeral: true });
+        await interaction.editReply({ embeds: [embed] });
         return;
       }
     }
@@ -1147,9 +1177,14 @@ client.on(Events.InteractionCreate, async (interaction) => {
       }
 
       if (sub === 'list') {
+        // Defer immediately — lootStore.listOpen() below is a Redis read
+        // that can outlive Discord's 3-second window. Every reply in this
+        // branch is ephemeral, so it's safe to commit to that now.
+        await interaction.deferReply({ ephemeral: true });
+
         const open = await lootStore.listOpen();
         if (open.length === 0) {
-          await interaction.reply({ content: 'No loot splits are currently waiting on anyone.', ephemeral: true });
+          await interaction.editReply({ content: 'No loot splits are currently waiting on anyone.' });
           return;
         }
 
@@ -1167,11 +1202,16 @@ client.on(Events.InteractionCreate, async (interaction) => {
               })
               .join('\n')
           );
-        await interaction.reply({ embeds: [embed], ephemeral: true });
+        await interaction.editReply({ embeds: [embed] });
         return;
       }
 
       if (sub === 'stats') {
+        // Defer immediately — the two Redis reads below (getTotals,
+        // leaderboard) can outlive Discord's 3-second window. Not
+        // ephemeral, matching the original public reply.
+        await interaction.deferReply();
+
         const totals = await lootStore.getTotals();
         const top = await lootStore.leaderboard(10);
 
@@ -1192,35 +1232,39 @@ client.on(Events.InteractionCreate, async (interaction) => {
           });
         }
 
-        await interaction.reply({ embeds: [embed] });
+        await interaction.editReply({ embeds: [embed] });
         return;
       }
 
       if (sub === 'remind') {
+        // Defer immediately — lootStore.findSplit() below is a Redis read
+        // that can outlive Discord's 3-second window. Every reply in this
+        // branch is ephemeral, so it's safe to commit to that now.
+        await interaction.deferReply({ ephemeral: true });
+
         const splitId = interaction.options.getString('split_id');
         const split = await lootStore.findSplit(splitId);
         if (!split) {
-          await interaction.reply({ content: 'No loot split found with that ID.', ephemeral: true });
+          await interaction.editReply({ content: 'No loot split found with that ID.' });
           return;
         }
 
         const isCreator = split.createdBy && split.createdBy.id === interaction.user.id;
         const canManage = interaction.memberPermissions?.has(PermissionFlagsBits.ManageGuild);
         if (!isCreator && !canManage) {
-          await interaction.reply({
+          await interaction.editReply({
             content: 'Only the person who posted this split (or a server manager) can trigger a manual reminder.',
-            ephemeral: true,
           });
           return;
         }
 
         const unclaimed = lootStore.unclaimedParticipants(split);
         if (unclaimed.length === 0) {
-          await interaction.reply({ content: 'Everyone has already claimed their split.', ephemeral: true });
+          await interaction.editReply({ content: 'Everyone has already claimed their split.' });
           return;
         }
         if (!split.threadId) {
-          await interaction.reply({ content: "This split doesn't have a thread to post the reminder in.", ephemeral: true });
+          await interaction.editReply({ content: "This split doesn't have a thread to post the reminder in." });
           return;
         }
 
@@ -1236,44 +1280,48 @@ client.on(Events.InteractionCreate, async (interaction) => {
           split.lastReminderAt = Date.now();
           split.lastReminderMessageId = sent.id;
           await lootStore.persistSplit(split);
-          await interaction.reply({ content: 'Reminder sent.', ephemeral: true });
+          await interaction.editReply({ content: 'Reminder sent.' });
         } catch (e) {
           console.error('Manual loot reminder failed', e);
-          await interaction.reply({ content: 'Failed to send the reminder — try again shortly.', ephemeral: true });
+          await interaction.editReply({ content: 'Failed to send the reminder — try again shortly.' });
         }
         return;
       }
 
       if (sub === 'mark-claimed') {
+        // Defer immediately — lootStore.findSplit() below is a Redis read
+        // that can outlive Discord's 3-second window. Every reply in this
+        // branch is ephemeral, so it's safe to commit to that now.
+        await interaction.deferReply({ ephemeral: true });
+
         const splitId = interaction.options.getString('split_id');
         const targetUser = interaction.options.getUser('member');
         const split = await lootStore.findSplit(splitId);
         if (!split) {
-          await interaction.reply({ content: 'No loot split found with that ID.', ephemeral: true });
+          await interaction.editReply({ content: 'No loot split found with that ID.' });
           return;
         }
 
         const isCreator = split.createdBy && split.createdBy.id === interaction.user.id;
         const canManage = interaction.memberPermissions?.has(PermissionFlagsBits.ManageGuild);
         if (!isCreator && !canManage) {
-          await interaction.reply({
+          await interaction.editReply({
             content: 'Only the person who posted this split (or a server manager) can mark someone as claimed.',
-            ephemeral: true,
           });
           return;
         }
 
         const result = lootStore.markClaimed(split, targetUser.id);
         if (result.error === 'not_participant') {
-          await interaction.reply({ content: `<@${targetUser.id}> isn't a participant on this split.`, ephemeral: true });
+          await interaction.editReply({ content: `<@${targetUser.id}> isn't a participant on this split.` });
           return;
         }
         if (result.error === 'already_donated') {
-          await interaction.reply({ content: `<@${targetUser.id}> already donated this share to the guild — can't also mark it claimed.`, ephemeral: true });
+          await interaction.editReply({ content: `<@${targetUser.id}> already donated this share to the guild — can't also mark it claimed.` });
           return;
         }
         if (result.alreadyClaimed) {
-          await interaction.reply({ content: `<@${targetUser.id}> was already marked as claimed.`, ephemeral: true });
+          await interaction.editReply({ content: `<@${targetUser.id}> was already marked as claimed.` });
           return;
         }
 
@@ -1287,18 +1335,22 @@ client.on(Events.InteractionCreate, async (interaction) => {
           `Marked ${targetUser.username} as having claimed their split of "${split.lootName}"`
         );
 
-        await interaction.reply({
+        await interaction.editReply({
           content: `Marked <@${targetUser.id}> as having taken their split of **${split.lootName}**.`,
-          ephemeral: true,
         });
         return;
       }
 
       if (sub === 'delete') {
+        // Defer immediately — lootStore.findSplit() below is a Redis read
+        // that can outlive Discord's 3-second window. Every reply in this
+        // branch is ephemeral, so it's safe to commit to that now.
+        await interaction.deferReply({ ephemeral: true });
+
         const splitId = interaction.options.getString('split_id');
         const split = await lootStore.findSplit(splitId);
         if (!split) {
-          await interaction.reply({ content: 'No loot split found with that ID.', ephemeral: true });
+          await interaction.editReply({ content: 'No loot split found with that ID.' });
           return;
         }
 
@@ -1312,13 +1364,13 @@ client.on(Events.InteractionCreate, async (interaction) => {
           ((process.env.OFFICER_ROLE_ID && memberRoles.has(process.env.OFFICER_ROLE_ID)) ||
             (process.env.ADMIN_ROLE_ID && memberRoles.has(process.env.ADMIN_ROLE_ID)));
         if (!isOfficerOrAdmin) {
-          await interaction.reply({ content: 'Only officers/admins can delete a loot split.', ephemeral: true });
+          await interaction.editReply({ content: 'Only officers/admins can delete a loot split.' });
           return;
         }
 
         const result = await lootStore.deleteSplit(splitId);
         if (result.error === 'not_found') {
-          await interaction.reply({ content: 'No loot split found with that ID.', ephemeral: true });
+          await interaction.editReply({ content: 'No loot split found with that ID.' });
           return;
         }
 
@@ -1338,31 +1390,37 @@ client.on(Events.InteractionCreate, async (interaction) => {
           `Deleted the loot split for "${split.lootName}" (${lootRender.formatSilver(split.lootValue)})`
         );
 
-        await interaction.reply({ content: `Deleted the split for **${split.lootName}** — it's out of the all-time totals too.`, ephemeral: true });
+        await interaction.editReply({ content: `Deleted the split for **${split.lootName}** — it's out of the all-time totals too.` });
         return;
       }
     }
 
     // ----- loot split buttons: "I took my split" / "Donate my share" -----
     if (interaction.isButton() && interaction.customId.startsWith('loot_claim:')) {
+      // Defer immediately — every path below needs a Redis fetch first
+      // (findSplit), so a bare .reply() here can outlive Discord's 3-second
+      // window and throw "Unknown interaction". Ephemeral matches every
+      // downstream reply in this handler, so it's safe to fix up front.
+      await interaction.deferReply({ ephemeral: true });
+
       const splitId = interaction.customId.split(':')[1];
       const split = await lootStore.findSplit(splitId);
       if (!split) {
-        await interaction.reply({ content: 'This loot split no longer exists.', ephemeral: true });
+        await interaction.editReply({ content: 'This loot split no longer exists.' });
         return;
       }
 
       const result = lootStore.markClaimed(split, interaction.user.id);
       if (result.error === 'not_participant') {
-        await interaction.reply({ content: "You're not a participant on this loot split.", ephemeral: true });
+        await interaction.editReply({ content: "You're not a participant on this loot split." });
         return;
       }
       if (result.error === 'already_donated') {
-        await interaction.reply({ content: 'You already donated this share to the guild.', ephemeral: true });
+        await interaction.editReply({ content: 'You already donated this share to the guild.' });
         return;
       }
       if (result.alreadyClaimed) {
-        await interaction.reply({ content: "Already marked — you've taken your split.", ephemeral: true });
+        await interaction.editReply({ content: "Already marked — you've taken your split." });
         return;
       }
 
@@ -1370,38 +1428,40 @@ client.on(Events.InteractionCreate, async (interaction) => {
       await lootRender.updateSplitMessage(client, split);
       if (result.allResolved) await lootRender.celebrateCompletedThread(client, split);
 
-      await interaction.reply({ content: `✅ Marked — you took your split of **${split.lootName}**.`, ephemeral: true });
+      await interaction.editReply({ content: `✅ Marked — you took your split of **${split.lootName}**.` });
       return;
     }
 
     if (interaction.isButton() && interaction.customId.startsWith('loot_donate:')) {
+      // Same reasoning as loot_claim above.
+      await interaction.deferReply({ ephemeral: true });
+
       const splitId = interaction.customId.split(':')[1];
       const split = await lootStore.findSplit(splitId);
       if (!split) {
-        await interaction.reply({ content: 'This loot split no longer exists.', ephemeral: true });
+        await interaction.editReply({ content: 'This loot split no longer exists.' });
         return;
       }
 
       const result = await lootStore.donateShare(split, interaction.user.id);
       if (result.error === 'not_participant') {
-        await interaction.reply({ content: "You're not a participant on this loot split.", ephemeral: true });
+        await interaction.editReply({ content: "You're not a participant on this loot split." });
         return;
       }
       if (result.error === 'already_claimed') {
-        await interaction.reply({ content: 'You already claimed this share yourself.', ephemeral: true });
+        await interaction.editReply({ content: 'You already claimed this share yourself.' });
         return;
       }
       if (result.alreadyDonated) {
-        await interaction.reply({ content: "Already marked — you've donated this share to the guild.", ephemeral: true });
+        await interaction.editReply({ content: "Already marked — you've donated this share to the guild." });
         return;
       }
 
       await lootRender.updateSplitMessage(client, split);
       if (result.allResolved) await lootRender.celebrateCompletedThread(client, split);
 
-      await interaction.reply({
+      await interaction.editReply({
         content: `🎁 Thank you — your split of **${split.lootName}** was donated to the guild.`,
-        ephemeral: true,
       });
       return;
     }
@@ -1424,10 +1484,14 @@ client.on(Events.InteractionCreate, async (interaction) => {
         }
 
         if (catData.weaponOptions.length === 1) {
+          // Defer before the Redis write below — everything up to here was
+          // synchronous, so only this branch (and the matching one further
+          // down) actually risks outliving Discord's 3-second window.
+          await interaction.deferUpdate();
           removeUserFromEvent(event, interaction.user.id);
           catData.signups.push({ userId: interaction.user.id, weapon: catData.weaponOptions[0] });
           await saveEvents(events);
-          await interaction.update({ embeds: [buildEmbed(event, interaction.guild)], components: buildButtons(event, interaction.guild) });
+          await interaction.editReply({ embeds: [buildEmbed(event, interaction.guild)], components: buildButtons(event, interaction.guild) });
           return;
         }
 
@@ -1484,8 +1548,9 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
         removeUserFromEvent(event, interaction.user.id);
         items[onlyIdx].signups.push(interaction.user.id);
+        await interaction.deferUpdate();
         await saveEvents(events);
-        await interaction.update({ embeds: [buildEmbed(event, interaction.guild)], components: buildButtons(event, interaction.guild) });
+        await interaction.editReply({ embeds: [buildEmbed(event, interaction.guild)], components: buildButtons(event, interaction.guild) });
         return;
       }
 
@@ -1512,10 +1577,17 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
     // ----- select menu: specific build chosen -----
     if (interaction.isStringSelectMenu() && interaction.customId.startsWith('event_select:')) {
+      // Defer immediately — the sign-up path below does a Redis write
+      // (saveEvents) and re-renders the event embed before responding,
+      // which can outlive Discord's 3-second window and throw "Unknown
+      // interaction". deferUpdate (not deferReply) since every branch here
+      // edits this same ephemeral prompt rather than sending a new one.
+      await interaction.deferUpdate();
+
       const [, category, eventId] = interaction.customId.split(':');
       const event = events[eventId];
       if (!event || event.closed) {
-        await interaction.update({ content: 'This event is no longer open.', components: [] });
+        await interaction.editReply({ content: 'This event is no longer open.', components: [] });
         return;
       }
 
@@ -1524,7 +1596,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
       if (catData.mode === 'quota') {
         if (catData.signups.length >= catData.capacity) {
-          await interaction.update({ content: 'That role just filled up, try another.', components: [] });
+          await interaction.editReply({ content: 'That role just filled up, try another.', components: [] });
           return;
         }
         removeUserFromEvent(event, interaction.user.id);
@@ -1537,13 +1609,13 @@ client.on(Events.InteractionCreate, async (interaction) => {
           console.error('Failed to update event message after select', e);
         }
 
-        await interaction.update({ content: `Signed up as **${chosenValue}** (${category}).`, components: [] });
+        await interaction.editReply({ content: `Signed up as **${chosenValue}** (${category}).`, components: [] });
         return;
       }
 
       const item = catData.items[Number(chosenValue)];
       if (!item || item.signups.length >= 1) {
-        await interaction.update({ content: 'That slot just filled up, try another.', components: [] });
+        await interaction.editReply({ content: 'That slot just filled up, try another.', components: [] });
         return;
       }
 
@@ -1558,7 +1630,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
             if (opt.emoji) option.emoji = opt.emoji;
             return option;
           }));
-        await interaction.update({
+        await interaction.editReply({
           content: `Pick your ${category} weapon:`,
           components: [new ActionRowBuilder().addComponents(optSelect)],
         });
@@ -1575,30 +1647,33 @@ client.on(Events.InteractionCreate, async (interaction) => {
         console.error('Failed to update event message after select', e);
       }
 
-      await interaction.update({ content: `Signed up as **${weaponAliasStore.weaponDisplayName(item.name)}** (${category}).`, components: [] });
+      await interaction.editReply({ content: `Signed up as **${weaponAliasStore.weaponDisplayName(item.name)}** (${category}).`, components: [] });
       return;
     }
 
     // ----- select menu: weapon chosen for a multi-choice line (self sign-up) -----
     if (interaction.isStringSelectMenu() && interaction.customId.startsWith('event_optionselect:')) {
+      // Same reasoning as event_select above.
+      await interaction.deferUpdate();
+
       const [, category, eventId, itemIndexStr] = interaction.customId.split(':');
       const event = events[eventId];
       if (!event || event.closed) {
-        await interaction.update({ content: 'This event is no longer open.', components: [] });
+        await interaction.editReply({ content: 'This event is no longer open.', components: [] });
         return;
       }
 
       const catData = event.categories[category];
       const item = catData && catData.items[Number(itemIndexStr)];
       if (!item || item.signups.length >= 1) {
-        await interaction.update({ content: 'That slot just filled up, try another.', components: [] });
+        await interaction.editReply({ content: 'That slot just filled up, try another.', components: [] });
         return;
       }
 
       const optionIndex = Number(interaction.values[0]);
       const option = item.options && item.options[optionIndex];
       if (!option) {
-        await interaction.update({ content: 'Invalid choice.', components: [] });
+        await interaction.editReply({ content: 'Invalid choice.', components: [] });
         return;
       }
 
@@ -1613,25 +1688,28 @@ client.on(Events.InteractionCreate, async (interaction) => {
         console.error('Failed to update event message after option select', e);
       }
 
-      await interaction.update({ content: `Signed up as **${weaponAliasStore.weaponDisplayName(option.name)}** (${category}).`, components: [] });
+      await interaction.editReply({ content: `Signed up as **${weaponAliasStore.weaponDisplayName(option.name)}** (${category}).`, components: [] });
       return;
     }
 
     // ----- select menu: organizer picking a slot on behalf of someone else -----
     if (interaction.isStringSelectMenu() && interaction.customId.startsWith('event_select_for:')) {
+      // Same reasoning as event_select above.
+      await interaction.deferUpdate();
+
       const [, category, eventId, targetUserId] = interaction.customId.split(':');
       const event = events[eventId];
       if (!event || event.closed) {
-        await interaction.update({ content: 'This event is no longer open.', components: [] });
+        await interaction.editReply({ content: 'This event is no longer open.', components: [] });
         return;
       }
 
       const isOrganizer = event.organizerId === interaction.user.id;
       const canManage = interaction.memberPermissions?.has(PermissionFlagsBits.ManageGuild);
       if (!isOrganizer && !canManage) {
-        await interaction.reply({
+        await interaction.editReply({
           content: 'Only the organizer or a server manager can finish this assignment.',
-          ephemeral: true,
+          components: [],
         });
         return;
       }
@@ -1641,7 +1719,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
       if (catData.mode === 'quota') {
         if (catData.signups.length >= catData.capacity) {
-          await interaction.update({ content: 'That role just filled up, try another.', components: [] });
+          await interaction.editReply({ content: 'That role just filled up, try another.', components: [] });
           return;
         }
         removeUserFromEvent(event, targetUserId);
@@ -1654,7 +1732,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
           console.error('Failed to update event message after select', e);
         }
 
-        await interaction.update({
+        await interaction.editReply({
           content: `✅ Added <@${targetUserId}> as **${chosenValue}** (${category}).`,
           components: [],
         });
@@ -1663,7 +1741,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
       const item = catData.items[Number(chosenValue)];
       if (!item || item.signups.length >= 1) {
-        await interaction.update({ content: 'That slot just filled up, try another.', components: [] });
+        await interaction.editReply({ content: 'That slot just filled up, try another.', components: [] });
         return;
       }
 
@@ -1678,7 +1756,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
             if (opt.emoji) option.emoji = opt.emoji;
             return option;
           }));
-        await interaction.update({
+        await interaction.editReply({
           content: `Pick <@${targetUserId}>'s **${category}** weapon:`,
           components: [new ActionRowBuilder().addComponents(optSelect)],
         });
@@ -1695,7 +1773,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
         console.error('Failed to update event message after select', e);
       }
 
-      await interaction.update({
+      await interaction.editReply({
         content: `✅ Added <@${targetUserId}> as **${weaponAliasStore.weaponDisplayName(item.name)}** (${category}).`,
         components: [],
       });
@@ -1704,19 +1782,22 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
     // ----- select menu: weapon chosen for a multi-choice line (assigning someone else) -----
     if (interaction.isStringSelectMenu() && interaction.customId.startsWith('event_optionselect_for:')) {
+      // Same reasoning as event_select above.
+      await interaction.deferUpdate();
+
       const [, category, eventId, itemIndexStr, targetUserId] = interaction.customId.split(':');
       const event = events[eventId];
       if (!event || event.closed) {
-        await interaction.update({ content: 'This event is no longer open.', components: [] });
+        await interaction.editReply({ content: 'This event is no longer open.', components: [] });
         return;
       }
 
       const isOrganizer = event.organizerId === interaction.user.id;
       const canManage = interaction.memberPermissions?.has(PermissionFlagsBits.ManageGuild);
       if (!isOrganizer && !canManage) {
-        await interaction.reply({
+        await interaction.editReply({
           content: 'Only the organizer or a server manager can finish this assignment.',
-          ephemeral: true,
+          components: [],
         });
         return;
       }
@@ -1724,14 +1805,14 @@ client.on(Events.InteractionCreate, async (interaction) => {
       const catData = event.categories[category];
       const item = catData && catData.items[Number(itemIndexStr)];
       if (!item || item.signups.length >= 1) {
-        await interaction.update({ content: 'That slot just filled up, try another.', components: [] });
+        await interaction.editReply({ content: 'That slot just filled up, try another.', components: [] });
         return;
       }
 
       const optionIndex = Number(interaction.values[0]);
       const option = item.options && item.options[optionIndex];
       if (!option) {
-        await interaction.update({ content: 'Invalid choice.', components: [] });
+        await interaction.editReply({ content: 'Invalid choice.', components: [] });
         return;
       }
 
@@ -1746,7 +1827,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
         console.error('Failed to update event message after option select', e);
       }
 
-      await interaction.update({
+      await interaction.editReply({
         content: `✅ Added <@${targetUserId}> as **${weaponAliasStore.weaponDisplayName(option.name)}** (${category}).`,
         components: [],
       });
@@ -1755,26 +1836,31 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
     // ----- close flow: no-shows picked from the multi-select -----
     if (interaction.isStringSelectMenu() && interaction.customId.startsWith('event_close_select:')) {
+      // Defer immediately — finalizeEventClose below does a Redis write,
+      // re-renders the embed, and posts a close summary, any of which can
+      // outlive Discord's 3-second window and throw "Unknown interaction".
+      await interaction.deferUpdate();
+
       const [, eventId] = interaction.customId.split(':');
       const event = events[eventId];
       if (!event) {
-        await interaction.update({ content: 'This event no longer exists.', components: [] });
+        await interaction.editReply({ content: 'This event no longer exists.', components: [] });
         return;
       }
       const isOrganizer = event.organizerId === interaction.user.id;
       const canManage = interaction.memberPermissions?.has(PermissionFlagsBits.ManageGuild);
       if (!isOrganizer && !canManage) {
-        await interaction.reply({ content: 'Only the organizer or a server manager can close this event.', ephemeral: true });
+        await interaction.editReply({ content: 'Only the organizer or a server manager can close this event.', components: [] });
         return;
       }
       if (event.closed) {
-        await interaction.update({ content: 'This event is already closed.', components: [] });
+        await interaction.editReply({ content: 'This event is already closed.', components: [] });
         return;
       }
 
       const noShowIds = interaction.values;
       await finalizeEventClose(client, event, noShowIds, interaction.user);
-      await interaction.update({
+      await interaction.editReply({
         content: `Event closed. No-shows: ${noShowIds.length > 0 ? noShowIds.map((id) => `<@${id}>`).join(', ') : '*none*'}`,
         components: [],
       });
@@ -1783,25 +1869,28 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
     // ----- close flow: "no no-shows" button -----
     if (interaction.isButton() && interaction.customId.startsWith('event_close_none:')) {
+      // Same reasoning as event_close_select above.
+      await interaction.deferUpdate();
+
       const [, eventId] = interaction.customId.split(':');
       const event = events[eventId];
       if (!event) {
-        await interaction.update({ content: 'This event no longer exists.', components: [] });
+        await interaction.editReply({ content: 'This event no longer exists.', components: [] });
         return;
       }
       const isOrganizer = event.organizerId === interaction.user.id;
       const canManage = interaction.memberPermissions?.has(PermissionFlagsBits.ManageGuild);
       if (!isOrganizer && !canManage) {
-        await interaction.reply({ content: 'Only the organizer or a server manager can close this event.', ephemeral: true });
+        await interaction.editReply({ content: 'Only the organizer or a server manager can close this event.', components: [] });
         return;
       }
       if (event.closed) {
-        await interaction.update({ content: 'This event is already closed.', components: [] });
+        await interaction.editReply({ content: 'This event is already closed.', components: [] });
         return;
       }
 
       await finalizeEventClose(client, event, [], interaction.user);
-      await interaction.update({ content: 'Event closed. No-shows: *none*', components: [] });
+      await interaction.editReply({ content: 'Event closed. No-shows: *none*', components: [] });
       return;
     }
 
@@ -1813,9 +1902,12 @@ client.on(Events.InteractionCreate, async (interaction) => {
         await interaction.reply({ content: 'Event not found.', ephemeral: true });
         return;
       }
+      // Defer before the Redis write below — the lookup above is
+      // synchronous so it's already safe, but saveEvents is not.
+      await interaction.deferUpdate();
       removeUserFromEvent(event, interaction.user.id);
       await saveEvents(events);
-      await interaction.update({ embeds: [buildEmbed(event, interaction.guild)], components: buildButtons(event, interaction.guild) });
+      await interaction.editReply({ embeds: [buildEmbed(event, interaction.guild)], components: buildButtons(event, interaction.guild) });
       return;
     }
 
@@ -1896,7 +1988,15 @@ client.on(Events.InteractionCreate, async (interaction) => {
     console.error('Interaction error:', err);
     if (interaction.isRepliable()) {
       try {
-        await interaction.reply({ content: 'Something went wrong, please try again.', ephemeral: true });
+        // If we'd already deferred/replied before hitting this error, a
+        // bare .reply() here throws "InteractionAlreadyReplied" and the
+        // catch below swallows that too — so the user gets no feedback at
+        // all instead of the intended error message.
+        if (interaction.deferred || interaction.replied) {
+          await interaction.editReply({ content: 'Something went wrong, please try again.', embeds: [], components: [] });
+        } else {
+          await interaction.reply({ content: 'Something went wrong, please try again.', ephemeral: true });
+        }
       } catch {
         /* ignore */
       }
