@@ -51,7 +51,7 @@ const lootRender = require('./loot-render');
 // refresh from either side behaves identically. Destructured under their
 // original names so nothing else in this file has to change.
 const { loadEvents, saveEvents, removeUserFromEvent, getSignedUpUserIds, getMissingRolesSummary } = eventsStore;
-const { buildEmbed, buildButtons, updateEventMessage } = eventRender;
+const { buildEmbed, buildButtons, updateEventMessage, roleEmojiText } = eventRender;
 
 // Shapes a Discord user into the { id, username, role } shape activity-store
 // expects — "role" here is just a label for the log (Discord doesn't have
@@ -1003,7 +1003,10 @@ client.on(Events.InteractionCreate, async (interaction) => {
             lastParty = row.party;
           }
           const roleEmoji = roleEmojiText(interaction.guild, row.category);
-          lines.push(`${roleEmoji} - ${row.emoji || '🔹'} - **${weaponAliasStore.weaponDisplayName(row.name)}**`);
+          const label = row.options
+            ? row.options.map((o) => `${o.emoji || '🔹'} **${weaponAliasStore.weaponDisplayName(o.name)}**`).join('/')
+            : `${row.emoji || '🔹'} **${weaponAliasStore.weaponDisplayName(row.name)}**`;
+          lines.push(`${roleEmoji} - ${label}`);
         }
 
         let description = lines.join('\n') || '*empty*';
