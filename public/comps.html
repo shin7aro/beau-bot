@@ -4,9 +4,10 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>Compositions — Rise of Dahalo</title>
-<meta name="description" content="Officer/admin composition editor for Rise of Dahalo — shared with the Discord bot's /comp commands.">
+<meta name="description" content="Guild compositions for Rise of Dahalo — shared with the Discord bot's /comp commands.">
 <link rel="stylesheet" href="css/base.css">
 <link rel="stylesheet" href="css/builds.css">
+<link rel="stylesheet" href="css/events.css">
 <link rel="stylesheet" href="css/comps.css">
 </head>
 <body class="app-shell">
@@ -52,24 +53,45 @@
   </div>
 </div>
 
-<!-- MAIN APP (hidden until authorized) -->
-<div id="comps-app" class="app-main" style="display:none">
+<!-- LIST VIEW (CARDS GRID) -->
+<div id="comps-list-view" class="app-main" style="display:none">
   <div class="controls">
-    <div class="comp-select-wrap">
-      <select id="comp-select">
-        <option value="">Select a composition…</option>
-      </select>
+    <div class="search-wrap">
+      <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+      <input type="text" id="comp-search" placeholder="Search compositions…" autocomplete="off">
     </div>
     <span class="count-label" id="comp-count-label">0 compositions</span>
-    <button class="comp-add-btn" id="new-comp-btn"><span class="btn-label">+ New composition</span></button>
+    <button class="comp-add-btn officer-only" id="new-comp-btn"><span class="btn-label">+ New composition</span></button>
   </div>
 
+  <div class="event-card-grid comp-card-grid" id="comp-card-grid"></div>
+  <div class="empty-state" id="comp-empty" style="display:none">No compositions match your search.</div>
+</div>
+
+<!-- VIEWER VIEW (READ-ONLY VIEWER) -->
+<div id="comps-viewer-view" class="app-main event-detail-app" style="display:none">
+  <div class="event-detail-head-row">
+    <button class="detail-back-btn event-detail-back" id="comp-viewer-back-btn">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+      Back to compositions
+    </button>
+    <div class="event-role-counter-row" id="comp-viewer-role-counter-row"></div>
+  </div>
+  <div class="comp-viewer-layout" id="comp-viewer-layout">
+    <!-- filled by comps.js: info column (with Edit button) / roster parties / (optional build card) -->
+  </div>
+</div>
+
+<!-- EDITOR VIEW (EDIT FORM) -->
+<div id="comps-editor-view" class="app-main event-detail-app" style="display:none">
+  <div class="event-detail-head-row">
+    <button class="detail-back-btn event-detail-back" id="comp-editor-back-btn">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+      Back
+    </button>
+  </div>
   <div class="comp-editor-wrap" id="comp-editor-wrap">
-    <div class="detail-placeholder" id="comp-detail-placeholder">
-      <p>Select a composition above to view or edit it</p>
-      <small>Or create a new one</small>
-    </div>
-    <div class="detail-card" id="comp-detail-card"></div>
+    <div class="detail-card visible" id="comp-detail-card"></div>
   </div>
 </div>
 

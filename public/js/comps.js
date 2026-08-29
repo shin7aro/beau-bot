@@ -1,5 +1,5 @@
 /* ─────────────────────────────────────────
-   COMPOSITIONS — officer/admin editor
+   COMPOSITIONS — visual card list, viewer & editor
    Reads/writes the same `comps` data the
    Discord bot's /comp commands use.
 ───────────────────────────────────────── */
@@ -8,13 +8,11 @@ const TAB_LABELS = { brawl: 'Brawl', gank: 'Gank', kite: 'Kite & Clap', brawlcla
 
 let allComps = [];       // [{ key, label, categories, updatedAt, ... }]
 let buildOptions = [];   // [{ tab, index, role, weapon }]
-let weaponEmojiMap = {}; // { "Broadsword": "<:tag:id>", ... } from /api/weapon-emojis —
-                         // maintained on the separate (Shin7aro-only) Emoji Linking
-                         // page, not editable here. A line's emoji is set automatically
-                         // the moment a weapon's picked below (see openWeaponPopover);
-                         // there's no per-line emoji picker in this editor anymore.
-let editingKey = null;   // null = viewing/creating, otherwise the comp being edited
+let weaponEmojiMap = {}; // { "Broadsword": "<:tag:id>", ... } from /api/weapon-emojis
+let viewingKey = null;   // currently selected comp key in read-only viewer
+let editingKey = null;   // null = creating new, otherwise key of comp being edited
 let draft = null;        // working copy of the comp currently shown in the editor
+let searchStr = '';
 
 function escapeHtml(s) {
   return String(s || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -35,6 +33,26 @@ async function api(path, opts) {
   return res.status === 204 ? null : res.json();
 }
 
+function showToast(message) {
+  const toast = document.getElementById('toast');
+  if (!toast) { alert(message); return; }
+  toast.innerHTML = escapeHtml(message);
+  toast.classList.add('show');
+  clearTimeout(showToast._t);
+  showToast._t = setTimeout(() => toast.classList.remove('show'), 3000);
+}
+
+function emojiToHtml(value, { size = 16, fallback = '🔹' } = {}) {
+  if (!value) return `<span class="event-emoji-fallback">${fallback}</span>`;
+  const m = String(value).match(/^<a?:(\w+):(\d+)>$/);
+  if (m) {
+    const animated = value.startsWith('<a:');
+    const url = `https://cdn.discordapp.com/emojis/${m[2]}.${animated ? 'gif' : 'png'}?size=32`;
+    return `<img class="event-emoji-img" src="${url}" alt="${escapeHtml(m[1])}" loading="lazy" style="width:${size}px;height:${size}px">`;
+  }
+  return `<span class="event-emoji-fallback">${escapeHtml(value)}</span>`;
+}
+
 async function loadAll() {
   let weaponAliases;
   [allComps, buildOptions, weaponEmojiMap, weaponAliases] = await Promise.all([
@@ -44,35 +62,294 @@ async function loadAll() {
     api('/api/weapon-aliases').catch(() => ({})),
   ]);
   window.WEAPON_ALIASES = weaponAliases;
-  renderCompSelect();
+  renderCompGrid();
 }
 
-/* ---------- comp picker (dropdown) ---------- */
-function renderCompSelect() {
-  const select = document.getElementById('comp-select');
+/* ---------- helper: expand comp items into rows ---------- */
+function getCompRows(comp) {
+  const rows = [];
+  if (!comp || !comp.categories) return rows;
+  for (const cat of CATEGORY_ORDER) {
+    const cData = comp.categories[cat];
+    if (!cData || !Array.isArray(cData.items)) continue;
+    cData.items.forEach((item, itemIndex) => {
+      const party = typeof item.party === 'number' ? item.party : 0;
+      if (item.options && Array.isArray(item.options)) {
+        rows.push({
+          category: cat,
+          party,
+          itemIndex,
+          options: item.options.map(o => ({
+            name: o.name,
+            emoji: o.emoji,
+            iconUrl: window.imgUrl ? window.imgUrl(o.name) : null,
+            buildTab: o.buildTab,
+            buildId: o.buildId,
+          })),
+        });
+      } else {
+        rows.push({
+          category: cat,
+          name: item.name,
+          emoji: item.emoji,
+          party,
+          itemIndex,
+          iconUrl: window.imgUrl ? window.imgUrl(item.name) : null,
+          buildTab: item.buildTab,
+          buildId: item.buildId,
+        });
+      }
+    });
+  }
+  return rows;
+}
+
+function countCompSlots(comp) {
+  return getCompRows(comp).length;
+}
+
+function getCompRoleCounts(comp) {
+  const counts = {};
+  const rows = getCompRows(comp);
+  for (const row of rows) {
+    counts[row.category] = (counts[row.category] || 0) + 1;
+  }
+  return counts;
+}
+
+/* ─────────────────────────────────────────
+   1. LIST VIEW: COMP CARDS GRID
+───────────────────────────────────────── */
+function renderCompGrid() {
+  const grid = document.getElementById('comp-card-grid');
+  const empty = document.getElementById('comp-empty');
   const countLabel = document.getElementById('comp-count-label');
-  countLabel.textContent = `${allComps.length} composition${allComps.length === 1 ? '' : 's'}`;
 
-  const sorted = [...allComps].sort((a, b) => a.label.localeCompare(b.label));
-  const currentValue = select.value;
-  select.innerHTML = `<option value="">Select a composition…</option>` +
-    sorted.map(c => `<option value="${escapeHtml(c.key)}">${escapeHtml(c.label)}</option>`).join('');
-  if (currentValue && sorted.some(c => c.key === currentValue)) select.value = currentValue;
+  let list = allComps;
+  if (searchStr) {
+    list = list.filter(c => c.label.toLowerCase().includes(searchStr));
+  }
+
+  countLabel.textContent = `${list.length} composition${list.length === 1 ? '' : 's'}`;
+  empty.style.display = list.length === 0 ? '' : 'none';
+
+  grid.innerHTML = list.map(c => {
+    const totalSlots = countCompSlots(c);
+    const roleCounts = getCompRoleCounts(c);
+    const rolePillsHtml = CATEGORY_ORDER
+      .filter(cat => roleCounts[cat])
+      .map(cat => `<span class="comp-card-role-chip role-${cat.toLowerCase()}">${cat}: ${roleCounts[cat]}</span>`)
+      .join('');
+
+    return `
+      <div class="comp-card event-card" data-key="${escapeHtml(c.key)}">
+        <div class="event-card-top">
+          <span class="comp-card-badge">📋 Composition</span>
+          <span class="event-card-progress-label">${totalSlots} slot${totalSlots === 1 ? '' : 's'}</span>
+        </div>
+        <h3 class="event-card-title comp-card-title">${escapeHtml(c.label)}</h3>
+        <div class="event-card-meta comp-card-meta">
+          <span>Total slots: <strong>${totalSlots}</strong></span>
+          <div class="comp-card-roles">${rolePillsHtml || '<span style="color:var(--ink-faint)">No roles added</span>'}</div>
+        </div>
+        <div class="event-card-progress-wrap">
+          <div class="event-card-progress-bar"><div class="event-card-progress-fill" style="width:100%"></div></div>
+          <span class="event-card-progress-label">Click to inspect</span>
+        </div>
+      </div>`;
+  }).join('');
+
+  grid.querySelectorAll('.comp-card').forEach(card => {
+    card.addEventListener('click', () => openViewer(card.dataset.key));
+  });
 }
 
+/* ─────────────────────────────────────────
+   2. COMP VIEWER (READ-ONLY)
+───────────────────────────────────────── */
+function openViewer(key) {
+  const comp = allComps.find(c => c.key === key);
+  if (!comp) return;
+  viewingKey = key;
+  location.hash = '#c/' + encodeURIComponent(key);
+
+  document.getElementById('comps-list-view').style.display = 'none';
+  document.getElementById('comps-editor-view').style.display = 'none';
+  document.getElementById('comps-viewer-view').style.display = '';
+
+  renderViewer(comp);
+}
+
+function closeViewer() {
+  viewingKey = null;
+  history.replaceState(null, '', location.pathname + location.search);
+  document.getElementById('comps-viewer-view').style.display = 'none';
+  document.getElementById('comps-editor-view').style.display = 'none';
+  document.getElementById('comps-list-view').style.display = '';
+  renderCompGrid();
+}
+
+function renderViewer(comp) {
+  const rows = getCompRows(comp);
+  const totalSlots = rows.length;
+  const roleCounts = getCompRoleCounts(comp);
+
+  // Role counter header bar
+  const counterRow = document.getElementById('comp-viewer-role-counter-row');
+  const rolePillsHtml = CATEGORY_ORDER
+    .filter(cat => roleCounts[cat])
+    .map(cat => `
+      <span class="role-count-pill role-${cat.toLowerCase()}">
+        <span class="role-count-name">${escapeHtml(cat)}</span>
+        <span class="role-count-num">${roleCounts[cat]}</span>
+      </span>`).join('');
+
+  counterRow.innerHTML = `
+    <div class="event-role-counter">
+      <span class="role-count-total">${totalSlots} Slot${totalSlots === 1 ? '' : 's'}</span>
+      ${rolePillsHtml}
+    </div>`;
+
+  // Parties breakdown
+  const parties = {};
+  for (const row of rows) {
+    if (!parties[row.party]) parties[row.party] = [];
+    parties[row.party].push(row);
+  }
+  const partyKeys = Object.keys(parties).sort((a, b) => Number(a) - Number(b));
+  const hasMultipleParties = partyKeys.length > 1;
+
+  const partiesHtml = `<div class="event-party-grid">${partyKeys.map(pk => `
+    <div class="event-party-card">
+      <div class="event-party-head">${hasMultipleParties ? `Party ${Number(pk) + 1}` : 'Roster'}</div>
+      ${parties[pk].map(row => renderViewerRow(row)).join('')}
+    </div>`).join('')}</div>`;
+
+  const canEdit = isOfficerOrAdmin();
+
+  const layout = document.getElementById('comp-viewer-layout');
+  layout.innerHTML = `
+    <div class="event-info-col">
+      <div class="event-info-card">
+        <span class="comp-card-badge" style="align-self:flex-start;">📋 Composition</span>
+        <h2 class="event-info-title">${escapeHtml(comp.label)}</h2>
+        <div class="event-info-row">
+          <span class="event-info-label">Total slots</span>
+          <span class="event-info-value"><strong>${totalSlots}</strong></span>
+        </div>
+        <div class="event-info-row">
+          <span class="event-info-label">Parties</span>
+          <span class="event-info-value">${partyKeys.length} ${partyKeys.length === 1 ? 'party' : 'parties'}</span>
+        </div>
+        ${canEdit ? `
+          <div class="event-action-row" style="margin-top:8px;">
+            <button class="event-action-btn" id="comp-viewer-edit-btn">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.85 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>
+              Edit composition
+            </button>
+          </div>` : ''}
+      </div>
+    </div>
+    <div class="event-roster-col">
+      ${partiesHtml || '<p class="section-sub">No slots in this composition.</p>'}
+    </div>
+    <div class="event-build-col" id="comp-viewer-build-col" style="display:none;"></div>`;
+
+  const editBtn = document.getElementById('comp-viewer-edit-btn');
+  if (editBtn) {
+    editBtn.addEventListener('click', () => openEditor(comp.key));
+  }
+
+  // Wire build inspection clicks on weapon pills
+  layout.querySelectorAll('[data-build-tab][data-build-id]').forEach(el => {
+    el.addEventListener('click', () => {
+      const tab = el.dataset.buildTab;
+      const id = el.dataset.buildId;
+      if (tab && id !== undefined && id !== '') {
+        showBuildDetail(tab, parseInt(id, 10), el.dataset.weaponName || '');
+      }
+    });
+  });
+}
+
+function renderViewerRow(row) {
+  const isMulti = !!row.options;
+  const roleClass = `role-${row.category.toLowerCase()}`;
+
+  if (isMulti) {
+    const optionsHtml = row.options.map(o => {
+      const icon = o.iconUrl
+        ? `<img class="event-row-pill-icon" src="${escapeHtml(o.iconUrl)}" alt="" loading="lazy">`
+        : emojiToHtml(o.emoji, { size: 16, fallback: '🔹' });
+      const displayName = window.weaponDisplayName ? window.weaponDisplayName(o.name) : o.name;
+      const buildAttr = (o.buildTab && o.buildId !== null)
+        ? `data-build-tab="${escapeHtml(o.buildTab)}" data-build-id="${o.buildId}" data-weapon-name="${escapeHtml(o.name)}" title="Click to view build"`
+        : '';
+      return `
+        <button type="button" class="comp-viewer-option-pill ${roleClass}" ${buildAttr}>
+          ${icon}
+          <span class="event-row-name-text">${escapeHtml(displayName || 'Any')}</span>
+        </button>`;
+    }).join('');
+
+    return `
+      <div class="comp-viewer-row">
+        <div class="comp-viewer-options-wrap">${optionsHtml}</div>
+      </div>`;
+  }
+
+  const icon = row.iconUrl
+    ? `<img class="event-row-pill-icon" src="${escapeHtml(row.iconUrl)}" alt="" loading="lazy">`
+    : emojiToHtml(row.emoji, { size: 16, fallback: '🔹' });
+  const displayName = window.weaponDisplayName ? window.weaponDisplayName(row.name) : row.name;
+  const buildAttr = (row.buildTab && row.buildId !== null)
+    ? `data-build-tab="${escapeHtml(row.buildTab)}" data-build-id="${row.buildId}" data-weapon-name="${escapeHtml(row.name)}" title="Click to view build"`
+    : '';
+
+  return `
+    <div class="comp-viewer-row">
+      <button type="button" class="comp-viewer-row-pill ${roleClass}" ${buildAttr}>
+        ${icon}
+        <span class="event-row-name-text">${escapeHtml(displayName || 'Any')}</span>
+      </button>
+    </div>`;
+}
+
+function showBuildDetail(tab, buildId, weaponName) {
+  const col = document.getElementById('comp-viewer-build-col');
+  if (!col) return;
+  col.style.display = '';
+  col.innerHTML = `
+    <div class="event-info-card">
+      <div style="display:flex; justify-content:space-between; align-items:center;">
+        <span class="event-info-label">War Ledger Build</span>
+        <button type="button" class="btn" style="padding:2px 8px; font-size:11px;" id="close-build-preview-btn">✕</button>
+      </div>
+      <h3 style="font-size:15px; font-weight:700; color:var(--ink); margin:0;">${escapeHtml(weaponName)}</h3>
+      <p style="font-size:12px; color:var(--ink-dim); margin:0;">Tab: <strong>${escapeHtml(TAB_LABELS[tab] || tab)}</strong></p>
+      <a class="cta-primary" href="builds.html?tab=${encodeURIComponent(tab)}&build=${encodeURIComponent(buildId)}" style="display:inline-flex; font-size:12px; padding:8px 12px; justify-content:center; margin-top:6px;">
+        Open in War Ledger →
+      </a>
+    </div>`;
+
+  document.getElementById('close-build-preview-btn')?.addEventListener('click', () => {
+    col.style.display = 'none';
+  });
+}
+
+/* ─────────────────────────────────────────
+   3. COMP EDITOR (EDIT / CREATE)
+───────────────────────────────────────── */
 function newDraftCategories() {
   const cats = {};
   for (const cat of CATEGORY_ORDER) cats[cat] = { mode: 'items', items: [] };
   return cats;
 }
 
-// How many party columns to show, derived from the highest party index any
-// item currently uses (so opening an existing comp shows exactly as many
-// columns as it actually has). Always at least 1 — Party 1 is the default
-// and can't be removed.
 function computePartyCount(categories) {
   let max = 0;
   for (const cat of CATEGORY_ORDER) {
+    if (!categories[cat] || !categories[cat].items) continue;
     for (const item of categories[cat].items) {
       if (typeof item.party === 'number' && item.party > max) max = item.party;
     }
@@ -80,172 +357,92 @@ function computePartyCount(categories) {
   return max + 1;
 }
 
-function selectComp(key) {
-  const comp = allComps.find(c => c.key === key);
-  if (!comp) return;
+function openEditor(key = null) {
+  if (!isOfficerOrAdmin()) {
+    showToast('Only officers and admins can edit compositions.');
+    return;
+  }
+
   editingKey = key;
-  draft = { label: comp.label, categories: JSON.parse(JSON.stringify(comp.categories)) };
-  for (const cat of CATEGORY_ORDER) if (!draft.categories[cat]) draft.categories[cat] = { mode: 'items', items: [] };
-  draft.partyCount = computePartyCount(draft.categories);
-  document.getElementById('comp-select').value = key;
-  renderDetail();
+  if (key) {
+    const comp = allComps.find(c => c.key === key);
+    if (!comp) return;
+    draft = { label: comp.label, categories: JSON.parse(JSON.stringify(comp.categories)) };
+    for (const cat of CATEGORY_ORDER) if (!draft.categories[cat]) draft.categories[cat] = { mode: 'items', items: [] };
+    draft.partyCount = computePartyCount(draft.categories);
+  } else {
+    draft = { label: '', categories: newDraftCategories(), partyCount: 1 };
+  }
+
+  document.getElementById('comps-list-view').style.display = 'none';
+  document.getElementById('comps-viewer-view').style.display = 'none';
+  document.getElementById('comps-editor-view').style.display = '';
+
+  renderEditor();
 }
 
-function startNewComp() {
+function closeEditor() {
   editingKey = null;
-  draft = { label: '', categories: newDraftCategories(), partyCount: 1 };
-  document.getElementById('comp-select').value = '';
-  renderDetail();
-}
-
-/* ---------- weapon picker (searchable — replaces free-text weapon entry) ----------
-   A small popover with a search box over a filtered, clickable list. The
-   list is sourced straight from
-   item-map.js's own ITEM_MAP, so a selection is always a real item — the
-   free-text field this replaces was the actual root cause of names that
-   never resolved to an icon or that forked a weapon's play-count history
-   into two entries over a casing slip (see api.js's computeProfileStats
-   and the events-page player snippet). Picking from this list makes that
-   whole class of mistake structurally impossible from the site editor. */
-function weaponPreviewHtml(name) {
-  if (!name) return '<span class="weapon-preview-empty">Pick a weapon…</span>';
-  const url = window.imgUrl ? window.imgUrl(name) : null;
-  const display = window.weaponDisplayName ? window.weaponDisplayName(name) : name;
-  return `
-    ${url ? `<img class="weapon-preview-icon" src="${url}" alt="">` : '<span class="weapon-preview-icon weapon-preview-icon-blank"></span>'}
-    <span class="weapon-preview-name">${escapeHtml(display)}</span>`;
-}
-
-function closeWeaponPopover() {
-  const pop = document.getElementById('weapon-popover');
-  if (pop) pop.remove();
-  document.removeEventListener('mousedown', handleWeaponPopoverOutsideClick, true);
-}
-
-function handleWeaponPopoverOutsideClick(e) {
-  const pop = document.getElementById('weapon-popover');
-  if (pop && !pop.contains(e.target)) closeWeaponPopover();
-}
-
-function openWeaponPopover(anchorBtn, cat, i, optionIndex) {
-  closeWeaponPopover();
-  const pop = document.createElement('div');
-  pop.id = 'weapon-popover';
-  pop.className = 'weapon-popover';
-  pop.innerHTML = `
-    <input type="text" class="weapon-popover-search" placeholder="Search weapons…" autocomplete="off">
-    <div class="weapon-popover-list"></div>`;
-  document.body.appendChild(pop);
-
-  const rect = anchorBtn.getBoundingClientRect();
-  pop.style.top = `${window.scrollY + rect.bottom + 6}px`;
-  pop.style.left = `${window.scrollX + rect.left}px`;
-
-  // Weapons only — window.WEAPON_NAMES (item-map.js) excludes offhands and
-  // everything else in ITEM_MAP. Falls back to the full map only if that
-  // list somehow isn't loaded, so the picker never just goes empty.
-  const allNames = (window.WEAPON_NAMES || Object.keys(window.ITEM_MAP || {}))
-    .slice()
-    .sort((a, b) => a.localeCompare(b));
-  const list = pop.querySelector('.weapon-popover-list');
-  const renderList = (filter = '') => {
-    const q = filter.toLowerCase();
-    const matches = q
-      ? allNames.filter(n => n.toLowerCase().includes(q) || (window.WEAPON_ALIASES?.[n] || '').toLowerCase().includes(q))
-      : allNames;
-    if (matches.length === 0) {
-      list.innerHTML = '<p class="weapon-popover-empty">No matches</p>';
-      return;
-    }
-    // Capped — the full ~300-item list only ever needs to render fully
-    // once someone actually scrolls that far; anything typed narrows it
-    // down immediately anyway.
-    list.innerHTML = matches.slice(0, 60).map(n => {
-      const display = window.weaponDisplayName ? window.weaponDisplayName(n) : n;
-      return `
-      <button type="button" class="weapon-popover-item" data-name="${escapeHtml(n)}">
-        <img src="${window.imgUrl(n)}" alt="">
-        <span>${escapeHtml(display)}</span>
-      </button>`;
-    }).join('');
-
-    list.querySelectorAll('.weapon-popover-item').forEach(btn => btn.addEventListener('click', () => {
-      const item = draft.categories[cat].items[i];
-      const target = optionIndex !== undefined ? item.options[optionIndex] : item;
-      target.name = btn.dataset.name;
-      // Auto-linked from the weapon->emoji map the (Shin7aro-only) Emoji
-      // Linking page maintains — no per-line emoji picker here anymore.
-      // A weapon that hasn't been linked yet on that page just saves with
-      // no emoji, same as before that page existed.
-      target.emoji = weaponEmojiMap[btn.dataset.name] || null;
-      closeWeaponPopover();
-      renderDetail();
-    }));
-  };
-  renderList();
-  pop.querySelector('.weapon-popover-search').addEventListener('input', e => renderList(e.target.value));
-  pop.querySelector('.weapon-popover-search').focus();
-
-  setTimeout(() => document.addEventListener('mousedown', handleWeaponPopoverOutsideClick, true), 0);
-}
-
-/* ---------- build dropdown, filtered to the row's own role ---------- */
-function buildOptionsHtml(selectedTab, selectedIndex, cat) {
-  let html = `<option value=""${selectedTab == null ? ' selected' : ''}>No build yet</option>`;
-  const roleFiltered = buildOptions.filter(o => o.role && o.role.toLowerCase() === cat.toLowerCase());
-  const byTab = {};
-  roleFiltered.forEach(o => { (byTab[o.tab] = byTab[o.tab] || []).push(o); });
-  for (const tab of Object.keys(byTab)) {
-    html += `<optgroup label="${TAB_LABELS[tab] || tab}">`;
-    html += byTab[tab].map(o => {
-      const sel = (o.tab === selectedTab && o.index === selectedIndex) ? ' selected' : '';
-      return `<option value="${buildOptionValue(o)}"${sel}>${escapeHtml(o.weapon)}</option>`;
-    }).join('');
-    html += `</optgroup>`;
+  draft = null;
+  document.getElementById('comps-editor-view').style.display = 'none';
+  if (viewingKey) {
+    document.getElementById('comps-viewer-view').style.display = '';
+  } else {
+    document.getElementById('comps-list-view').style.display = '';
   }
-  // Defensive: if the currently linked build's role doesn't match this row's
-  // category anymore (role data changed, or the row's category changed after
-  // linking), still show it selected instead of silently unlinking it.
-  const stillLinkedButFiltered = selectedTab != null && !roleFiltered.some(o => o.tab === selectedTab && o.index === selectedIndex);
-  if (stillLinkedButFiltered) {
-    const linked = buildOptions.find(o => o.tab === selectedTab && o.index === selectedIndex);
-    if (linked) html += `<option value="${buildOptionValue(linked)}" selected>${escapeHtml(linked.weapon)} — different role</option>`;
-  }
-  return html;
-}
-
-/* ---------- party columns ---------- */
-function renderMultiChoiceRow(cat, i, item) {
-  const optionsHtml = item.options.map((opt, oi) => `
-    <div class="comp-item-option" data-cat="${cat}" data-i="${i}" data-oi="${oi}">
-      <button type="button" class="comp-item-weapon-btn comp-item-option-weapon-btn">${weaponPreviewHtml(opt.name)}</button>
-      <select class="comp-item-build comp-item-option-build">${buildOptionsHtml(opt.buildTab, opt.buildId, cat)}</select>
-      <button type="button" class="comp-item-option-remove" title="Remove this choice">${TRASH_ICON}</button>
-    </div>`).join('');
-  return `
-    <div class="comp-item-row comp-item-row-multi" data-cat="${cat}" data-i="${i}">
-      <div class="comp-item-options">
-        ${optionsHtml}
-        <button type="button" class="btn comp-item-add-option-btn" data-cat="${cat}" data-i="${i}">+ Add choice</button>
-      </div>
-      <button type="button" class="comp-item-remove" title="Remove line">${TRASH_ICON}</button>
-    </div>`;
 }
 
 function renderPartyColumn(p) {
   const categoriesHtml = CATEGORY_ORDER.map(cat => {
-    const items = draft.categories[cat].items;
-    const rows = items
-      .map((item, i) => ({ item, i }))
-      .filter(({ item }) => (item.party || 0) === p)
-      .map(({ item, i }) => item.options ? renderMultiChoiceRow(cat, i, item) : `
+    const catData = draft.categories[cat];
+    const itemsInParty = catData.items
+      .map((it, originalIdx) => ({ it, originalIdx }))
+      .filter(({ it }) => (it.party || 0) === p);
+
+    const rows = itemsInParty.map(({ it, originalIdx: i }) => {
+      if (it.options) {
+        const optionsHtml = it.options.map((opt, oi) => {
+          const matchingBuilds = buildOptions.filter(b => b.role === cat.toLowerCase() && b.weapon === opt.name);
+          const currentVal = (opt.buildTab && opt.buildId !== null) ? `${opt.buildTab}:${opt.buildId}` : '';
+          const buildOptionsHtml = `<option value="">No linked build</option>` +
+            matchingBuilds.map(b => `<option value="${buildOptionValue(b)}" ${currentVal === buildOptionValue(b) ? 'selected' : ''}>[${TAB_LABELS[b.tab] || b.tab}] ${escapeHtml(b.weapon)}</option>`).join('');
+
+          return `
+            <div class="comp-item-option" data-cat="${cat}" data-i="${i}" data-oi="${oi}">
+              <button type="button" class="comp-item-weapon-btn comp-item-option-weapon-btn">
+                ${weaponPreviewHtml(opt.name)}
+              </button>
+              <select class="comp-item-option-build">${buildOptionsHtml}</select>
+              <button type="button" class="comp-item-option-remove" title="Remove this choice">✕</button>
+            </div>`;
+        }).join('');
+
+        return `
+          <div class="comp-item-row comp-item-row-multi" data-cat="${cat}" data-i="${i}">
+            <div class="comp-item-options">
+              ${optionsHtml}
+              <button type="button" class="btn comp-item-add-option-btn" data-cat="${cat}" data-i="${i}">+ Add choice</button>
+            </div>
+            <button type="button" class="comp-item-remove" title="Remove whole line">${TRASH_ICON}</button>
+          </div>`;
+      }
+
+      const matchingBuilds = buildOptions.filter(b => b.role === cat.toLowerCase() && b.weapon === it.name);
+      const currentVal = (it.buildTab && it.buildId !== null) ? `${it.buildTab}:${it.buildId}` : '';
+      const buildOptionsHtml = `<option value="">No linked build</option>` +
+        matchingBuilds.map(b => `<option value="${buildOptionValue(b)}" ${currentVal === buildOptionValue(b) ? 'selected' : ''}>[${TAB_LABELS[b.tab] || b.tab}] ${escapeHtml(b.weapon)}</option>`).join('');
+
+      return `
         <div class="comp-item-row" data-cat="${cat}" data-i="${i}">
-          <button type="button" class="comp-item-weapon-btn">${weaponPreviewHtml(item.name)}</button>
-          <select class="comp-item-build">${buildOptionsHtml(item.buildTab, item.buildId, cat)}</select>
-          <button type="button" class="btn comp-item-add-choice-btn" data-cat="${cat}" data-i="${i}" title="Give this line more than one acceptable weapon">+ Choice</button>
-          <button type="button" class="comp-item-remove" title="Remove">${TRASH_ICON}</button>
-        </div>`)
-      .join('');
+          <button type="button" class="comp-item-weapon-btn">
+            ${weaponPreviewHtml(it.name)}
+          </button>
+          <select class="comp-item-build">${buildOptionsHtml}</select>
+          <button type="button" class="btn comp-item-add-choice-btn" data-cat="${cat}" data-i="${i}">+ Choice</button>
+          <button type="button" class="comp-item-remove" title="Remove line">${TRASH_ICON}</button>
+        </div>`;
+    }).join('');
+
     return `
       <div class="comp-category" data-cat="${cat}">
         <div class="comp-category-head">
@@ -268,25 +465,8 @@ function renderPartyColumn(p) {
     </div>`;
 }
 
-function removeLastParty() {
-  const lastIdx = draft.partyCount - 1;
-  if (lastIdx === 0) return;
-  const hasItems = CATEGORY_ORDER.some(cat => draft.categories[cat].items.some(it => (it.party || 0) === lastIdx));
-  if (hasItems) {
-    alert(`Party ${lastIdx + 1} still has role lines — remove or move them to another party first.`);
-    return;
-  }
-  draft.partyCount--;
-  renderDetail();
-}
-
-/* ---------- main render ---------- */
-function renderDetail() {
-  const placeholder = document.getElementById('comp-detail-placeholder');
+function renderEditor() {
   const card = document.getElementById('comp-detail-card');
-  placeholder.style.display = 'none';
-  card.classList.add('visible');
-
   const partyColumnsHtml = Array.from({ length: draft.partyCount }, (_, p) => renderPartyColumn(p)).join('');
 
   card.innerHTML = `
@@ -304,10 +484,6 @@ function renderDetail() {
       <button class="btn" id="comp-save-btn"><span class="btn-label">${editingKey ? 'Save changes' : 'Create composition'}</span></button>
     </div>`;
 
-  // Line-level controls only (single-choice rows) — option-level name
-  // controls inside a multi-choice row share some of the same classes for
-  // consistent styling, so they're explicitly excluded here and wired
-  // separately below.
   card.querySelectorAll('.comp-item-weapon-btn:not(.comp-item-option-weapon-btn)').forEach(btn => btn.addEventListener('click', () => {
     const row = btn.closest('.comp-item-row');
     openWeaponPopover(btn, row.dataset.cat, +row.dataset.i);
@@ -321,16 +497,13 @@ function renderDetail() {
   card.querySelectorAll('.comp-item-remove').forEach(btn => btn.addEventListener('click', e => {
     const row = e.target.closest('.comp-item-row');
     draft.categories[row.dataset.cat].items.splice(+row.dataset.i, 1);
-    renderDetail();
+    renderEditor();
   }));
   card.querySelectorAll('.comp-add-item-btn').forEach(btn => btn.addEventListener('click', () => {
     draft.categories[btn.dataset.cat].items.push({ name: '', emoji: null, party: +btn.dataset.party, signups: [], buildId: null, buildTab: null });
-    renderDetail();
+    renderEditor();
   }));
 
-  // Turns a single-choice line into a multi-choice one, seeding the first
-  // option from whatever was already typed so nothing's lost, plus one
-  // empty option ready to fill in.
   card.querySelectorAll('.comp-item-add-choice-btn').forEach(btn => btn.addEventListener('click', () => {
     const item = draft.categories[btn.dataset.cat].items[+btn.dataset.i];
     draft.categories[btn.dataset.cat].items[+btn.dataset.i] = {
@@ -342,10 +515,9 @@ function renderDetail() {
       signups: [],
       signedOptionIndex: null,
     };
-    renderDetail();
+    renderEditor();
   }));
 
-  // Option-level controls inside a multi-choice line.
   card.querySelectorAll('.comp-item-option-weapon-btn').forEach(btn => btn.addEventListener('click', () => {
     const opt = btn.closest('.comp-item-option');
     openWeaponPopover(btn, opt.dataset.cat, +opt.dataset.i, +opt.dataset.oi);
@@ -358,12 +530,8 @@ function renderDetail() {
   }));
   card.querySelectorAll('.comp-item-add-option-btn').forEach(btn => btn.addEventListener('click', () => {
     draft.categories[btn.dataset.cat].items[+btn.dataset.i].options.push({ name: '', emoji: null, buildId: null, buildTab: null });
-    renderDetail();
+    renderEditor();
   }));
-  // Removing an option drops it straight back to a normal single-choice
-  // line once only one option is left, instead of leaving a "multi-choice"
-  // line with nothing to choose between — carries that last option's own
-  // build link forward too, so it isn't lost in the conversion.
   card.querySelectorAll('.comp-item-option-remove').forEach(btn => btn.addEventListener('click', e => {
     const opt = e.target.closest('.comp-item-option');
     const item = draft.categories[opt.dataset.cat].items[+opt.dataset.i];
@@ -375,11 +543,11 @@ function renderDetail() {
         buildId: last.buildId ?? null, buildTab: last.buildTab ?? null,
       };
     }
-    renderDetail();
+    renderEditor();
   }));
 
   document.getElementById('comp-label-input').addEventListener('input', e => { draft.label = e.target.value; });
-  document.getElementById('comp-add-party-btn').addEventListener('click', () => { draft.partyCount++; renderDetail(); });
+  document.getElementById('comp-add-party-btn').addEventListener('click', () => { draft.partyCount++; renderEditor(); });
   const removePartyBtn = document.getElementById('comp-party-remove-btn');
   if (removePartyBtn) removePartyBtn.addEventListener('click', removeLastParty);
 
@@ -387,17 +555,31 @@ function renderDetail() {
   if (deleteBtn) deleteBtn.addEventListener('click', async () => {
     if (!confirm(`Delete "${draft.label}"? This can't be undone.`)) return;
     await api(`/api/comps/${editingKey}`, { method: 'DELETE' });
-    closeDetail();
+    showToast(`Deleted composition "${draft.label}".`);
+    viewingKey = null;
+    closeEditor();
     await loadAll();
   });
 
   document.getElementById('comp-save-btn').addEventListener('click', saveDraft);
 }
 
+function removeLastParty() {
+  const lastIdx = draft.partyCount - 1;
+  if (lastIdx === 0) return;
+  const hasItems = CATEGORY_ORDER.some(cat => draft.categories[cat].items.some(it => (it.party || 0) === lastIdx));
+  if (hasItems) {
+    alert(`Party ${lastIdx + 1} still has role lines — remove or move them to another party first.`);
+    return;
+  }
+  draft.partyCount--;
+  renderEditor();
+}
+
 async function saveDraft() {
   const label = draft.label.trim();
   if (!label) { alert('Give the composition a name first.'); return; }
-  const hasAnyItem = CATEGORY_ORDER.some(cat => draft.categories[cat].items.some(it => it.name.trim()));
+  const hasAnyItem = CATEGORY_ORDER.some(cat => draft.categories[cat].items.some(it => (it.name && it.name.trim()) || (it.options && it.options.length)));
   if (!hasAnyItem) { alert('Add at least one role line first.'); return; }
 
   try {
@@ -406,52 +588,153 @@ async function saveDraft() {
         method: 'PUT',
         body: JSON.stringify({ newLabel: label, categories: draft.categories }),
       });
+      showToast(`Updated composition "${label}".`);
     } else {
       await api('/api/comps', {
         method: 'POST',
         body: JSON.stringify({ label, categories: draft.categories }),
       });
+      showToast(`Created composition "${label}".`);
     }
-    closeDetail();
+    const savedKey = editingKey;
+    closeEditor();
     await loadAll();
+    if (savedKey) openViewer(savedKey);
   } catch (err) {
     alert(err.message);
   }
 }
 
-function closeDetail() {
-  editingKey = null;
-  draft = null;
-  document.getElementById('comp-select').value = '';
-  document.getElementById('comp-detail-card').classList.remove('visible');
-  document.getElementById('comp-detail-placeholder').style.display = '';
+/* ─────────────────────────────────────────
+   4. WEAPON POPOVER SEARCH & PICKER
+───────────────────────────────────────── */
+function weaponPreviewHtml(name) {
+  if (!name) return '<span class="weapon-preview-empty">Pick a weapon…</span>';
+  const url = window.imgUrl ? window.imgUrl(name) : null;
+  const display = window.weaponDisplayName ? window.weaponDisplayName(name) : name;
+  return `
+    ${url ? `<img class="weapon-preview-icon" src="${url}" alt="">` : '<span class="weapon-preview-icon weapon-preview-icon-blank"></span>'}
+    <span class="weapon-preview-name">${escapeHtml(display)}</span>`;
+}
+
+function closeWeaponPopover() {
+  const pop = document.getElementById('weapon-popover');
+  if (pop) pop.remove();
+  document.removeEventListener('mousedown', handleWeaponPopoverOutsideClick, true);
+}
+
+function handleWeaponPopoverOutsideClick(e) {
+  const pop = document.getElementById('weapon-popover');
+  if (pop && !pop.contains(e.target)) closeWeaponPopover();
+}
+
+function openWeaponPopover(anchorBtn, cat, itemIndex, optionIndex = null) {
+  closeWeaponPopover();
+
+  const pop = document.createElement('div');
+  pop.id = 'weapon-popover';
+  pop.className = 'weapon-popover';
+  pop.innerHTML = `
+    <input type="text" class="weapon-popover-search" placeholder="Search weapons…" autocomplete="off">
+    <div class="weapon-popover-list"></div>`;
+  document.body.appendChild(pop);
+
+  const rect = anchorBtn.getBoundingClientRect();
+  pop.style.top = `${window.scrollY + rect.bottom + 6}px`;
+  pop.style.left = `${window.scrollX + rect.left}px`;
+
+  const list = pop.querySelector('.weapon-popover-list');
+  const input = pop.querySelector('.weapon-popover-search');
+  const allWeapons = window.WEAPON_NAMES || Object.keys(window.ITEM_MAP || {});
+
+  const renderList = (filter = '') => {
+    const q = filter.trim().toLowerCase();
+    const matches = allWeapons.filter(w => {
+      if (!q) return true;
+      if (w.toLowerCase().includes(q)) return true;
+      const alias = window.weaponDisplayName ? window.weaponDisplayName(w) : '';
+      return alias && alias.toLowerCase().includes(q);
+    });
+
+    if (matches.length === 0) {
+      list.innerHTML = `<div class="weapon-popover-empty">No weapons found</div>`;
+      return;
+    }
+
+    list.innerHTML = matches.map(w => {
+      const url = window.imgUrl ? window.imgUrl(w) : null;
+      const display = window.weaponDisplayName ? window.weaponDisplayName(w) : w;
+      return `
+        <button type="button" class="weapon-popover-item" data-weapon="${escapeHtml(w)}">
+          ${url ? `<img src="${url}" alt="">` : ''}
+          <span>${escapeHtml(display)}</span>
+        </button>`;
+    }).join('');
+
+    list.querySelectorAll('.weapon-popover-item').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const chosen = btn.dataset.weapon;
+        const autoEmoji = weaponEmojiMap[chosen] || null;
+
+        if (optionIndex !== null) {
+          const opt = draft.categories[cat].items[itemIndex].options[optionIndex];
+          opt.name = chosen;
+          opt.emoji = autoEmoji;
+        } else {
+          const it = draft.categories[cat].items[itemIndex];
+          it.name = chosen;
+          it.emoji = autoEmoji;
+        }
+
+        closeWeaponPopover();
+        renderEditor();
+      });
+    });
+  };
+
+  renderList();
+  input.addEventListener('input', e => renderList(e.target.value));
+  setTimeout(() => input.focus(), 20);
+
+  setTimeout(() => document.addEventListener('mousedown', handleWeaponPopoverOutsideClick, true), 0);
 }
 
 const TRASH_ICON = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0-1 14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2L4 6h16Z"/></svg>`;
 
+/* ─────────────────────────────────────────
+   5. BOOT & NAVIGATION
+───────────────────────────────────────── */
 async function init() {
   const loading = document.getElementById('comps-loading-view');
   await window.SITE_AUTH_READY;
+
   if (!isOfficerOrAdmin()) {
     if (loading) loading.style.display = 'none';
     document.getElementById('gate-message').style.display = '';
     return;
   }
 
-  document.getElementById('comp-select').addEventListener('change', e => {
-    if (e.target.value) selectComp(e.target.value);
-    else closeDetail();
+  const searchInput = document.getElementById('comp-search');
+  searchInput.addEventListener('input', () => {
+    searchStr = searchInput.value.trim().toLowerCase();
+    renderCompGrid();
   });
-  document.getElementById('new-comp-btn').addEventListener('click', startNewComp);
+
+  document.getElementById('new-comp-btn').addEventListener('click', () => openEditor(null));
+  document.getElementById('comp-viewer-back-btn').addEventListener('click', closeViewer);
+  document.getElementById('comp-editor-back-btn').addEventListener('click', closeEditor);
 
   try {
     await loadAll();
   } catch (err) {
-    alert('Failed to load compositions: ' + err.message);
+    showToast('Failed to load compositions: ' + err.message);
   } finally {
     if (loading) loading.style.display = 'none';
-    document.getElementById('comps-app').style.display = '';
+    document.getElementById('comps-list-view').style.display = '';
   }
+
+  const hashId = location.hash.startsWith('#c/') ? decodeURIComponent(location.hash.slice(3)) : null;
+  if (hashId) openViewer(hashId);
 }
 
 init();
