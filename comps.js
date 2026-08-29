@@ -581,7 +581,7 @@ async function getCompByKey(key) {
   return comps[key] || null;
 }
 
-async function createCompStructured({ label, categories, userId, eventType }) {
+async function createCompStructured({ label, categories, userId, eventType, iconWeapon }) {
   const clean = normalizeStructuredCategories(categories);
   if (Object.keys(clean).length === 0) return null;
 
@@ -593,6 +593,7 @@ async function createCompStructured({ label, categories, userId, eventType }) {
     label: label.trim(),
     categories: clean,
     eventType: eventType || null, // PVP / PVE / Gank / null
+    iconWeapon: iconWeapon || null, // main weapon icon for card thumbnail
     createdBy: userId,
     updatedBy: userId,
     updatedAt: Date.now(),
@@ -601,7 +602,7 @@ async function createCompStructured({ label, categories, userId, eventType }) {
   return { key, ...comps[key] };
 }
 
-async function updateCompStructured({ key, newLabel, categories, userId, eventType }) {
+async function updateCompStructured({ key, newLabel, categories, userId, eventType, iconWeapon }) {
   const clean = normalizeStructuredCategories(categories);
   if (Object.keys(clean).length === 0) return null;
 
@@ -617,6 +618,7 @@ async function updateCompStructured({ key, newLabel, categories, userId, eventTy
     label: newLabel.trim(),
     categories: clean,
     eventType: eventType !== undefined ? eventType : (existing.eventType || null),
+    iconWeapon: iconWeapon !== undefined ? iconWeapon : (existing.iconWeapon || null),
     createdBy: existing.createdBy,
     updatedBy: userId,
     updatedAt: Date.now(),

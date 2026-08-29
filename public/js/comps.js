@@ -151,11 +151,20 @@ function renderCompGrid() {
     const eventTypeBadgeClass = c.eventType ? `type-${c.eventType}` : 'type-untagged';
     const creatorName = c.createdBy || 'Unknown';
 
+    // Icon weapon: use iconWeapon if available, otherwise fallback to first tank weapon
+    let iconWeapon = c.iconWeapon;
+    if (!iconWeapon && c.categories && c.categories.Tank && c.categories.Tank.items && c.categories.Tank.items.length > 0) {
+      const firstTankItem = c.categories.Tank.items[0];
+      iconWeapon = firstTankItem.options ? (firstTankItem.options[0]?.name || null) : firstTankItem.name;
+    }
+    const iconUrl = iconWeapon && window.imgUrl ? window.imgUrl(iconWeapon) : null;
+
     return `
       <div class="comp-card event-card" data-key="${escapeHtml(c.key)}">
         <div class="comp-card-header">
           <h3 class="comp-card-title">${escapeHtml(c.label)}</h3>
           <span class="event-type-badge ${eventTypeBadgeClass}">${eventTypeLabel}</span>
+          ${iconUrl ? `<img class="comp-card-icon" src="${escapeHtml(iconUrl)}" alt="" loading="lazy">` : '<div class="comp-card-icon-placeholder"></div>'}
         </div>
         <div class="event-card-meta comp-card-meta">
           <span>Total slots: <strong>${totalSlots}</strong></span>
@@ -460,12 +469,13 @@ function openEditor(key = null) {
     draft = { 
       label: comp.label, 
       categories: JSON.parse(JSON.stringify(comp.categories)),
-      eventType: comp.eventType || null
+      eventType: comp.eventType || null,
+      iconWeapon: comp.iconWeapon || null
     };
     for (const cat of CATEGORY_ORDER) if (!draft.categories[cat]) draft.categories[cat] = { mode: 'items', items: [] };
     draft.partyCount = computePartyCount(draft.categories);
   } else {
-    draft = { label: '', categories: newDraftCategories(), partyCount: 1, eventType: null };
+    draft = { label: '', categories: newDraftCategories(), partyCount: 1, eventType: null, iconWeapon: null };
   }
 
   document.getElementById('comps-list-view').style.display = 'none';
@@ -579,6 +589,12 @@ function renderEditor() {
         <option value="Gank" ${draft.eventType === 'Gank' ? 'selected' : ''}>Gank</option>
       </select>
     </div>
+    <div class="comp-event-type-row">
+      <span class="comp-event-type-label">Icon Weapon:</span>
+      <button type="button" class="comp-item-weapon-btn" id="comp-icon-weapon-btn" style="max-width:280px;">
+        ${weaponPreviewHtml(draft.iconWeapon)}
+      </button>
+    </div>
     <div class="comp-parties-toolbar">
       <button type="button" class="btn" id="comp-add-party-btn">+ Add party</button>
     </div>
@@ -651,6 +667,13 @@ function renderEditor() {
 
   document.getElementById('comp-label-input').addEventListener('input', e => { draft.label = e.target.value; });
   document.getElementById('comp-event-type-select').addEventListener('change', e => { draft.eventType = e.target.value || null; });
+  
+  // Icon weapon picker
+  const iconWeaponBtn = document.getElementById('comp-icon-weapon-btn');
+  if (iconWeaponBtn) {
+    iconWeaponBtn.addEventListener('click', () => openIconWeaponPopover(iconWeaponBtn));
+  }
+  
   document.getElementById('comp-add-party-btn').addEventListener('click', () => { draft.partyCount++; renderEditor(); });
   const removePartyBtn = document.getElementById('comp-party-remove-btn');
   if (removePartyBtn) removePartyBtn.addEventListener('click', removeLastParty);
@@ -683,6 +706,7 @@ function removeLastParty() {
 async function saveDraft() {
   const label = draft.label.trim();
   if (!label) { alert('Give the composition a name first.'); return; }
+  if (!draft.iconWeapon) { alert('Choose an icon weapon for this composition.'); return; }
   const hasAnyItem = CATEGORY_ORDER.some(cat => draft.categories[cat].items.some(it => (it.name && it.name.trim()) || (it.options && it.options.length)));
   if (!hasAnyItem) { alert('Add at least one role line first.'); return; }
 
@@ -690,13 +714,13 @@ async function saveDraft() {
     if (editingKey) {
       await api(`/api/comps/${editingKey}`, {
         method: 'PUT',
-        body: JSON.stringify({ newLabel: label, categories: draft.categories, eventType: draft.eventType }),
+        body: JSON.stringify({ newLabel: label, categories: draft.categories, eventType: draft.eventType, iconWeapon: draft.iconWeapon }),
       });
       showToast(`Updated composition "${label}".`);
     } else {
       await api('/api/comps', {
         method: 'POST',
-        body: JSON.stringify({ label, categories: draft.categories, eventType: draft.eventType }),
+        body: JSON.stringify({ label, categories: draft.categories, eventType: draft.eventType, iconWeapon: draft.iconWeapon }),
       });
       showToast(`Created composition "${label}".`);
     }
@@ -790,6 +814,66 @@ function openWeaponPopover(anchorBtn, cat, itemIndex, optionIndex = null) {
           it.emoji = autoEmoji;
         }
 
+        closeWeaponPopover();
+        renderEditor();
+      });
+    });
+  };
+
+  renderList();
+  input.addEventListener('input', e => renderList(e.target.value));
+  setTimeout(() => input.focus(), 20);
+
+  setTimeout(() => document.addEventListener('mousedown', handleWeaponPopoverOutsideClick, true), 0);
+}
+
+/* Icon weapon picker - dedicated popover for composition icon */
+function openIconWeaponPopover(anchorBtn) {
+  closeWeaponPopover();
+
+  const pop = document.createElement('div');
+  pop.id = 'weapon-popover';
+  pop.className = 'weapon-popover';
+  pop.innerHTML = `
+    <input type="text" class="weapon-popover-search" placeholder="Search weapons…" autocomplete="off">
+    <div class="weapon-popover-list"></div>`;
+  document.body.appendChild(pop);
+
+  const rect = anchorBtn.getBoundingClientRect();
+  pop.style.top = `${window.scrollY + rect.bottom + 6}px`;
+  pop.style.left = `${window.scrollX + rect.left}px`;
+
+  const list = pop.querySelector('.weapon-popover-list');
+  const input = pop.querySelector('.weapon-popover-search');
+  const allWeapons = window.WEAPON_NAMES || Object.keys(window.ITEM_MAP || {});
+
+  const renderList = (filter = '') => {
+    const q = filter.trim().toLowerCase();
+    const matches = allWeapons.filter(w => {
+      if (!q) return true;
+      if (w.toLowerCase().includes(q)) return true;
+      const alias = window.weaponDisplayName ? window.weaponDisplayName(w) : '';
+      return alias && alias.toLowerCase().includes(q);
+    });
+
+    if (matches.length === 0) {
+      list.innerHTML = `<div class="weapon-popover-empty">No weapons found</div>`;
+      return;
+    }
+
+    list.innerHTML = matches.map(w => {
+      const url = window.imgUrl ? window.imgUrl(w) : null;
+      const display = window.weaponDisplayName ? window.weaponDisplayName(w) : w;
+      return `
+        <button type="button" class="weapon-popover-item" data-weapon="${escapeHtml(w)}">
+          ${url ? `<img src="${url}" alt="">` : ''}
+          <span>${escapeHtml(display)}</span>
+        </button>`;
+    }).join('');
+
+    list.querySelectorAll('.weapon-popover-item').forEach(btn => {
+      btn.addEventListener('click', () => {
+        draft.iconWeapon = btn.dataset.weapon;
         closeWeaponPopover();
         renderEditor();
       });
