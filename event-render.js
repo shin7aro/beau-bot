@@ -297,6 +297,47 @@ async function deletePreviousReminder(channel, messageId) {
   }
 }
 
+// Deletes any active reminder message in #event-reminders for this event.
+async function deleteEventReminder(client, event) {
+  if (!event || !event.lastReminderMessageId || !event.guildId) return;
+  try {
+    const guild = client.guilds.cache.get(event.guildId) || (await client.guilds.fetch(event.guildId));
+    const remindersChannel = findEventRemindersChannel(guild);
+    if (remindersChannel) {
+      await deletePreviousReminder(remindersChannel, event.lastReminderMessageId);
+      event.lastReminderMessageId = null;
+    }
+  } catch (e) {
+    console.error('Failed to clean up event reminder message', event.id, e);
+  }
+}
+
+// Posts the event closed announcement in the event's thread (falling back
+// to the event's channel if the thread is unavailable/deleted) to keep the
+// main channel clean.
+async function postEventCloseSummary(client, event, noShowIds) {
+  const summary = noShowIds.length > 0 ? noShowIds.map((id) => `<@${id}>`).join(', ') : '*none*';
+  const text = `🔒 Event **${event.title}** closed. No-shows: ${summary}`;
+
+  // Try posting to thread first (thread ID matches event.id)
+  try {
+    const thread = await client.channels.fetch(event.id);
+    if (thread && thread.isThread && thread.isThread()) {
+      await thread.send(text);
+      return;
+    }
+  } catch {
+    // Thread not found or inaccessible; fall back to the main event channel
+  }
+
+  try {
+    const channel = await client.channels.fetch(event.channelId);
+    await channel.send(text);
+  } catch (e) {
+    console.error('Failed to post close summary', event.id, e);
+  }
+}
+
 module.exports = {
   CATEGORY_META,
   ROLE_EMOJI_NAMES,
@@ -309,6 +350,8 @@ module.exports = {
   deleteEventMessage,
   createEventThread,
   deletePreviousReminder,
+  deleteEventReminder,
+  postEventCloseSummary,
   findDahaloRole,
   dahaloPingContent,
   findEventRemindersChannel,

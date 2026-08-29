@@ -51,7 +51,7 @@ const lootRender = require('./loot-render');
 // refresh from either side behaves identically. Destructured under their
 // original names so nothing else in this file has to change.
 const { loadEvents, saveEvents, removeUserFromEvent, getSignedUpUserIds, getMissingRolesSummary } = eventsStore;
-const { buildEmbed, buildButtons, updateEventMessage, roleEmojiText } = eventRender;
+const { buildEmbed, buildButtons, updateEventMessage, roleEmojiText, deleteEventReminder, postEventCloseSummary } = eventRender;
 
 // Shapes a Discord user into the { id, username, role } shape activity-store
 // expects — "role" here is just a label for the log (Discord doesn't have
@@ -188,10 +188,15 @@ function buildAskBuildSelectRows(eventId, linkedRows) {
 
 // Shared by both the "pick no-shows" select menu and the "no no-shows"
 // button — marks the event closed, records who didn't show, updates the
-// posted embed, and announces the outcome publicly in the event's channel.
+// posted embed, cleans up any active reminder message, and announces the
+// outcome in the event's thread.
 async function finalizeEventClose(client, event, noShowIds, closedByUser) {
   event.closed = true;
   event.noShows = noShowIds;
+
+  // Clean up any remaining reminder message in #event-reminders
+  await deleteEventReminder(client, event);
+
   await saveEvents(events);
 
   if (closedByUser) {
@@ -208,13 +213,7 @@ async function finalizeEventClose(client, event, noShowIds, closedByUser) {
     console.error('Failed to update event message on close', e);
   }
 
-  try {
-    const channel = await client.channels.fetch(event.channelId);
-    const summary = noShowIds.length > 0 ? noShowIds.map((id) => `<@${id}>`).join(', ') : '*none*';
-    await channel.send(`🔒 Event **${event.title}** closed. No-shows: ${summary}`);
-  } catch (e) {
-    console.error('Failed to post close summary', e);
-  }
+  await postEventCloseSummary(client, event, noShowIds);
 }
 
 // updateEventMessage now lives in event-render.js (see the requires block

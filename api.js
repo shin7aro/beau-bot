@@ -1463,10 +1463,9 @@ router.post('/api/events/:id/close', auth.requireOfficer, async (req, res) => {
 
     if (discordClient) {
       try {
+        await eventRender.deleteEventReminder(discordClient, event);
         await eventRender.updateEventMessage(discordClient, event);
-        const channel = await discordClient.channels.fetch(event.channelId);
-        const summary = noShowIds.length > 0 ? noShowIds.map((id) => `<@${id}>`).join(', ') : '*none*';
-        await channel.send(`🔒 Event **${event.title}** closed. No-shows: ${summary}`);
+        await eventRender.postEventCloseSummary(discordClient, event, noShowIds);
       } catch (e) {
         console.error('Failed to update Discord after site close', e);
       }
