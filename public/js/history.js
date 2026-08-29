@@ -39,13 +39,16 @@ async function loadHistory() {
 }
 
 async function init() {
+  const loading = document.getElementById('history-loading-view');
   await window.SITE_AUTH_READY;
   if (!isAdmin()) {
+    if (loading) loading.style.display = 'none';
     document.getElementById('gate-message').style.display = '';
     return;
   }
-  document.getElementById('history-app').style.display = '';
   await loadHistory();
+  if (loading) loading.style.display = 'none';
+  document.getElementById('history-app').style.display = '';
 }
 
 init();

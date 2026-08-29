@@ -98,8 +98,7 @@ async function loadRoster() {
     rosterData = await api('/api/roster');
     renderRosterGrid();
   } catch (err) {
-
-    document.getElementById('roster-grid').innerHTML = `<div class="empty-state">Failed to load the roster: ${escapeHtml(err.message)}</div>`;
+    document.getElementById('roster-grid').innerHTML = `<div class="empty-state" style="grid-column: 1 / -1;">Failed to load the roster: ${escapeHtml(err.message)}</div>`;
   }
 }
 
@@ -109,6 +108,14 @@ function openHierarchyModal() {
   document.getElementById('hierarchy-modal-overlay').style.display = '';
   pendingUserPatches = {};
   pendingReorderTiers = new Set();
+  const list = document.getElementById('hierarchy-list');
+  if (list) {
+    list.innerHTML = `
+      <div class="loading-state">
+        <div class="spinner"></div>
+        <span>Loading Dahalo members…</span>
+      </div>`;
+  }
   loadHierarchy();
 }
 

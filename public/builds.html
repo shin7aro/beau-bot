@@ -74,7 +74,14 @@
     <table>
       <colgroup><col class="c-role"><col class="c-weapon"></colgroup>
       <thead><tr><th>Role</th><th>Main weapon</th></tr></thead>
-      <tbody id="tbody"></tbody>
+      <tbody id="tbody">
+        <tr><td colspan="2" style="padding:0; border:none;">
+          <div class="loading-state">
+            <div class="spinner"></div>
+            <span>Loading builds…</span>
+          </div>
+        </td></tr>
+      </tbody>
     </table>
     <div class="empty-state" id="empty" style="display:none">No builds match your filter.</div>
   </div>

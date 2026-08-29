@@ -63,11 +63,12 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 async function init() {
+  const loading = document.getElementById('events-loading-view');
   if (!isLoggedIn()) {
+    if (loading) loading.style.display = 'none';
     document.getElementById('gate-message').style.display = '';
     return;
   }
-  document.getElementById('events-list-view').style.display = '';
 
   wireListControls();
   wireModalOverlay();
@@ -81,6 +82,9 @@ async function init() {
   window.WEAPON_ALIASES = await api('/api/weapon-aliases').catch(() => ({}));
 
   await loadEvents();
+
+  if (loading) loading.style.display = 'none';
+  document.getElementById('events-list-view').style.display = '';
 
   const hashId = location.hash.startsWith('#e/') ? location.hash.slice(3) : null;
   if (hashId) openEvent(hashId);

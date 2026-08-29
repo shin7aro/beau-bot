@@ -50,11 +50,12 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 async function init() {
+  const loading = document.getElementById('loot-loading-view');
   if (!isLoggedIn()) {
+    if (loading) loading.style.display = 'none';
     document.getElementById('gate-message').style.display = '';
     return;
   }
-  document.getElementById('loot-view').style.display = '';
 
   document.getElementById('new-loot-btn').addEventListener('click', openLootForm);
   document.getElementById('toggle-loot-closed-btn').addEventListener('click', () => {
@@ -71,6 +72,9 @@ async function init() {
   wireModalOverlay();
 
   await loadLoot();
+
+  if (loading) loading.style.display = 'none';
+  document.getElementById('loot-view').style.display = '';
 }
 
 async function loadLoot() {

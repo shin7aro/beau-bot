@@ -211,12 +211,13 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 async function init() {
+  const loading = document.getElementById('emoji-linking-loading-view');
   await window.SITE_AUTH_READY;
   if (!isEmojiAdmin()) {
+    if (loading) loading.style.display = 'none';
     document.getElementById('gate-message').style.display = '';
     return;
   }
-  document.getElementById('emoji-linking-app').style.display = '';
 
   try {
     [serverEmojis, weaponEmojiMap, weaponAliasMap] = await Promise.all([
@@ -227,6 +228,9 @@ async function init() {
     window.WEAPON_ALIASES = weaponAliasMap;
   } catch (err) {
     alert('Failed to load emoji data: ' + err.message);
+  } finally {
+    if (loading) loading.style.display = 'none';
+    document.getElementById('emoji-linking-app').style.display = '';
   }
   renderList();
 

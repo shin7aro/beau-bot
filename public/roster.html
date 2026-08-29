@@ -62,7 +62,12 @@
     </div>
     <p class="roster-count" id="roster-count"></p>
   </div>
-  <div class="roster-grid" id="roster-grid"><!-- filled by js/roster.js --></div>
+  <div class="roster-grid" id="roster-grid">
+    <div class="loading-state" id="roster-loading" style="grid-column: 1 / -1;">
+      <div class="spinner"></div>
+      <span>Loading roster…</span>
+    </div>
+  </div>
   <div class="empty-state" id="roster-empty" style="display:none">Nobody here yet.</div>
 </section>
 

@@ -430,12 +430,13 @@ function closeDetail() {
 const TRASH_ICON = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0-1 14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2L4 6h16Z"/></svg>`;
 
 async function init() {
+  const loading = document.getElementById('comps-loading-view');
   await window.SITE_AUTH_READY;
   if (!isOfficerOrAdmin()) {
+    if (loading) loading.style.display = 'none';
     document.getElementById('gate-message').style.display = '';
     return;
   }
-  document.getElementById('comps-app').style.display = '';
 
   document.getElementById('comp-select').addEventListener('change', e => {
     if (e.target.value) selectComp(e.target.value);
@@ -447,6 +448,9 @@ async function init() {
     await loadAll();
   } catch (err) {
     alert('Failed to load compositions: ' + err.message);
+  } finally {
+    if (loading) loading.style.display = 'none';
+    document.getElementById('comps-app').style.display = '';
   }
 }
 

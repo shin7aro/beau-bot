@@ -120,6 +120,8 @@ async function api(path, opts) {
 }
 
 function showError(message) {
+  const loading = document.getElementById('profile-loading-view');
+  if (loading) loading.style.display = 'none';
   document.getElementById('profile-view').style.display = 'none';
   document.getElementById('profile-error-view').style.display = '';
   document.getElementById('profile-error').textContent = message;
@@ -206,7 +208,10 @@ function resolveProfileId() {
 async function init() {
   await window.SITE_AUTH_READY;
 
+  const loading = document.getElementById('profile-loading-view');
+
   if (!window.SITE_AUTH.loggedIn) {
+    if (loading) loading.style.display = 'none';
     // Preserve the full URL (including ?id=...) so logging in returns
     // straight to the profile that was being looked at, not a blank one.
     document.getElementById('gate-login-link').href =
@@ -217,12 +222,14 @@ async function init() {
 
   const userId = resolveProfileId();
   if (!userId) {
+    if (loading) loading.style.display = 'none';
     showError('No profile to show — missing a member id.');
     return;
   }
 
   try {
     const profile = await api(`/api/profile/${encodeURIComponent(userId)}`);
+    if (loading) loading.style.display = 'none';
     document.getElementById('profile-view').style.display = '';
     renderProfile(profile);
   } catch (err) {
