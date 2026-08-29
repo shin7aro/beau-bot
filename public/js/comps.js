@@ -15,6 +15,7 @@ let viewingKey = null;   // currently selected comp key in read-only viewer
 let editingKey = null;   // null = creating new, otherwise key of comp being edited
 let draft = null;        // working copy of the comp currently shown in the editor
 let searchStr = '';
+let typeFilter = 'all';  // all / PVP / PVE / Gank
 
 function escapeHtml(s) {
   return String(s || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -128,6 +129,9 @@ function renderCompGrid() {
   const countLabel = document.getElementById('comp-count-label');
 
   let list = allComps;
+  if (typeFilter !== 'all') {
+    list = list.filter(c => c.eventType === typeFilter);
+  }
   if (searchStr) {
     list = list.filter(c => c.label.toLowerCase().includes(searchStr));
   }
@@ -819,6 +823,14 @@ async function init() {
   searchInput.addEventListener('input', () => {
     searchStr = searchInput.value.trim().toLowerCase();
     renderCompGrid();
+  });
+
+  document.querySelectorAll('#comp-type-filter .filter-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      typeFilter = btn.dataset.type;
+      document.querySelectorAll('#comp-type-filter .filter-btn').forEach(b => b.classList.toggle('active', b === btn));
+      renderCompGrid();
+    });
   });
 
   document.getElementById('new-comp-btn').addEventListener('click', () => openEditor(null));
