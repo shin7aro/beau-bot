@@ -137,7 +137,17 @@ router.put('/api/builds/:tab', auth.requireOfficer, async (req, res) => {
 
 router.get('/api/comps', auth.requireOfficer, async (req, res) => {
   try {
-    res.json(await comps.listComps());
+    const compsList = await comps.listComps();
+    // Enrich with creator usernames
+    const members = await fetchDahaloMembers();
+    const memberMap = new Map(members.map(m => [m.id, m.username]));
+    
+    const enriched = compsList.map(c => ({
+      ...c,
+      createdByUsername: memberMap.get(c.createdBy) || 'Unknown'
+    }));
+    
+    res.json(enriched);
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Failed to load compositions.' });

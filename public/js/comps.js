@@ -149,7 +149,7 @@ function renderCompGrid() {
 
     const eventTypeLabel = c.eventType ? EVENT_TYPE_LABELS[c.eventType] || c.eventType : 'Untagged';
     const eventTypeBadgeClass = c.eventType ? `type-${c.eventType}` : 'type-untagged';
-    const creatorName = c.createdBy || 'Unknown';
+    const creatorName = c.createdByUsername || 'Unknown';
 
     // Icon weapon: use iconWeapon if available, otherwise fallback to first tank weapon
     let iconWeapon = c.iconWeapon;
