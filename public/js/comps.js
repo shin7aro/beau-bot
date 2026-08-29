@@ -5,10 +5,12 @@
 ───────────────────────────────────────── */
 const CATEGORY_ORDER = ['Tank', 'Support', 'DPS', 'Healer', 'Battlemount'];
 const TAB_LABELS = { brawl: 'Brawl', gank: 'Gank', kite: 'Kite & Clap', brawlclap: 'Brawl & Clap', tracking: 'Tracking', groupdungeon: 'Group Dungeon', avadungeon: 'Ava Dungeon' };
+const EVENT_TYPE_LABELS = { PVP: 'PvP', PVE: 'PvE', Gank: 'Gank' };
 
-let allComps = [];       // [{ key, label, categories, updatedAt, ... }]
+let allComps = [];       // [{ key, label, categories, eventType, updatedAt, ... }]
 let buildOptions = [];   // [{ tab, index, role, weapon }]
 let weaponEmojiMap = {}; // { "Broadsword": "<:tag:id>", ... } from /api/weapon-emojis
+let allBuildsCache = null; // lazy-loaded full builds list
 let viewingKey = null;   // currently selected comp key in read-only viewer
 let editingKey = null;   // null = creating new, otherwise key of comp being edited
 let draft = null;        // working copy of the comp currently shown in the editor
@@ -141,10 +143,13 @@ function renderCompGrid() {
       .map(cat => `<span class="comp-card-role-chip role-${cat.toLowerCase()}">${cat}: ${roleCounts[cat]}</span>`)
       .join('');
 
+    const eventTypeLabel = c.eventType ? EVENT_TYPE_LABELS[c.eventType] || c.eventType : 'Untagged';
+    const eventTypeBadgeClass = c.eventType ? `type-${c.eventType}` : 'type-untagged';
+
     return `
       <div class="comp-card event-card" data-key="${escapeHtml(c.key)}">
         <div class="event-card-top">
-          <span class="comp-card-badge">📋 Composition</span>
+          <span class="event-type-badge ${eventTypeBadgeClass}">${eventTypeLabel}</span>
           <span class="event-card-progress-label">${totalSlots} slot${totalSlots === 1 ? '' : 's'}</span>
         </div>
         <h3 class="event-card-title comp-card-title">${escapeHtml(c.label)}</h3>
@@ -226,12 +231,14 @@ function renderViewer(comp) {
     </div>`).join('')}</div>`;
 
   const canEdit = isOfficerOrAdmin();
+  const eventTypeLabel = comp.eventType ? EVENT_TYPE_LABELS[comp.eventType] || comp.eventType : 'Untagged';
+  const eventTypeBadgeClass = comp.eventType ? `type-${comp.eventType}` : 'type-untagged';
 
   const layout = document.getElementById('comp-viewer-layout');
   layout.innerHTML = `
     <div class="event-info-col">
       <div class="event-info-card">
-        <span class="comp-card-badge" style="align-self:flex-start;">📋 Composition</span>
+        <span class="event-type-badge ${eventTypeBadgeClass}" style="align-self:flex-start;">${eventTypeLabel}</span>
         <h2 class="event-info-title">${escapeHtml(comp.label)}</h2>
         <div class="event-info-row">
           <span class="event-info-label">Total slots</span>
@@ -265,8 +272,9 @@ function renderViewer(comp) {
     el.addEventListener('click', () => {
       const tab = el.dataset.buildTab;
       const id = el.dataset.buildId;
-      if (tab && id !== undefined && id !== '') {
-        showBuildDetail(tab, parseInt(id, 10), el.dataset.weaponName || '');
+      const cat = el.dataset.category;
+      if (tab && id !== undefined && id !== '' && cat) {
+        showBuildDetail(tab, parseInt(id, 10), el.dataset.weaponName || '', cat);
       }
     });
   });
@@ -283,7 +291,7 @@ function renderViewerRow(row) {
         : emojiToHtml(o.emoji, { size: 16, fallback: '🔹' });
       const displayName = window.weaponDisplayName ? window.weaponDisplayName(o.name) : o.name;
       const buildAttr = (o.buildTab && o.buildId !== null)
-        ? `data-build-tab="${escapeHtml(o.buildTab)}" data-build-id="${o.buildId}" data-weapon-name="${escapeHtml(o.name)}" title="Click to view build"`
+        ? `data-build-tab="${escapeHtml(o.buildTab)}" data-build-id="${o.buildId}" data-weapon-name="${escapeHtml(o.name)}" data-category="${escapeHtml(row.category)}" title="Click to view build"`
         : '';
       return `
         <button type="button" class="comp-viewer-option-pill ${roleClass}" ${buildAttr}>
@@ -303,7 +311,7 @@ function renderViewerRow(row) {
     : emojiToHtml(row.emoji, { size: 16, fallback: '🔹' });
   const displayName = window.weaponDisplayName ? window.weaponDisplayName(row.name) : row.name;
   const buildAttr = (row.buildTab && row.buildId !== null)
-    ? `data-build-tab="${escapeHtml(row.buildTab)}" data-build-id="${row.buildId}" data-weapon-name="${escapeHtml(row.name)}" title="Click to view build"`
+    ? `data-build-tab="${escapeHtml(row.buildTab)}" data-build-id="${row.buildId}" data-weapon-name="${escapeHtml(row.name)}" data-category="${escapeHtml(row.category)}" title="Click to view build"`
     : '';
 
   return `
@@ -315,26 +323,105 @@ function renderViewerRow(row) {
     </div>`;
 }
 
-function showBuildDetail(tab, buildId, weaponName) {
+const EVENT_ROLE_COLORS = { healer: 'var(--healer)', support: 'var(--support)', dps: 'var(--dps)', tank: 'var(--tank)', battlemount: 'var(--cosmic)' };
+const EVENT_ROLE_LABELS = { healer: 'Healer', support: 'Support', dps: 'DPS', tank: 'Tank', battlemount: 'Battlemount' };
+const EVENT_FLAG_SVG = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 22V4a1 1 0 0 1 1.45-.9L19 9.5 5.45 16.4A1 1 0 0 1 4 15.5"/></svg>`;
+
+const imgUrl = window.imgUrl;
+function renderGearSlot(label, name) {
+  if (!name && !label) return `<div class="slot-card empty spacer"></div>`;
+  if (!name) return `
+    <div class="slot-card empty">
+      <div class="slot-empty-icon"></div>
+      <div class="slot-info"><span class="slot-label">${escapeHtml(label)}</span><span class="slot-name">—</span></div>
+    </div>`;
+  const url = typeof imgUrl === 'function' ? imgUrl(name) : null;
+  const icon = url
+    ? `<img src="${escapeHtml(url)}" alt="" loading="lazy" onerror="this.style.opacity='0.15'">`
+    : `<div class="slot-empty-icon"></div>`;
+  return `
+    <div class="slot-card">
+      ${icon}
+      <div class="slot-info"><span class="slot-label">${escapeHtml(label)}</span><span class="slot-name" title="${escapeHtml(name)}">${escapeHtml(name)}</span></div>
+    </div>`;
+}
+
+async function ensureAllBuildsLoaded() {
+  if (allBuildsCache) return allBuildsCache;
+  allBuildsCache = await api('/api/builds');
+  return allBuildsCache;
+}
+
+async function showBuildDetail(tab, buildId, weaponName, cat) {
   const col = document.getElementById('comp-viewer-build-col');
   if (!col) return;
+
+  let builds;
+  try {
+    builds = await ensureAllBuildsLoaded();
+  } catch (err) {
+    col.style.display = '';
+    col.innerHTML = `<div class="event-info-card"><p style="color:var(--ink-faint)">Failed to load builds: ${escapeHtml(err.message)}</p></div>`;
+    return;
+  }
+
+  const tabBuilds = builds[tab] || [];
+  const build = tabBuilds[buildId];
+  if (!build) {
+    col.style.display = '';
+    col.innerHTML = `<div class="event-info-card"><p style="color:var(--ink-faint)">Build not found.</p></div>`;
+    return;
+  }
+
+  const roleKey = cat.toLowerCase();
+  const color = EVENT_ROLE_COLORS[roleKey] || 'var(--line-2)';
+  const roleLabel = EVENT_ROLE_LABELS[roleKey] || cat;
+
   col.style.display = '';
   col.innerHTML = `
-    <div class="event-info-card">
-      <div style="display:flex; justify-content:space-between; align-items:center;">
-        <span class="event-info-label">War Ledger Build</span>
-        <button type="button" class="btn" style="padding:2px 8px; font-size:11px;" id="close-build-preview-btn">✕</button>
+    <div class="event-details-head">War Ledger Build</div>
+    <div class="event-build-panel">
+      <div class="card-header">
+        <div class="card-role-bar" style="background:${color}"></div>
+        <div class="card-title-row">
+          <div class="card-title">${escapeHtml(build.weapon || 'Unnamed build')}</div>
+        </div>
+        <div class="card-meta">
+          <span class="role-pill role-${roleKey}"><span class="role-pill-dot" style="background:${color}"></span>${escapeHtml(roleLabel)}</span>
+        </div>
       </div>
-      <h3 style="font-size:15px; font-weight:700; color:var(--ink); margin:0;">${escapeHtml(weaponName)}</h3>
-      <p style="font-size:12px; color:var(--ink-dim); margin:0;">Tab: <strong>${escapeHtml(TAB_LABELS[tab] || tab)}</strong></p>
-      <a class="cta-primary" href="builds.html?tab=${encodeURIComponent(tab)}&build=${encodeURIComponent(buildId)}" style="display:inline-flex; font-size:12px; padding:8px 12px; justify-content:center; margin-top:6px;">
-        Open in War Ledger →
-      </a>
+      <div>
+        <div class="section-label">Build</div>
+        <div class="slots-grid event-build-slots">
+          ${renderGearSlot('', '')}
+          ${renderGearSlot('Head', build.head)}
+          ${renderGearSlot('Cape', build.cape)}
+          ${renderGearSlot('Weapon', build.weapon)}
+          ${renderGearSlot('Chest', build.chest)}
+          ${renderGearSlot('Offhand', build.offhand)}
+          ${renderGearSlot('Potion', build.potion)}
+          ${renderGearSlot('Feet', build.feet)}
+          ${renderGearSlot('Food', build.food)}
+        </div>
+      </div>
+      ${build.note ? `<div class="card-note-block">${EVENT_FLAG_SVG}<span class="card-note-text">${escapeHtml(build.note)}</span></div>` : ''}
+      <div style="padding-top:12px;">
+        <a class="cta-primary" href="builds.html?tab=${encodeURIComponent(tab)}&build=${encodeURIComponent(buildId)}" style="display:inline-flex; font-size:12px; padding:8px 12px; justify-content:center;">
+          Open in War Ledger →
+        </a>
+      </div>
     </div>`;
 
-  document.getElementById('close-build-preview-btn')?.addEventListener('click', () => {
-    col.style.display = 'none';
-  });
+  const grid = col.querySelector('.event-build-slots');
+  const header = col.querySelector('.card-header');
+  if (grid) {
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        grid.classList.add('revealed');
+      });
+    });
+  }
+  if (header) setTimeout(() => header.classList.add('shimmer'), 750);
 }
 
 /* ─────────────────────────────────────────
@@ -367,11 +454,15 @@ function openEditor(key = null) {
   if (key) {
     const comp = allComps.find(c => c.key === key);
     if (!comp) return;
-    draft = { label: comp.label, categories: JSON.parse(JSON.stringify(comp.categories)) };
+    draft = { 
+      label: comp.label, 
+      categories: JSON.parse(JSON.stringify(comp.categories)),
+      eventType: comp.eventType || null
+    };
     for (const cat of CATEGORY_ORDER) if (!draft.categories[cat]) draft.categories[cat] = { mode: 'items', items: [] };
     draft.partyCount = computePartyCount(draft.categories);
   } else {
-    draft = { label: '', categories: newDraftCategories(), partyCount: 1 };
+    draft = { label: '', categories: newDraftCategories(), partyCount: 1, eventType: null };
   }
 
   document.getElementById('comps-list-view').style.display = 'none';
@@ -476,6 +567,15 @@ function renderEditor() {
         ${editingKey ? `<button class="card-delete-btn" type="button" id="comp-delete-btn" title="Delete this composition">${TRASH_ICON}</button>` : ''}
       </div>
     </div>
+    <div class="comp-event-type-row">
+      <span class="comp-event-type-label">Composition Type:</span>
+      <select id="comp-event-type-select" class="comp-event-type-select">
+        <option value="">Untagged</option>
+        <option value="PVP" ${draft.eventType === 'PVP' ? 'selected' : ''}>PvP</option>
+        <option value="PVE" ${draft.eventType === 'PVE' ? 'selected' : ''}>PvE</option>
+        <option value="Gank" ${draft.eventType === 'Gank' ? 'selected' : ''}>Gank</option>
+      </select>
+    </div>
     <div class="comp-parties-toolbar">
       <button type="button" class="btn" id="comp-add-party-btn">+ Add party</button>
     </div>
@@ -547,6 +647,7 @@ function renderEditor() {
   }));
 
   document.getElementById('comp-label-input').addEventListener('input', e => { draft.label = e.target.value; });
+  document.getElementById('comp-event-type-select').addEventListener('change', e => { draft.eventType = e.target.value || null; });
   document.getElementById('comp-add-party-btn').addEventListener('click', () => { draft.partyCount++; renderEditor(); });
   const removePartyBtn = document.getElementById('comp-party-remove-btn');
   if (removePartyBtn) removePartyBtn.addEventListener('click', removeLastParty);
@@ -586,13 +687,13 @@ async function saveDraft() {
     if (editingKey) {
       await api(`/api/comps/${editingKey}`, {
         method: 'PUT',
-        body: JSON.stringify({ newLabel: label, categories: draft.categories }),
+        body: JSON.stringify({ newLabel: label, categories: draft.categories, eventType: draft.eventType }),
       });
       showToast(`Updated composition "${label}".`);
     } else {
       await api('/api/comps', {
         method: 'POST',
-        body: JSON.stringify({ label, categories: draft.categories }),
+        body: JSON.stringify({ label, categories: draft.categories, eventType: draft.eventType }),
       });
       showToast(`Created composition "${label}".`);
     }
