@@ -16,6 +16,9 @@ async function loadCategories() {
   }
 }
 
+// Expose globally for builds.js to call during initialization
+window.loadCategories = loadCategories;
+
 function renderTabNav() {
   const tabNav = document.getElementById('tab-nav');
   if (!tabNav) return;
