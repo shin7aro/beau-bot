@@ -86,6 +86,8 @@ function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
 
+window.escapeHtml = escapeHtml; // Expose globally for builds-categories.js
+
 /* ─────────────────────────────────────────
    ITEM PICKER MODAL
    (shared overlay used by every tab to
@@ -499,6 +501,7 @@ async function initTabs() {
   // Load categories first, then builds
   await loadCategories();
   ALL_BUILDS = await fetchAllBuilds();
+  window.ALL_BUILDS = ALL_BUILDS; // Expose globally for builds-categories.js
 
   createTab({ tabKey: 'brawl',    searchId: 'search',          filterId: 'filter-group',          countId: 'count-label',          tbodyId: 'tbody',          emptyId: 'empty',          placeholderId: 'detail-placeholder',          cardId: 'detail-card',          paneId: 'brawl-detail-pane',    addBtnId: 'add-build-btn',          resetBtnId: 'reset-build-btn',          roles: ['dps','healer','support','tank'] });
   createTab({ tabKey: 'kite',     searchId: 'kite-search',     filterId: 'kite-filter-group',     countId: 'kite-count-label',     tbodyId: 'kite-tbody',     emptyId: 'kite-empty',     placeholderId: 'kite-detail-placeholder',     cardId: 'kite-detail-card',     paneId: 'kite-detail-pane',     addBtnId: 'kite-add-build-btn',     resetBtnId: 'kite-reset-build-btn',     roles: ['dps','healer','support','tank'] });
