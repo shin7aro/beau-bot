@@ -121,6 +121,108 @@ router.get('/api/builds', async (req, res) => {
   }
 });
 
+// ── BUILD CATEGORIES (officer/admin only) ─────────────────────────────────
+// IMPORTANT: These routes must come BEFORE /api/builds/:tab to avoid route conflicts
+
+router.get('/api/builds/categories', async (req, res) => {
+  try {
+    res.json(await buildsStore.loadCategories());
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to load categories.' });
+  }
+});
+
+router.post('/api/builds/categories', auth.requireOfficer, async (req, res) => {
+  try {
+    const { label } = req.body;
+    if (!label || typeof label !== 'string' || !label.trim()) {
+      return res.status(400).json({ error: 'Category label is required.' });
+    }
+    
+    const categories = await buildsStore.loadCategories();
+    const id = label.toLowerCase().replace(/[^a-z0-9]+/g, '');
+    
+    if (categories.some(c => c.id === id)) {
+      return res.status(400).json({ error: 'A category with this name already exists.' });
+    }
+    
+    const newCategory = {
+      id,
+      label: label.trim(),
+      order: categories.length
+    };
+    
+    categories.push(newCategory);
+    await buildsStore.saveCategories(categories);
+    
+    // Initialize empty builds array for this category
+    const allBuilds = await buildsStore.loadAllBuilds();
+    allBuilds[id] = [];
+    await storage.saveJSON('builds', require('path').join(__dirname, 'builds.json'), allBuilds);
+    
+    activityStore.log(req.user, 'builds.category.create', `Created category: ${label}`);
+    res.json(newCategory);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to create category.' });
+  }
+});
+
+router.put('/api/builds/categories/:id', auth.requireOfficer, async (req, res) => {
+  try {
+    const { label } = req.body;
+    if (!label || typeof label !== 'string' || !label.trim()) {
+      return res.status(400).json({ error: 'Category label is required.' });
+    }
+    
+    const categories = await buildsStore.loadCategories();
+    const category = categories.find(c => c.id === req.params.id);
+    
+    if (!category) {
+      return res.status(404).json({ error: 'Category not found.' });
+    }
+    
+    category.label = label.trim();
+    await buildsStore.saveCategories(categories);
+    activityStore.log(req.user, 'builds.category.update', `Renamed category: ${req.params.id} to ${label}`);
+    res.json(category);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to update category.' });
+  }
+});
+
+router.delete('/api/builds/categories/:id', auth.requireOfficer, async (req, res) => {
+  try {
+    const categories = await buildsStore.loadCategories();
+    const index = categories.findIndex(c => c.id === req.params.id);
+    
+    if (index === -1) {
+      return res.status(404).json({ error: 'Category not found.' });
+    }
+    
+    // Prevent deletion of default categories
+    if (buildsStore.DEFAULT_TABS.includes(req.params.id)) {
+      return res.status(400).json({ error: 'Cannot delete default categories.' });
+    }
+    
+    categories.splice(index, 1);
+    await buildsStore.saveCategories(categories);
+    
+    // Optionally delete builds data for this category
+    const allBuilds = await buildsStore.loadAllBuilds();
+    delete allBuilds[req.params.id];
+    await storage.saveJSON('builds', require('path').join(__dirname, 'builds.json'), allBuilds);
+    
+    activityStore.log(req.user, 'builds.category.delete', `Deleted category: ${req.params.id}`);
+    res.status(204).send();
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to delete category.' });
+  }
+});
+
 router.put('/api/builds/:tab', auth.requireOfficer, async (req, res) => {
   try {
     if (!Array.isArray(req.body)) return res.status(400).json({ error: 'Body must be an array of builds.' });
