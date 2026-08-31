@@ -302,10 +302,36 @@ img { max-width: 100%; display: block; }
   .btn { padding: 0; width: 44px; justify-content: center; }
   .site-footer { padding: 28px 16px; }
 }
+/* Below this width the logo + full title + every nav link + the header
+   buttons no longer fit on one line — flexbox was cramming them all in
+   anyway, which squeezed .header-text down to a sliver (sometimes just
+   a clipped fragment of a single letter, no ellipsis, since there wasn't
+   even enough width to render "…"). Wrapping the nav onto its own row
+   keeps the full site title AND every nav link readable, instead of
+   trading one for the other. */
+@media (max-width: 700px) {
+  .site-header {
+    flex-wrap: wrap;
+    height: auto;
+    min-height: var(--header-h);
+    padding-top: 10px;
+    padding-bottom: 8px;
+    row-gap: 8px;
+  }
+  .site-nav {
+    order: 3;
+    flex-basis: 100%;
+    margin-left: 0;
+    justify-content: flex-start;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .site-nav::-webkit-scrollbar { display: none; }
+}
 @media (max-width: 560px) {
-  .site-header { padding: 0 14px; gap: 10px; }
+  .site-header { padding-left: 14px; padding-right: 14px; gap: 10px; }
   .header-text h1 { font-size: 16px; }
   .guild-mark { width: 32px; height: 32px; }
-  .site-nav { margin-left: 4px; gap: 0; }
+  .site-nav { gap: 0; }
   .site-nav a { padding: 8px 7px; font-size: 12px; }
 }

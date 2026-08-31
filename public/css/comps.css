@@ -272,3 +272,28 @@
   .comp-parties-row { flex-direction: column; }
   .comp-party-col { max-width: none; }
 }
+@media (max-width: 480px) {
+  /* At this width these grids (weapon picker + build select + action
+     buttons, all on one row) get squeezed into unusable slivers.
+     Re-flow each into two rows: weapon picker + build select stacked
+     full-width, action buttons on their own row below. */
+  .comp-party-col { min-width: 0; }
+  .comp-item-row {
+    grid-template-columns: 1fr auto;
+    grid-template-areas: "weapon weapon" "build build" "addchoice remove";
+    row-gap: 6px;
+  }
+  .comp-item-row > .comp-item-weapon-btn { grid-area: weapon; }
+  .comp-item-row > .comp-item-build { grid-area: build; }
+  .comp-item-row > .comp-item-add-choice-btn { grid-area: addchoice; justify-self: start; }
+  .comp-item-row > .comp-item-remove { grid-area: remove; justify-self: end; }
+
+  .comp-item-option {
+    grid-template-columns: 1fr auto;
+    grid-template-areas: "weapon remove" "build build";
+    row-gap: 6px;
+  }
+  .comp-item-option > .comp-item-weapon-btn { grid-area: weapon; }
+  .comp-item-option > .comp-item-option-build { grid-area: build; }
+  .comp-item-option > .comp-item-option-remove { grid-area: remove; }
+}
