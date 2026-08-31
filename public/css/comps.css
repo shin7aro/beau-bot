@@ -8,7 +8,7 @@
 /* ---------- COMP CARDS (GRID VIEW) ---------- */
 .comp-card-grid {
   display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-  align-content: start; align-items: start;
+  align-content: start; align-items: stretch;
   gap: 14px; padding: 4px 24px 24px;
   overflow-y: auto; flex: 1; min-height: 0;
 }
@@ -16,6 +16,7 @@
   background: var(--surface); border: 1px solid var(--line); border-radius: 12px;
   padding: 16px; display: flex; flex-direction: column; gap: 10px; cursor: pointer;
   transition: border-color 0.15s, transform 0.15s;
+  height: 100%; min-height: 150px;
 }
 .comp-card:hover { border-color: var(--accent); transform: translateY(-1px); }
 
