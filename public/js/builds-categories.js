@@ -149,6 +149,29 @@ async function createCategory() {
   }
   
   if (!res.ok) {
+    // Server reported an error — but the operation may have actually taken
+    // effect (some non-fatal secondary step can return a 500 after the
+    // category was already created). Re-check the authoritative list before
+    // showing an error, so a false failure never masks a real success.
+    let didHappen = false;
+    try {
+      const verify = await fetch('/api/builds/categories');
+      if (verify.ok) {
+        const cats = await verify.json();
+        didHappen = cats.some(c => c.label.trim().toLowerCase() === label.trim().toLowerCase());
+      }
+    } catch (verifyErr) {
+      console.error('Could not verify category creation:', verifyErr);
+    }
+
+    if (didHappen) {
+      await loadCategories();
+      renderTabNav();
+      if (input) input.value = '';
+      showToast(`Category "${label}" created`);
+      return;
+    }
+
     const data = await res.json().catch(() => ({}));
     alert(data.error || 'Failed to create category');
     return;
@@ -194,6 +217,31 @@ async function deleteCategory(id) {
   }
   
   if (!res.ok) {
+    // Server reported an error — but the category may have already been
+    // removed (a non-fatal secondary step can return a 500 after the
+    // delete took effect). Re-check before showing an error.
+    let deleted = false;
+    try {
+      const verify = await fetch('/api/builds/categories');
+      if (verify.ok) {
+        const cats = await verify.json();
+        deleted = !cats.some(c => c.id === id);
+      }
+    } catch (verifyErr) {
+      console.error('Could not verify category deletion:', verifyErr);
+    }
+
+    if (deleted) {
+      await loadCategories();
+      if (window.ALL_BUILDS) delete window.ALL_BUILDS[id];
+      const orphanPanel = document.getElementById('tab-' + id);
+      if (orphanPanel) orphanPanel.remove();
+      renderCategoryList();
+      renderTabNav();
+      showToast('Category deleted');
+      return;
+    }
+
     const data = await res.json().catch(() => ({}));
     alert(data.error || 'Failed to delete category');
     return;

@@ -155,13 +155,19 @@ router.post('/api/builds/categories', auth.requireOfficer, async (req, res) => {
     
     categories.push(newCategory);
     await buildsStore.saveCategories(categories);
-    
-    // Initialize empty builds array for this category
-    const allBuilds = await buildsStore.loadAllBuilds();
-    allBuilds[id] = [];
-    await storage.saveJSON('builds', require('path').join(__dirname, 'builds.json'), allBuilds);
-    
     activityStore.log(req.user, 'builds.category.create', `Created category: ${label}`);
+    
+    // Secondary/optional: initialize an empty builds list for this category.
+    // This must never turn a successful category creation into a 500 — the
+    // category itself is already saved above, so a hiccup here is non-fatal.
+    try {
+      const allBuilds = await buildsStore.loadAllBuilds();
+      allBuilds[id] = [];
+      await storage.saveJSON('builds', require('path').join(__dirname, 'builds.json'), allBuilds);
+    } catch (secondaryErr) {
+      console.error('builds.category.create: secondary builds init failed (non-fatal)', secondaryErr);
+    }
+    
     res.json(newCategory);
   } catch (err) {
     console.error(err);
@@ -209,13 +215,18 @@ router.delete('/api/builds/categories/:id', auth.requireOfficer, async (req, res
     
     categories.splice(index, 1);
     await buildsStore.saveCategories(categories);
-    
-    // Optionally delete builds data for this category
-    const allBuilds = await buildsStore.loadAllBuilds();
-    delete allBuilds[req.params.id];
-    await storage.saveJSON('builds', require('path').join(__dirname, 'builds.json'), allBuilds);
-    
     activityStore.log(req.user, 'builds.category.delete', `Deleted category: ${req.params.id}`);
+    
+    // Secondary/optional: clean up that category's builds data. Non-fatal —
+    // the category is already gone, so a hiccup here must not return a 500.
+    try {
+      const allBuilds = await buildsStore.loadAllBuilds();
+      delete allBuilds[req.params.id];
+      await storage.saveJSON('builds', require('path').join(__dirname, 'builds.json'), allBuilds);
+    } catch (secondaryErr) {
+      console.error('builds.category.delete: secondary builds cleanup failed (non-fatal)', secondaryErr);
+    }
+    
     res.status(204).send();
   } catch (err) {
     console.error(err);
