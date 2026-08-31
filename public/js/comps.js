@@ -4,13 +4,13 @@
    Discord bot's /comp commands use.
 ───────────────────────────────────────── */
 const CATEGORY_ORDER = ['Tank', 'Support', 'DPS', 'Healer', 'Battlemount'];
-const TAB_LABELS = { brawl: 'Brawl', gank: 'Gank', kite: 'Kite & Clap', brawlclap: 'Brawl & Clap', tracking: 'Tracking', groupdungeon: 'Group Dungeon', avadungeon: 'Ava Dungeon' };
 const EVENT_TYPE_LABELS = { PVP: 'PvP', PVE: 'PvE', Gank: 'Gank' };
 
 let allComps = [];       // [{ key, label, categories, eventType, updatedAt, ... }]
 let buildOptions = [];   // [{ tab, index, role, weapon }]
 let weaponEmojiMap = {}; // { "Broadsword": "<:tag:id>", ... } from /api/weapon-emojis
 let allBuildsCache = null; // lazy-loaded full builds list
+let buildCategoriesCache = null; // lazy-loaded categories list
 let viewingKey = null;   // currently selected comp key in read-only viewer
 let editingKey = null;   // null = creating new, otherwise key of comp being edited
 let draft = null;        // working copy of the comp currently shown in the editor
@@ -22,6 +22,19 @@ function escapeHtml(s) {
 }
 
 function buildOptionValue(o) { return `${o.tab}:${o.index}`; }
+
+async function loadBuildCategories() {
+  if (!buildCategoriesCache) {
+    buildCategoriesCache = await api('/api/builds/categories').catch(() => []);
+  }
+  return buildCategoriesCache;
+}
+
+function getCategoryLabel(tabId) {
+  if (!buildCategoriesCache) return tabId;
+  const cat = buildCategoriesCache.find(c => c.id === tabId);
+  return cat ? cat.label : tabId;
+}
 
 async function api(path, opts) {
   const res = await fetch(path, {
@@ -64,6 +77,7 @@ async function loadAll() {
     api('/api/weapon-emojis').catch(() => ({})),
     api('/api/weapon-aliases').catch(() => ({})),
   ]);
+  await loadBuildCategories(); // Load categories for labels
   window.WEAPON_ALIASES = weaponAliases;
   renderCompGrid();
 }
@@ -509,7 +523,7 @@ function renderPartyColumn(p) {
           const matchingBuilds = buildOptions.filter(b => b.role === cat.toLowerCase() && b.weapon === opt.name);
           const currentVal = (opt.buildTab && opt.buildId !== null) ? `${opt.buildTab}:${opt.buildId}` : '';
           const buildOptionsHtml = `<option value="">No linked build</option>` +
-            matchingBuilds.map(b => `<option value="${buildOptionValue(b)}" ${currentVal === buildOptionValue(b) ? 'selected' : ''}>[${TAB_LABELS[b.tab] || b.tab}] ${escapeHtml(b.weapon)}</option>`).join('');
+            matchingBuilds.map(b => `<option value="${buildOptionValue(b)}" ${currentVal === buildOptionValue(b) ? 'selected' : ''}>[${getCategoryLabel(b.tab)}] ${escapeHtml(b.weapon)}</option>`).join('');
 
           return `
             <div class="comp-item-option" data-cat="${cat}" data-i="${i}" data-oi="${oi}">
@@ -534,7 +548,7 @@ function renderPartyColumn(p) {
       const matchingBuilds = buildOptions.filter(b => b.role === cat.toLowerCase() && b.weapon === it.name);
       const currentVal = (it.buildTab && it.buildId !== null) ? `${it.buildTab}:${it.buildId}` : '';
       const buildOptionsHtml = `<option value="">No linked build</option>` +
-        matchingBuilds.map(b => `<option value="${buildOptionValue(b)}" ${currentVal === buildOptionValue(b) ? 'selected' : ''}>[${TAB_LABELS[b.tab] || b.tab}] ${escapeHtml(b.weapon)}</option>`).join('');
+        matchingBuilds.map(b => `<option value="${buildOptionValue(b)}" ${currentVal === buildOptionValue(b) ? 'selected' : ''}>[${getCategoryLabel(b.tab)}] ${escapeHtml(b.weapon)}</option>`).join('');
 
       return `
         <div class="comp-item-row" data-cat="${cat}" data-i="${i}">
