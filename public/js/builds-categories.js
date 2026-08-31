@@ -21,24 +21,31 @@ function renderTabNav() {
   if (!tabNav) return;
   
   const manageBtnHtml = window.SITE_AUTH && (window.SITE_AUTH.role === 'officer' || window.SITE_AUTH.role === 'admin')
-    ? '<button class="btn manage-categories-btn officer-only" id="manage-categories-btn"><span class="btn-label">+ Manage Categories</span></button>'
+    ? '<button class="btn manage-categories-btn officer-only visible" id="manage-categories-btn"><span class="btn-label">+ Manage Categories</span></button>'
     : '';
   
   tabNav.innerHTML = allCategories.map(cat => 
-    `<button class="tab-btn ${cat.id === currentTab ? 'active' : ''}" data-tab="${cat.id}">${escapeHtml(cat.label)}</button>`
+    `<button class="tab-btn ${cat.id === (window.currentTab || 'brawl') ? 'active' : ''}" data-tab="${cat.id}">${escapeHtml(cat.label)}</button>`
   ).join('') + manageBtnHtml;
   
   // Re-attach tab click handlers
   tabNav.querySelectorAll('.tab-btn').forEach(btn => {
-    btn.addEventListener('click', () => switchTab(btn.dataset.tab));
+    btn.addEventListener('click', () => {
+      if (window.switchTab) {
+        window.switchTab(btn.dataset.tab);
+      } else {
+        // Fallback for legacy tab switching
+        const tab = btn.dataset.tab;
+        window.currentTab = tab;
+        document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
+        document.querySelectorAll('.tab-panel').forEach(p => p.classList.toggle('active', p.id === 'tab-' + tab));
+      }
+    });
   });
   
   const manageBtn = document.getElementById('manage-categories-btn');
   if (manageBtn) {
     manageBtn.addEventListener('click', openCategoryModal);
-    if (window.SITE_AUTH && (window.SITE_AUTH.role === 'officer' || window.SITE_AUTH.role === 'admin')) {
-      manageBtn.classList.add('visible');
-    }
   }
 }
 
@@ -140,8 +147,8 @@ async function createCategory() {
     allCategories.push(newCat);
     
     // Initialize empty tab panel for new category
-    if (!ALL_BUILDS[newCat.id]) {
-      ALL_BUILDS[newCat.id] = [];
+    if (window.ALL_BUILDS && !window.ALL_BUILDS[newCat.id]) {
+      window.ALL_BUILDS[newCat.id] = [];
     }
     
     input.value = '';
@@ -170,14 +177,19 @@ async function deleteCategory(id) {
     }
     
     allCategories = allCategories.filter(c => c.id !== id);
-    delete ALL_BUILDS[id];
+    if (window.ALL_BUILDS) {
+      delete window.ALL_BUILDS[id];
+    }
     
     renderCategoryList();
     renderTabNav();
     
     // Switch to first category if we deleted the current one
+    const currentTab = window.currentTab || 'brawl';
     if (currentTab === id && allCategories.length > 0) {
-      switchTab(allCategories[0].id);
+      if (window.switchTab) {
+        window.switchTab(allCategories[0].id);
+      }
     }
     
     showToast('Category deleted');

@@ -189,6 +189,7 @@ function pulseButton(btn) {
    /api/builds. No more per-device localStorage.
 ───────────────────────────────────────── */
 let ALL_BUILDS = null; // { brawl: [...], kite: [...], tracking: [...], ... }
+let currentTab = 'brawl'; // Track active tab
 
 async function fetchAllBuilds() {
   const res = await fetch('/api/builds');
@@ -494,6 +495,9 @@ function applyDeepLinkFromURL() {
 
 async function initTabs() {
   await window.SITE_AUTH_READY;
+  
+  // Load categories first, then builds
+  await loadCategories();
   ALL_BUILDS = await fetchAllBuilds();
 
   createTab({ tabKey: 'brawl',    searchId: 'search',          filterId: 'filter-group',          countId: 'count-label',          tbodyId: 'tbody',          emptyId: 'empty',          placeholderId: 'detail-placeholder',          cardId: 'detail-card',          paneId: 'brawl-detail-pane',    addBtnId: 'add-build-btn',          resetBtnId: 'reset-build-btn',          roles: ['dps','healer','support','tank'] });
@@ -515,10 +519,17 @@ initTabs();
    TAB SWITCHING
    (copy-link button lives in shared js/site.js)
 ───────────────────────────────────────── */
+function switchTab(tabKey) {
+  currentTab = tabKey;
+  window.currentTab = tabKey; // Expose globally
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === tabKey));
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.toggle('active', p.id === 'tab-' + tabKey));
+}
+
+window.switchTab = switchTab; // Expose globally for builds-categories.js
+
 document.getElementById('tab-nav').addEventListener('click', e => {
   const btn = e.target.closest('.tab-btn');
   if (!btn) return;
-  const tab = btn.dataset.tab;
-  document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b === btn));
-  document.querySelectorAll('.tab-panel').forEach(p => p.classList.toggle('active', p.id === 'tab-' + tab));
+  switchTab(btn.dataset.tab);
 });
