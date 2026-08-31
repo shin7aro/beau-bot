@@ -9,10 +9,12 @@ async function loadCategories() {
   try {
     const res = await fetch('/api/builds/categories');
     allCategories = await res.json();
+    window.__buildCategories = allCategories; // Expose for builds.js init
     renderTabNav();
   } catch (err) {
     console.error('Failed to load categories:', err);
     allCategories = [];
+    window.__buildCategories = [];
   }
 }
 
@@ -148,10 +150,16 @@ async function createCategory() {
     
     const newCat = await res.json();
     allCategories.push(newCat);
+    window.__buildCategories = allCategories;
     
-    // Initialize empty tab panel for new category
+    // Initialize empty build list for new category
     if (window.ALL_BUILDS && !window.ALL_BUILDS[newCat.id]) {
       window.ALL_BUILDS[newCat.id] = [];
+    }
+    
+    // Create the tab panel + wire up the build editor (same as other tabs)
+    if (window.createDynamicTab && !document.getElementById('tab-' + newCat.id)) {
+      window.createDynamicTab(newCat);
     }
     
     input.value = '';

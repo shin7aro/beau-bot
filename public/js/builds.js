@@ -514,8 +514,95 @@ async function initTabs() {
   createTab({ tabKey: 'groupdungeon', searchId: 'groupdungeon-search', filterId: 'groupdungeon-filter-group', countId: 'groupdungeon-count-label', tbodyId: 'groupdungeon-tbody', emptyId: 'groupdungeon-empty', placeholderId: 'groupdungeon-detail-placeholder', cardId: 'groupdungeon-detail-card', paneId: 'groupdungeon-detail-pane', addBtnId: 'groupdungeon-add-build-btn', resetBtnId: 'groupdungeon-reset-build-btn', roles: ['dps','healer','support','tank'],          comingSoonId: 'groupdungeon-comingsoon', builderId: 'groupdungeon-builder' });
   createTab({ tabKey: 'avadungeon',  searchId: 'avadungeon-search',  filterId: 'avadungeon-filter-group',  countId: 'avadungeon-count-label',  tbodyId: 'avadungeon-tbody',  emptyId: 'avadungeon-empty',  placeholderId: 'avadungeon-detail-placeholder',  cardId: 'avadungeon-detail-card',  paneId: 'avadungeon-detail-pane',  addBtnId: 'avadungeon-add-build-btn',  resetBtnId: 'avadungeon-reset-build-btn',  roles: ['dps','healer','support','tank'],          comingSoonId: 'avadungeon-comingsoon',  builderId: 'avadungeon-builder' });
 
+  // Custom categories (created via "Manage Categories") get a freshly
+  // generated tab panel + full build editor wired up, identical to the
+  // hardcoded tabs above.
+  const hardcodedTabs = ['brawl', 'kite', 'tracking', 'gank', 'brawlclap', 'groupdungeon', 'avadungeon'];
+  for (const cat of (window.__buildCategories || [])) {
+    if (hardcodedTabs.includes(cat.id)) continue;
+    if (document.getElementById('tab-' + cat.id)) continue; // already created
+    createDynamicTab(cat);
+  }
+
   applyDeepLinkFromURL();
 }
+
+// Build a full tab-panel (search, filters, add/reset, table, detail pane)
+// for a user-created category and wire up its build editor.
+function createDynamicTab(cat) {
+  const id = cat.id;
+  const panel = document.createElement('div');
+  panel.className = 'tab-panel';
+  panel.id = 'tab-' + id;
+  panel.innerHTML = `
+<div class="controls">
+  <div class="search-wrap">
+    <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+    <input type="text" id="${id}-search" placeholder="Search weapon, slot…" autocomplete="off">
+  </div>
+  <div class="filter-group" id="${id}-filter-group">
+    <button class="filter-btn active" data-role="all">All</button>
+    <button class="filter-btn" data-role="dps"><span class="fb-dot" style="background:var(--dps)"></span>DPS</button>
+    <button class="filter-btn" data-role="healer"><span class="fb-dot" style="background:var(--healer)"></span>Healer</button>
+    <button class="filter-btn" data-role="support"><span class="fb-dot" style="background:var(--support)"></span>Support</button>
+    <button class="filter-btn" data-role="tank"><span class="fb-dot" style="background:var(--tank)"></span>Tank</button>
+  </div>
+  <span class="count-label" id="${id}-count-label">0 builds</span>
+  <button class="comp-add-btn" id="${id}-add-build-btn"><span class="btn-label">+ New build</span></button>
+  <button class="comp-reset-btn" id="${id}-reset-build-btn"><span class="btn-label">Reset</span></button>
+</div>
+<div class="main">
+  <div class="table-pane">
+    <table>
+      <colgroup><col class="c-role"><col class="c-weapon"></colgroup>
+      <thead><tr><th>Role</th><th>Main weapon</th></tr></thead>
+      <tbody id="${id}-tbody"></tbody>
+    </table>
+    <div class="empty-state" id="${id}-empty" style="display:none">No builds match your filter.</div>
+  </div>
+  <div class="detail-pane" id="${id}-detail-pane">
+    <div class="detail-placeholder" id="${id}-detail-placeholder">
+      <div class="ph-grid">
+        <div class="ph-slot"></div><div class="ph-slot"></div><div class="ph-slot"></div>
+        <div class="ph-slot"></div><div class="ph-slot"></div><div class="ph-slot"></div>
+        <div class="ph-slot"></div><div class="ph-slot"></div><div class="ph-slot"></div>
+      </div>
+      <p>Select a build to inspect it</p>
+      <small>Click any row on the left</small>
+    </div>
+    <button class="detail-back-btn" data-back-for="${id}">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+      Back to builds
+    </button>
+    <div class="detail-card" id="${id}-detail-card"></div>
+  </div>
+</div>`;
+
+  // Insert after the last existing tab panel.
+  const lastPanel = document.querySelector('.tab-panel:last-of-type');
+  if (lastPanel && lastPanel.parentNode) {
+    lastPanel.parentNode.insertBefore(panel, lastPanel.nextSibling);
+  } else {
+    document.body.appendChild(panel);
+  }
+
+  createTab({
+    tabKey: id,
+    searchId: `${id}-search`,
+    filterId: `${id}-filter-group`,
+    countId: `${id}-count-label`,
+    tbodyId: `${id}-tbody`,
+    emptyId: `${id}-empty`,
+    placeholderId: `${id}-detail-placeholder`,
+    cardId: `${id}-detail-card`,
+    paneId: `${id}-detail-pane`,
+    addBtnId: `${id}-add-build-btn`,
+    resetBtnId: `${id}-reset-build-btn`,
+    roles: ['dps', 'healer', 'support', 'tank'],
+  });
+}
+
+window.createDynamicTab = createDynamicTab; // Expose for builds-categories.js
 
 initTabs();
 /* ─────────────────────────────────────────
