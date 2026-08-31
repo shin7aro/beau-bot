@@ -320,35 +320,6 @@ router.put('/api/home', auth.requireAdmin, async (req, res) => {
   res.json(saved);
 });
 
-// ── THEME SWITCHING (admin only - Shin7aro 👑) ────────────────────────────
-
-router.post('/api/theme/switch', auth.requireAdmin, async (req, res) => {
-  try {
-    const { theme } = req.body;
-    if (!theme || (theme !== 'default' && theme !== 'gold')) {
-      return res.status(400).json({ error: 'Invalid theme. Must be "default" or "gold".' });
-    }
-    const content = await homeStore.loadHomeContent();
-    content.theme = theme;
-    await homeStore.saveHomeContent(content);
-    activityStore.log(req.user, 'theme.switch', `Switched site theme to: ${theme}`);
-    res.json({ theme, message: `Theme switched to ${theme}` });
-  } catch (err) {
-    console.error('Theme switch error:', err);
-    res.status(500).json({ error: 'Failed to switch theme.' });
-  }
-});
-
-router.get('/api/theme', async (req, res) => {
-  try {
-    const content = await homeStore.loadHomeContent();
-    res.json({ theme: content.theme || 'default' });
-  } catch (err) {
-    console.error('Theme fetch error:', err);
-    res.status(500).json({ error: 'Failed to fetch theme.' });
-  }
-});
-
 // ── HISTORY (admin only) ──────────────────────────────────────────────────
 
 router.get('/api/history', auth.requireAdmin, async (req, res) => {

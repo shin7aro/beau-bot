@@ -86,7 +86,6 @@ function renderAuthControl() {
         ${(role === 'officer' || role === 'admin') ? '<a class="auth-menu-item" href="comps.html">Compositions</a>' : ''}
         ${role === 'admin' ? '<a class="auth-menu-item" href="history.html">History</a>' : ''}
         ${window.SITE_AUTH.emojiAdmin ? '<a class="auth-menu-item" href="emoji-linking.html">Emoji Linking</a>' : ''}
-        ${role === 'admin' ? '<div class="auth-menu-divider"></div><button class="auth-menu-item" id="theme-switcher-btn" style="width:100%; text-align:left; border:none; background:none; cursor:pointer; font:inherit;">🎨 Switch Theme</button>' : ''}
         <div class="auth-menu-divider"></div>
         <a class="auth-menu-item auth-menu-danger" href="/auth/logout">Log out</a>
       </div>
@@ -104,42 +103,6 @@ function renderAuthControl() {
     if (!mount.contains(e.target)) closeMenu();
   });
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeMenu(); });
-
-  // Theme switcher (admin only)
-  const themeSwitcherBtn = document.getElementById('theme-switcher-btn');
-  if (themeSwitcherBtn) {
-    themeSwitcherBtn.addEventListener('click', async (e) => {
-      e.preventDefault();
-      closeMenu();
-      const currentTheme = document.documentElement.getAttribute('data-theme') || 'default';
-      const newTheme = currentTheme === 'default' ? 'gold' : 'default';
-      try {
-        const res = await fetch('/api/theme/switch', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          credentials: 'same-origin',
-          body: JSON.stringify({ theme: newTheme }),
-        });
-        if (res.ok) {
-          document.documentElement.setAttribute('data-theme', newTheme);
-          showToast(`Theme switched to ${newTheme === 'gold' ? 'Black & Gold' : 'Default'}`);
-        } else {
-          showToast('Failed to switch theme');
-        }
-      } catch (err) {
-        console.error('Theme switch error:', err);
-        showToast('Failed to switch theme');
-      }
-    });
-  }
-}
-
-function showToast(message) {
-  const toast = document.getElementById('toast');
-  if (!toast) return;
-  toast.textContent = message;
-  toast.classList.add('show');
-  setTimeout(() => toast.classList.remove('show'), 3000);
 }
 
 function escapeAttr(s) {
