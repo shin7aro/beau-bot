@@ -61,7 +61,8 @@ function renderHighlights() {
     return;
   }
   const removeVisible = editMode;
-  grid.innerHTML = highlights.map(h => {
+  // Reverse the array so newest videos appear first
+  grid.innerHTML = [...highlights].reverse().map(h => {
     const embed = youtubeEmbedUrl(h.youtubeUrl);
     return `<div class="highlight-card">
       ${embed
