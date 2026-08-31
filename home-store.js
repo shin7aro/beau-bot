@@ -34,6 +34,7 @@ const DEFAULT_CONTENT = {
   aboutQuote: 'Know your kit. Trust the call. Win the fight.',
   aboutQuoteCite: '— Dahalo Command',
   highlights: [], // [{ id, title, youtubeUrl, addedAt }]
+  theme: 'default', // 'default' or 'gold'
 };
 
 async function loadHomeContent() {
