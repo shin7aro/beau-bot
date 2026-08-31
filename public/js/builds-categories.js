@@ -134,80 +134,94 @@ async function createCategory() {
   
   if (!label) return;
   
+  let res;
   try {
-    const res = await fetch('/api/builds/categories', {
+    res = await fetch('/api/builds/categories', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       credentials: 'same-origin',
       body: JSON.stringify({ label }),
     });
-    
-    if (!res.ok) {
-      const data = await res.json();
-      alert(data.error || 'Failed to create category');
-      return;
-    }
-    
-    const newCat = await res.json();
-    allCategories.push(newCat);
-    window.__buildCategories = allCategories;
-    
-    // Initialize empty build list for new category
-    if (window.ALL_BUILDS && !window.ALL_BUILDS[newCat.id]) {
-      window.ALL_BUILDS[newCat.id] = [];
-    }
-    
-    // Create the tab panel + wire up the build editor (same as other tabs)
-    if (window.createDynamicTab && !document.getElementById('tab-' + newCat.id)) {
-      window.createDynamicTab(newCat);
-    }
-    
-    input.value = '';
-    renderCategoryList();
-    renderTabNav();
-    showToast(`Category "${label}" created`);
   } catch (err) {
     console.error('Failed to create category:', err);
-    alert('Failed to create category');
+    alert('Failed to create category — is the server reachable?');
+    return;
   }
+  
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    alert(data.error || 'Failed to create category');
+    return;
+  }
+  
+  // Server accepted — update local state and UI. All UI steps here are
+  // best-effort: never let a rendering hiccup masquerade as a failed save,
+  // since the category was already persisted server-side.
+  const newCat = await res.json().catch(() => null);
+  try {
+    // Re-sync the authoritative list from the server, then re-render.
+    await loadCategories();
+    
+    if (newCat && window.ALL_BUILDS && !window.ALL_BUILDS[newCat.id]) {
+      window.ALL_BUILDS[newCat.id] = [];
+    }
+    if (newCat && !document.getElementById('tab-' + newCat.id)) {
+      if (window.createDynamicTab) window.createDynamicTab(newCat);
+    }
+    renderCategoryList();
+    renderTabNav();
+  } catch (err) {
+    console.error('Error updating UI after creating category:', err);
+  }
+  
+  if (input) input.value = '';
+  showToast(`Category "${label}" created`);
 }
 
 async function deleteCategory(id) {
   if (!confirm('Delete this category? All builds in it will be removed.')) return;
   
+  let res;
   try {
-    const res = await fetch(`/api/builds/categories/${id}`, {
+    res = await fetch(`/api/builds/categories/${id}`, {
       method: 'DELETE',
       credentials: 'same-origin',
     });
-    
-    if (!res.ok) {
-      const data = await res.json().catch(() => ({}));
-      alert(data.error || 'Failed to delete category');
-      return;
-    }
-    
-    allCategories = allCategories.filter(c => c.id !== id);
+  } catch (err) {
+    console.error('Failed to delete category:', err);
+    alert('Failed to delete category — is the server reachable?');
+    return;
+  }
+  
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    alert(data.error || 'Failed to delete category');
+    return;
+  }
+  
+  // Server accepted — update local state and UI best-effort. Even if a
+  // rendering step throws, the category is already gone server-side.
+  try {
+    await loadCategories(); // re-sync authoritative list
     if (window.ALL_BUILDS) {
       delete window.ALL_BUILDS[id];
     }
-    
+    // Remove the dynamically-created tab panel if present.
+    const orphanPanel = document.getElementById('tab-' + id);
+    if (orphanPanel) orphanPanel.remove();
     renderCategoryList();
     renderTabNav();
     
     // Switch to first category if we deleted the current one
     const currentTab = window.currentTab || 'brawl';
-    if (currentTab === id && allCategories.length > 0) {
-      if (window.switchTab) {
-        window.switchTab(allCategories[0].id);
-      }
+    if (currentTab === id && allCategories.length > 0 && window.switchTab) {
+      window.switchTab(allCategories[0].id);
     }
-    
-    showToast('Category deleted');
   } catch (err) {
-    console.error('Failed to delete category:', err);
-    alert('Failed to delete category');
+    console.error('Error updating UI after deleting category:', err);
   }
+  
+  showToast('Category deleted');
 }
 
 function showToast(message) {

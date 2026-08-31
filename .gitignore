@@ -17,5 +17,9 @@ Thumbs.db
 .vscode/
 .idea/
 
-# Local data files (if any)
+# Local data files (fallback when Redis is not configured)
 *.local.json
+
+# Runtime JSON data (generated/fallback storage, not source)
+builds.json
+build-categories.json
