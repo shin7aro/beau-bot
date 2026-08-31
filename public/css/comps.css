@@ -98,12 +98,18 @@
 .comp-viewer-row-pill.role-support { background: var(--support-bg); border-color: var(--support); }
 .comp-viewer-row-pill.role-battlemount { background: rgba(74,78,143,0.14); border-color: var(--cosmic); }
 
-.comp-viewer-options-wrap { display: flex; flex-direction: column; gap: 4px; flex: 1; min-width: 0; }
-.comp-viewer-option-pill {
-  display: inline-flex; align-items: center; gap: 8px; height: 30px;
-  background: transparent; border: 1px solid; border-radius: 6px;
-  padding: 0 10px; font-size: 12px; font-weight: 600; cursor: pointer;
+/* Multi-choice weapons: aligned horizontally like event viewer */
+.comp-viewer-options-wrap { 
+  display: flex; align-items: center; gap: 4px; flex: 1; min-width: 0;
+  height: 32px; padding: 0 10px; border: 1px solid transparent; box-sizing: border-box;
 }
+.comp-viewer-option-pill {
+  flex: 1 1 0; min-width: 0; height: 32px; display: inline-flex; align-items: center; gap: 6px;
+  background: transparent; border: 1px solid; border-radius: 6px;
+  padding: 0 8px; font-size: 12.5px; font-weight: 600; cursor: pointer;
+}
+.comp-viewer-option-pill:first-child { margin-left: -11px; }
+.comp-viewer-option-pill:last-child { margin-right: -11px; }
 .comp-viewer-option-pill:hover { filter: brightness(1.2); }
 .comp-viewer-option-pill.role-tank { background: var(--tank-bg); border-color: var(--tank); }
 .comp-viewer-option-pill.role-dps { background: var(--dps-bg); border-color: var(--dps); }
