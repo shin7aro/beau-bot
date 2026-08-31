@@ -84,6 +84,22 @@
   0%   { opacity: 0; transform: translate(-50%,-50%) rotate(-7deg) scale(1.3); }
   100% { opacity: 0.94; transform: translate(-50%,-50%) rotate(-7deg) scale(1); }
 }
+
+/* Quote box now fills the hero's right column (where the stamp used to be). */
+.hero-quote {
+  justify-self: center;
+  align-self: center;
+  max-width: 360px;
+  padding: 30px 26px;
+}
+
+/* Stamp now fills the About section's right column (where the quote used
+   to be). The .hero-visual/.stamp rules above keep it centered/sized. */
+.about-quote-moved {
+  justify-self: stretch;
+  align-self: center;
+  min-height: 360px;
+}
 .stamp svg { width: 100%; height: 100%; }
 .stamp .stamp-ring { fill: none; stroke: var(--accent); }
 .stamp .stamp-ring-outer { stroke-width: 1.4; opacity: 0.9; }
