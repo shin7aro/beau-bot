@@ -44,14 +44,19 @@ html[data-theme="new"] {
   --trim: #c9a876; /* muted bronze/tan hairline, sampled off the guild banner's shield trim */
 }
 
-/* ── Ambient backdrop: swaps the photo background for dark glass over
-   amber glow, so the frosted panels below have something to catch. ── */
+/* ── Ambient backdrop: same background photo as the old theme, but with
+   a dark-glass amber tint/glow instead of the old purple wash, so the
+   frosted panels below have something to catch. ── */
 html[data-theme="new"] body {
   background-image:
-    radial-gradient(720px 480px at 12% -8%, rgba(240,181,61,0.16), transparent 60%),
-    radial-gradient(600px 440px at 94% 14%, rgba(217,154,46,0.13), transparent 55%),
-    radial-gradient(940px 720px at 50% 120%, rgba(240,181,61,0.09), transparent 60%),
-    linear-gradient(180deg, #0b0e14, var(--bg) 40%);
+    radial-gradient(720px 480px at 12% -8%, rgba(240,181,61,0.2), transparent 60%),
+    radial-gradient(600px 440px at 94% 14%, rgba(217,154,46,0.16), transparent 55%),
+    radial-gradient(940px 720px at 50% 120%, rgba(240,181,61,0.1), transparent 60%),
+    linear-gradient(180deg, rgba(5,8,13,0.82), rgba(5,8,13,0.74) 40%, rgba(5,8,13,0.88)),
+    url('../assets/bg.jpg');
+  background-size: cover, cover, cover, cover, cover;
+  background-position: center, center, center, center, center 30%;
+  background-repeat: no-repeat;
   background-attachment: fixed;
 }
 @media (max-width: 880px) {
