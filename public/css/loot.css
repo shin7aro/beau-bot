@@ -83,7 +83,7 @@ button.loot-participant-chip {
 }
 button.loot-participant-chip:hover { color: var(--ink); border-color: var(--accent); }
 
-.loot-card-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 2px; }
+.loot-card-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: auto; padding-top: 2px; }
 .loot-card-foot-actions { display: flex; gap: 8px; }
 .loot-card-date { font-size: 11px; color: var(--ink-faint); font-family: 'JetBrains Mono', monospace; }
 
