@@ -36,13 +36,32 @@ html[data-theme="new"] {
   --accent-ink: #1a1206;
   --cosmic:     #8a5a1f;   /* deep bronze — the OTHER stop in every accent gradient (crest, primary buttons) */
 
-  /* "Support" role used to sit at an amber that now collides with the
-     brand gold — shifted toward rust so it stays a distinct role color. */
-  --support:    #cf7a3f;
-  --support-bg: rgba(207,122,63,0.16);
+  /* Role colors retuned for the gold theme — support used to sit at an
+     amber close enough to the brand gold to be confusing, so it's back
+     to yellow but a colder/greener one than --accent so the two don't
+     blend. The other three are pulled lighter/more saturated so they
+     hold up against the darker gold-on-black surfaces. */
+  --healer:     #8ed19c; --healer-bg:  rgba(142,209,156,0.16);
+  --support:    #d8c53e; --support-bg: rgba(216,197,62,0.16);
+  --dps:        #d4304f; --dps-bg:     rgba(212,48,79,0.16);
+  --tank:       #7fb2e6; --tank-bg:    rgba(127,178,230,0.16);
 
   --trim: #c9a876; /* muted bronze/tan hairline, sampled off the guild banner's shield trim */
 }
+
+/* Same issue as above for healer/tank/dps — a few spots hardcode the
+   color as rgba(...) instead of var(--healer)/var(--tank)/var(--dps),
+   so they're corrected here to match the retuned role colors. */
+html[data-theme="new"] tr[data-role="support"] { background: rgba(216,197,62,0.035); }
+html[data-theme="new"] tr[data-role="healer"]  { background: rgba(142,209,156,0.035); }
+html[data-theme="new"] tr[data-role="dps"]     { background: rgba(212,48,79,0.035); }
+html[data-theme="new"] tr[data-role="tank"]    { background: rgba(127,178,230,0.035); }
+html[data-theme="new"] .card-note-block { border-color: rgba(216,197,62,0.4); }
+html[data-theme="new"] .role-Support { border-color: rgba(216,197,62,0.35); }
+html[data-theme="new"] .role-Tank    { border-color: rgba(127,178,230,0.35); }
+html[data-theme="new"] .role-DPS     { border-color: rgba(212,48,79,0.35); }
+html[data-theme="new"] .role-Healer  { border-color: rgba(142,209,156,0.35); }
+html[data-theme="new"] .ls-pill      { border-color: rgba(127,178,230,0.35); }
 
 /* ── Ambient backdrop: same background photo as the old theme, but with
    a dark-glass amber tint/glow instead of the old purple wash, so the
