@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<script>(function(){try{if(localStorage.getItem('rod-theme')==='new')document.documentElement.setAttribute('data-theme','new');}catch(e){}})();</script>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Emoji Linking — Rise of Dahalo</title>
+<meta name="robots" content="noindex, nofollow">
+<meta name="description" content="Link each weapon to a bot emoji once, so the comp editor never has to ask again.">
+<link rel="stylesheet" href="css/base.css">
+<link rel="stylesheet" href="css/home.css">
+<link rel="stylesheet" href="css/builds.css">
+<link rel="stylesheet" href="css/comps.css">
+<link rel="stylesheet" href="css/emoji-linking.css">
+<link rel="stylesheet" href="css/theme-gilded.css">
+</head>
+<body class="app-shell">
+
+<!-- HEADER -->
+<header class="site-header">
+  <a href="index.html" class="brand">
+    <div class="guild-mark">
+      <svg viewBox="0 0 24 24"><path d="M12 2L4 6v6c0 5.5 3.4 9.7 8 11 4.6-1.3 8-5.5 8-11V6l-8-4z"/><path d="M12 7v9M9 10l3-3 3 3" stroke="#0d0d0f" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>
+    </div>
+    <div class="header-text">
+      <h1>RISE OF DAHALO</h1>
+      <span class="eyebrow">Emoji Linking</span>
+    </div>
+  </a>
+  <nav class="site-nav">
+    <a href="index.html">Home</a>
+    <a href="builds.html">Builds</a>
+    <a href="roster.html">Roster</a>
+    <a href="events.html" class="logged-in-only" id="events-nav-link">Events</a>
+    <a href="loot.html" class="logged-in-only" id="loot-nav-link">Loot Manager</a>
+    <a href="comps.html" class="officer-only" id="comps-nav-link">Compositions</a>
+  </nav>
+  <div class="header-actions">
+    <div id="auth-control"></div>
+  </div>
+</header>
+
+<!-- GATE: shown until we know the visitor is Shin7aro. Not just officer/admin —
+     this page is intentionally narrower than every other gated page on the
+     site, see web-auth.js's requireEmojiAdmin. -->
+<div class="wrap section" id="gate-message" style="display:none">
+  <div class="section-head">
+    <h2 class="section-title">Not your page</h2>
+    <p class="section-sub">This page links each weapon to a bot emoji for the comp editor. It's restricted to a single account.</p>
+  </div>
+</div>
+
+<!-- LOADING STATE -->
+<div class="wrap section" id="emoji-linking-loading-view">
+  <div class="loading-state">
+    <div class="spinner spinner-lg"></div>
+    <span>Loading emoji linking…</span>
+  </div>
+</div>
+
+<!-- MAIN APP (hidden until authorized) -->
+<div id="emoji-linking-app" class="app-main" style="display:none">
+  <div class="controls">
+    <input type="text" id="weapon-search" class="weapon-search-input" placeholder="Search weapons…" autocomplete="off">
+    <label class="el-hide-linked-toggle">
+      <input type="checkbox" id="hide-linked-toggle">
+      Hide linked
+    </label>
+    <span class="count-label" id="linked-count-label">0 / 136 linked</span>
+  </div>
+
+  <div class="main">
+    <p class="section-sub el-intro">
+      Click a weapon's emoji tile to link it. Once every weapon here has an emoji,
+      the comp editor will always fill it in automatically — nobody has to pick
+      it again in a comp line.
+    </p>
+    <div class="el-list" id="weapon-emoji-list"></div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script src="js/theme.js"></script>
+<script src="js/auth.js"></script>
+<script src="js/item-map.js"></script>
+<script src="js/emoji-linking.js"></script>
+<script src="js/site.js"></script>
+</body>
+</html>
