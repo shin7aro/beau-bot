@@ -95,6 +95,14 @@
 .profile-ledger { display: grid; grid-template-columns: 1.3fr 1fr; gap: 16px; }
 
 .ledger-panel { background: var(--surface); border: 1px solid var(--line-2); border-radius: 14px; padding: 20px 22px; }
+.ledger-panel-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
+.ledger-panel-head .ledger-panel-title { margin-bottom: 0; }
+/* Officer/admin-only "All-time / Weekly" switch — reuses .filter-group/
+   .filter-btn (builds.css) so it matches the segmented controls elsewhere
+   on the site rather than introducing a new toggle style. Sized down
+   slightly since it sits inside a panel header, not a full controls bar. */
+#attendance-range-toggle.filter-group { gap: 4px; }
+#attendance-range-toggle .filter-btn { padding: 4px 10px; font-size: 11px; }
 .ledger-panel-title {
   font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em;
   color: var(--ink-faint); margin-bottom: 14px;

@@ -964,6 +964,12 @@ function attendanceBucketFor(type) {
 async function computeProfileStats(userId) {
   const events = await eventsStore.loadEvents();
   const attendance = { PVP: 0, PVE: 0, Gank: 0 };
+  // Same all-time attendance loop below also tallies the last-7-days
+  // subset as it goes, rather than a second pass over every event — the
+  // profile page's weekly/all-time switch (admin-only) then just swaps
+  // which of the two objects it displays, client-side, no extra request.
+  const attendanceWeek = { PVP: 0, PVE: 0, Gank: 0 };
+  const weekCutoff = Date.now() - 7 * 24 * 60 * 60 * 1000;
   const roleCounts = {};
   const weaponCountsByBucket = { PVP: {}, PVE: {} };
   const campaigns = [];
@@ -975,7 +981,10 @@ async function computeProfileStats(userId) {
     if (noShows.has(userId)) continue;
 
     const bucket = attendanceBucketFor(event.type);
-    if (bucket) attendance[bucket] += 1;
+    if (bucket) {
+      attendance[bucket] += 1;
+      if ((event.createdAt || 0) >= weekCutoff) attendanceWeek[bucket] += 1;
+    }
 
     const rows = comps.expandAllCategoryRows(event.categories);
     for (const row of rows) {
@@ -1012,7 +1021,7 @@ async function computeProfileStats(userId) {
   const topWeaponsPvp = topWeaponsFrom(weaponCountsByBucket.PVP);
   const topWeaponsPve = topWeaponsFrom(weaponCountsByBucket.PVE);
 
-  return { attendance, favoriteRole, recentCampaigns: campaigns, topWeaponsPvp, topWeaponsPve };
+  return { attendance, attendanceWeek, favoriteRole, recentCampaigns: campaigns, topWeaponsPvp, topWeaponsPve };
 }
 
 // One member's profile — role, attendance, and loot earned. Gated the
@@ -1032,7 +1041,7 @@ router.get('/api/profile/:userId', auth.requireMember, async (req, res) => {
     const totals = await lootStore.getTotals();
     const lootRecord = totals.perMember[userId];
 
-    const { attendance, favoriteRole, recentCampaigns, topWeaponsPvp, topWeaponsPve } = await computeProfileStats(userId);
+    const { attendance, attendanceWeek, favoriteRole, recentCampaigns, topWeaponsPvp, topWeaponsPve } = await computeProfileStats(userId);
 
     res.json({
       id: userId,
@@ -1043,6 +1052,7 @@ router.get('/api/profile/:userId', auth.requireMember, async (req, res) => {
       inGuild: Boolean(found),
       memberSince: (found && found.joinedAt) || null,
       attendance,
+      attendanceWeek,
       favoriteRole,
       recentCampaigns,
       topWeaponsPvp,
@@ -1052,6 +1062,57 @@ router.get('/api/profile/:userId', auth.requireMember, async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Failed to load profile.' });
+  }
+});
+
+// ── ATTENDANCE LEADERBOARD (officer/admin only) ─────────────────────────
+// Same "closed events, not a no-show" attendance rule as computeProfileStats
+// above, but tallied for every active guild member in one pass over the
+// event list instead of one member at a time — computeProfileStats stays
+// as-is for the single-member profile page, this is the guild-wide view.
+async function computeAttendanceLeaderboard() {
+  const events = await eventsStore.loadEvents();
+  const counts = new Map(); // userId -> { PVP, PVE, Gank }
+
+  for (const event of Object.values(events)) {
+    if (!event.closed) continue;
+    const bucket = attendanceBucketFor(event.type);
+    if (!bucket) continue;
+    const noShows = new Set(event.noShows || []);
+    for (const userId of eventsStore.getSignedUpUserIds(event)) {
+      if (noShows.has(userId)) continue;
+      if (!counts.has(userId)) counts.set(userId, { PVP: 0, PVE: 0, Gank: 0 });
+      counts.get(userId)[bucket] += 1;
+    }
+  }
+
+  const members = await fetchDahaloMembers();
+  const positions = await rosterStore.loadPositions();
+
+  const rows = members.map((m) => {
+    const c = counts.get(m.id) || { PVP: 0, PVE: 0, Gank: 0 };
+    return {
+      id: m.id,
+      username: m.username,
+      avatar: m.avatar,
+      tier: rosterStore.getEntry(positions, m.id).tier,
+      PVP: c.PVP,
+      PVE: c.PVE,
+      Gank: c.Gank,
+      total: c.PVP + c.PVE + c.Gank,
+    };
+  });
+
+  rows.sort((a, b) => b.total - a.total || a.username.localeCompare(b.username));
+  return rows;
+}
+
+router.get('/api/attendance-leaderboard', auth.requireOfficer, async (req, res) => {
+  try {
+    res.json(await computeAttendanceLeaderboard());
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to load the attendance leaderboard.' });
   }
 });
 

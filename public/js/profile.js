@@ -154,9 +154,25 @@ function renderBanner(profile) {
   `;
 }
 
+// Renders the attendance rows + total for whichever range is currently
+// selected — called on initial render and again on every toggle click, so
+// switching ranges never needs a second request (both attendance objects
+// came back in the same /api/profile/:id response).
+function renderAttendanceRows(profile, range) {
+  const attendance = range === 'week' ? profile.attendanceWeek : profile.attendance;
+  const totalEvents = attendance.PVP + attendance.PVE + attendance.Gank;
+  const rows = document.getElementById('ledger-attendance-rows');
+  if (!rows) return;
+  rows.innerHTML = `
+    <div class="ledger-row"><span class="ledger-lbl">PVP attendance</span><span class="ledger-val">${attendance.PVP}</span></div>
+    <div class="ledger-row"><span class="ledger-lbl">PVE attendance</span><span class="ledger-val">${attendance.PVE}</span></div>
+    <div class="ledger-row"><span class="ledger-lbl">Gank attendance</span><span class="ledger-val">${attendance.Gank}</span></div>
+    <div class="ledger-row"><span class="ledger-lbl">Total events</span><span class="ledger-val">${totalEvents}</span></div>
+  `;
+}
+
 function renderLedger(profile) {
   const ledger = document.getElementById('profile-ledger');
-  const totalEvents = profile.attendance.PVP + profile.attendance.PVE + profile.attendance.Gank;
 
   const campaignsHtml = profile.recentCampaigns.length
     ? profile.recentCampaigns.map(c => `
@@ -168,11 +184,14 @@ function renderLedger(profile) {
 
   ledger.innerHTML = `
     <div class="ledger-panel">
-      <div class="ledger-panel-title">Service record</div>
-      <div class="ledger-row"><span class="ledger-lbl">PVP attendance</span><span class="ledger-val">${profile.attendance.PVP}</span></div>
-      <div class="ledger-row"><span class="ledger-lbl">PVE attendance</span><span class="ledger-val">${profile.attendance.PVE}</span></div>
-      <div class="ledger-row"><span class="ledger-lbl">Gank attendance</span><span class="ledger-val">${profile.attendance.Gank}</span></div>
-      <div class="ledger-row"><span class="ledger-lbl">Total events</span><span class="ledger-val">${totalEvents}</span></div>
+      <div class="ledger-panel-head">
+        <div class="ledger-panel-title">Service record</div>
+        <div class="filter-group officer-only" id="attendance-range-toggle">
+          <button class="filter-btn active" type="button" data-range="all">All-time</button>
+          <button class="filter-btn" type="button" data-range="week">Weekly</button>
+        </div>
+      </div>
+      <div id="ledger-attendance-rows"></div>
       <div class="ledger-row"><span class="ledger-lbl">Total loot earned</span><span class="ledger-val ledger-gold">${formatSilver(profile.totalLootEarned)}</span></div>
     </div>
     <div class="ledger-panel">
@@ -180,6 +199,21 @@ function renderLedger(profile) {
       <div class="campaigns-list">${campaignsHtml}</div>
     </div>
   `;
+
+  renderAttendanceRows(profile, 'all');
+
+  const toggle = document.getElementById('attendance-range-toggle');
+  // renderAuthControl() (auth.js) already ran once, before this panel
+  // existed — its generic ".officer-only" sweep can't reach an element
+  // that wasn't in the DOM yet, so this element's visibility is set
+  // directly here instead of relying on that sweep to find it later.
+  if (isOfficerOrAdmin()) toggle.classList.add('visible');
+  toggle.addEventListener('click', (e) => {
+    const btn = e.target.closest('.filter-btn');
+    if (!btn) return;
+    toggle.querySelectorAll('.filter-btn').forEach(b => b.classList.toggle('active', b === btn));
+    renderAttendanceRows(profile, btn.dataset.range);
+  });
 }
 
 // Two separated grids below the ledger — most-played weapon in PVP on

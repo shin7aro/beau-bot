@@ -1,0 +1,26 @@
+/* ─────────────────────────────────────────
+   ATTENDANCE LEADERBOARD — officer/admin only
+   (builds on tokens + shared classes from
+   base.css / home.css / history.css —
+   .history-table, .search-wrap, .controls,
+   .count-label are all reused as-is)
+───────────────────────────────────────── */
+.attendance-controls { padding: 20px 0 16px; align-items: center; }
+
+.attendance-table th.num, .attendance-table td.num { text-align: right; }
+.attendance-rank { color: var(--ink-faint); font-family: 'JetBrains Mono', monospace; }
+
+.attendance-member { display: flex; align-items: center; gap: 10px; }
+.attendance-avatar { width: 26px; height: 26px; border-radius: 50%; object-fit: cover; flex-shrink: 0; background: var(--surface-2); }
+.attendance-name { color: var(--ink); font-weight: 600; }
+.attendance-tier { color: var(--ink-faint); font-weight: 500; font-size: 11.5px; margin-left: 4px; }
+
+.attendance-table td.num { font-family: 'JetBrains Mono', monospace; }
+.attendance-total { font-weight: 700; color: var(--accent); }
+
+.attendance-row-hidden { display: none; }
+
+@media (max-width: 700px) {
+  .attendance-table td.num { text-align: left; }
+  .attendance-table td.num::before { content: attr(data-label) ": "; color: var(--ink-faint); font-family: inherit; }
+}
