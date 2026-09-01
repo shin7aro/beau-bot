@@ -189,6 +189,20 @@ img { max-width: 100%; display: block; }
 .auth-menu-item:hover { background: var(--surface-2); color: var(--ink); }
 .auth-menu-item.auth-menu-danger:hover { color: #e0685a; }
 .auth-menu-divider { height: 1px; background: var(--line); margin: 4px 2px; }
+.auth-menu-section-label {
+  padding: 6px 10px 2px; font-size: 10px; font-weight: 700; color: var(--ink-faint);
+  text-transform: uppercase; letter-spacing: 0.08em;
+}
+/* Buttons reused for the theme switch so they share the exact look of the
+   <a> menu items above (only the tag differs — this needs to run without
+   a page navigation, since switching the theme is a live global toggle). */
+button.auth-menu-item {
+  width: 100%; text-align: left; background: none; border: none;
+  font-family: inherit; display: flex; align-items: center; justify-content: space-between;
+}
+.auth-menu-theme-btn::after { content: ''; font-size: 11px; color: var(--accent); }
+html:not([data-theme="new"]) .auth-menu-theme-btn[data-theme-option="old"]::after,
+html[data-theme="new"] .auth-menu-theme-btn[data-theme-option="new"]::after { content: '✓'; }
 @media (max-width: 700px) { .auth-menu-name { display: none; } }
 .btn {
   display: inline-flex; align-items: center; gap: 7px;

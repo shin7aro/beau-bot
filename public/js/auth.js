@@ -4,7 +4,7 @@
    exposes window.SITE_AUTH, and renders a
    login/logout control into the header.
 ───────────────────────────────────────── */
-window.SITE_AUTH = { loggedIn: false, role: null, username: null, id: null, avatar: null, rosterAdmin: false, emojiAdmin: false };
+window.SITE_AUTH = { loggedIn: false, role: null, username: null, id: null, avatar: null, rosterAdmin: false, emojiAdmin: false, themeManager: false };
 
 // Builds a Discord CDN avatar URL from a user id + the avatar hash Discord
 // gave us at login (stored in the session). Falls back to Discord's own
@@ -39,6 +39,7 @@ window.SITE_AUTH_READY = fetch('/auth/me', { credentials: 'same-origin' })
         avatar: data.user.avatar,
         rosterAdmin: Boolean(data.user.rosterAdmin),
         emojiAdmin: Boolean(data.user.emojiAdmin),
+        themeManager: Boolean(data.user.themeManager),
       };
     }
     renderAuthControl();
@@ -86,6 +87,12 @@ function renderAuthControl() {
         ${(role === 'officer' || role === 'admin') ? '<a class="auth-menu-item" href="comps.html">Compositions</a>' : ''}
         ${role === 'admin' ? '<a class="auth-menu-item" href="history.html">History</a>' : ''}
         ${window.SITE_AUTH.emojiAdmin ? '<a class="auth-menu-item" href="emoji-linking.html">Emoji Linking</a>' : ''}
+        ${window.SITE_AUTH.themeManager ? `
+        <div class="auth-menu-divider"></div>
+        <div class="auth-menu-section-label">Site theme</div>
+        <button class="auth-menu-item auth-menu-theme-btn" type="button" data-theme-option="old" onclick="setSiteTheme('old')">Old theme</button>
+        <button class="auth-menu-item auth-menu-theme-btn" type="button" data-theme-option="new" onclick="setSiteTheme('new')">New theme</button>
+        ` : ''}
         <div class="auth-menu-divider"></div>
         <a class="auth-menu-item auth-menu-danger" href="/auth/logout">Log out</a>
       </div>

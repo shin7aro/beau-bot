@@ -22,6 +22,7 @@ const lootRender = require('./loot-render');
 const rosterStore = require('./roster-store');
 const weaponEmojiStore = require('./weapon-emoji-store');
 const weaponAliasStore = require('./weapon-alias-store');
+const themeStore = require('./theme-store');
 
 const router = express.Router();
 router.use(cookieParser());
@@ -95,19 +96,49 @@ router.get('/auth/logout', (req, res) => {
   res.redirect('/');
 });
 
-router.get('/auth/me', (req, res) => {
+router.get('/auth/me', async (req, res) => {
   if (!req.user) return res.json({ user: null });
   // Computed fresh from the current ROSTER_ADMIN_IDS/name list (and same
-  // for EMOJI_ADMIN_IDS/name below) on every call rather than baked into
-  // the session JWT, so revoking/granting access takes effect immediately
-  // without forcing a re-login.
+  // for EMOJI_ADMIN_IDS/name, and the roster's gm/right_hand seat for
+  // themeManager) on every call rather than baked into the session JWT, so
+  // revoking/granting access takes effect immediately without forcing a
+  // re-login.
   res.json({
     user: {
       ...req.user,
       rosterAdmin: auth.isRosterAdmin(req.user),
       emojiAdmin: auth.isEmojiAdmin(req.user),
+      themeManager: await auth.isThemeManager(req.user),
     },
   });
+});
+
+// ── SITE THEME (global — same for every visitor) ─────────────────────────
+// GET is public so every page can pick up the current theme. Switching it
+// is restricted to whoever currently holds the GM or Right Hand roster
+// seat (see web-auth.js's requireThemeManager).
+router.get('/api/theme', async (req, res) => {
+  try {
+    res.json({ theme: await themeStore.loadTheme() });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to load the site theme.' });
+  }
+});
+
+router.post('/api/theme', auth.requireThemeManager, async (req, res) => {
+  try {
+    const { theme } = req.body || {};
+    if (!themeStore.THEMES.includes(theme)) {
+      return res.status(400).json({ error: `Theme must be one of: ${themeStore.THEMES.join(', ')}` });
+    }
+    const saved = await themeStore.saveTheme(theme);
+    activityStore.log(req.user, 'theme.update', `Switched the site theme to "${saved}"`);
+    res.json({ theme: saved });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to switch the site theme.' });
+  }
 });
 
 // ── BUILDS ──────────────────────────────────────────────────────────────

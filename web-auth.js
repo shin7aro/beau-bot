@@ -278,6 +278,29 @@ function requireRosterAdmin(req, res, next) {
   next();
 }
 
+// ── SITE THEME SWITCH ───────────────────────────────────────────────────
+// Unlike ROSTER_ADMIN above (a fixed hand-picked pair), this tracks
+// whoever *currently* holds the "gm" or "right_hand" seat in the roster
+// tree (see roster-store.js) — so the right people can always switch the
+// site theme without an env var edit every time leadership changes.
+async function isThemeManager(user) {
+  if (!user) return false;
+  const positions = await rosterStore.loadPositions();
+  const tier = rosterStore.getEntry(positions, user.id).tier;
+  return tier === 'gm' || tier === 'right_hand';
+}
+
+async function requireThemeManager(req, res, next) {
+  try {
+    if (!(await isThemeManager(req.user))) {
+      return res.status(403).json({ error: 'Only the Guild Master or Right Hand can change the site theme.' });
+    }
+    next();
+  } catch (err) {
+    next(err);
+  }
+}
+
 // ── EMOJI LINKING PAGE ──────────────────────────────────────────────────
 // One person, full stop — same shape as ROSTER_ADMIN above (ID list wins if
 // set, name fallback otherwise), but narrower: this gates the secret
@@ -325,6 +348,8 @@ module.exports = {
   requireAdmin,
   isRosterAdmin,
   requireRosterAdmin,
+  isThemeManager,
+  requireThemeManager,
   isEmojiAdmin,
   requireEmojiAdmin,
 };
