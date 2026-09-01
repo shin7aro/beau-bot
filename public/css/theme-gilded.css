@@ -73,7 +73,14 @@ html[data-theme="new"] .site-header {
 /* ── Glass panel treatment — Home / Events / Compositions ──
    .event-card also covers Compositions' list cards (comps.js renders
    class="comp-card event-card"), so this one selector reaches both
-   pages' grids without duplicating rules. */
+   pages' grids without duplicating rules.
+
+   No overflow:hidden here — .modal-card, .event-info-card and .detail-card
+   can contain popovers (.emoji-popover, .weapon-popover,
+   .event-assign-popover) that are meant to float past the card's edge;
+   clipping the container would cut those off. The sheen below stays
+   contained to the rounded corners on its own, via border-radius:inherit,
+   so we don't need overflow:hidden on the parent to achieve that. */
 html[data-theme="new"] .qcard,
 html[data-theme="new"] .highlight-card,
 html[data-theme="new"] .hero-quote,
@@ -82,8 +89,7 @@ html[data-theme="new"] .event-card,
 html[data-theme="new"] .event-info-card,
 html[data-theme="new"] .event-party-card,
 html[data-theme="new"] .modal-card,
-html[data-theme="new"] .detail-card,
-html[data-theme="new"] .auth-menu-dropdown {
+html[data-theme="new"] .detail-card {
   position: relative;
   background: rgba(20,16,10,0.4);
   backdrop-filter: blur(22px) saturate(160%);
@@ -92,34 +98,51 @@ html[data-theme="new"] .auth-menu-dropdown {
   border-top-color: rgba(240,200,130,0.5);
   box-shadow:
     inset 0 1px 0 rgba(232,196,140,0.12),
-    0 24px 50px -22px rgba(0,0,0,0.75),
-    0 0 60px -32px rgba(240,181,61,0.4);
-  overflow: hidden;
+    0 10px 24px -14px rgba(0,0,0,0.6),
+    0 0 20px -12px rgba(240,181,61,0.35);
 }
 html[data-theme="new"] .qcard::before,
 html[data-theme="new"] .highlight-card::before,
 html[data-theme="new"] .hero-quote::before,
-html[data-theme="new"] .about-quote::before,
 html[data-theme="new"] .event-card::before,
 html[data-theme="new"] .event-info-card::before,
 html[data-theme="new"] .event-party-card::before,
 html[data-theme="new"] .modal-card::before,
 html[data-theme="new"] .detail-card::before {
   content: ''; position: absolute; inset: 0; pointer-events: none; z-index: 0;
+  border-radius: inherit;
   background: linear-gradient(122deg, rgba(255,255,255,0.1) 0%, transparent 30%, transparent 72%, rgba(232,196,140,0.05) 100%);
 }
-/* about-quote already draws its own ::before (the big quotation mark) —
-   don't clobber it with the sheen layer above. */
-html[data-theme="new"] .about-quote::before {
-  content: '"'; background: none;
-}
+/* .about-quote and .hero-quote are the same element (index.html gives it
+   both classes) — .about-quote already draws its own ::before (the giant
+   decorative quote mark, positioned via top/left, not inset:0). It's
+   deliberately left out of the selector list above so this sheen layer
+   never overwrites that positioning; the mark still goes gold on its own
+   since it's colored via var(--accent). */
 html[data-theme="new"] .qcard:hover,
 html[data-theme="new"] .event-card:hover {
   border-color: rgba(240,181,61,0.5);
   box-shadow:
     inset 0 1px 0 rgba(232,196,140,0.14),
-    0 28px 56px -22px rgba(0,0,0,0.8),
-    0 0 80px -28px rgba(240,181,61,0.55);
+    0 14px 30px -16px rgba(0,0,0,0.65),
+    0 0 26px -12px rgba(240,181,61,0.5);
+}
+
+/* Profile dropdown gets the same glass fill/border as the cards above,
+   but MUST keep base.css's position:absolute (that's what makes it float
+   below the trigger button instead of sitting in normal document flow) —
+   kept as its own rule so it's never swept up if the shared list above
+   changes. Shadow is small and un-glowy on purpose: this sits near the
+   top-right corner of the viewport, where a big soft-edged bloom is more
+   likely to spill off-screen than read as a glow. */
+html[data-theme="new"] .auth-menu-dropdown {
+  background: rgba(20,16,10,0.55);
+  backdrop-filter: blur(22px) saturate(160%);
+  -webkit-backdrop-filter: blur(22px) saturate(160%);
+  border-color: rgba(240,181,61,0.28);
+  box-shadow:
+    inset 0 1px 0 rgba(232,196,140,0.12),
+    0 14px 34px -12px rgba(0,0,0,0.6);
 }
 
 /* ── Hero headline: gold gradient instead of flat ink ── */
