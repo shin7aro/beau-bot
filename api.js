@@ -964,12 +964,15 @@ function attendanceBucketFor(type) {
 async function computeProfileStats(userId) {
   const events = await eventsStore.loadEvents();
   const attendance = { PVP: 0, PVE: 0, Gank: 0 };
-  // Same all-time attendance loop below also tallies the last-7-days
-  // subset as it goes, rather than a second pass over every event — the
-  // profile page's weekly/all-time switch (admin-only) then just swaps
-  // which of the two objects it displays, client-side, no extra request.
+  // Same all-time attendance loop below also tallies the last-7-days and
+  // last-30-days subsets as it goes, rather than extra passes over every
+  // event — the profile page's all-time/weekly/monthly switch (officer/
+  // admin only) then just swaps which of the three objects it displays,
+  // client-side, no extra request.
   const attendanceWeek = { PVP: 0, PVE: 0, Gank: 0 };
+  const attendanceMonth = { PVP: 0, PVE: 0, Gank: 0 };
   const weekCutoff = Date.now() - 7 * 24 * 60 * 60 * 1000;
+  const monthCutoff = Date.now() - 30 * 24 * 60 * 60 * 1000;
   const roleCounts = {};
   const weaponCountsByBucket = { PVP: {}, PVE: {} };
   const campaigns = [];
@@ -983,7 +986,9 @@ async function computeProfileStats(userId) {
     const bucket = attendanceBucketFor(event.type);
     if (bucket) {
       attendance[bucket] += 1;
-      if ((event.createdAt || 0) >= weekCutoff) attendanceWeek[bucket] += 1;
+      const createdAt = event.createdAt || 0;
+      if (createdAt >= monthCutoff) attendanceMonth[bucket] += 1;
+      if (createdAt >= weekCutoff) attendanceWeek[bucket] += 1;
     }
 
     const rows = comps.expandAllCategoryRows(event.categories);
@@ -1021,7 +1026,7 @@ async function computeProfileStats(userId) {
   const topWeaponsPvp = topWeaponsFrom(weaponCountsByBucket.PVP);
   const topWeaponsPve = topWeaponsFrom(weaponCountsByBucket.PVE);
 
-  return { attendance, attendanceWeek, favoriteRole, recentCampaigns: campaigns, topWeaponsPvp, topWeaponsPve };
+  return { attendance, attendanceWeek, attendanceMonth, favoriteRole, recentCampaigns: campaigns, topWeaponsPvp, topWeaponsPve };
 }
 
 // One member's profile — role, attendance, and loot earned. Gated the
@@ -1041,7 +1046,7 @@ router.get('/api/profile/:userId', auth.requireMember, async (req, res) => {
     const totals = await lootStore.getTotals();
     const lootRecord = totals.perMember[userId];
 
-    const { attendance, attendanceWeek, favoriteRole, recentCampaigns, topWeaponsPvp, topWeaponsPve } = await computeProfileStats(userId);
+    const { attendance, attendanceWeek, attendanceMonth, favoriteRole, recentCampaigns, topWeaponsPvp, topWeaponsPve } = await computeProfileStats(userId);
 
     res.json({
       id: userId,
@@ -1053,6 +1058,7 @@ router.get('/api/profile/:userId', auth.requireMember, async (req, res) => {
       memberSince: (found && found.joinedAt) || null,
       attendance,
       attendanceWeek,
+      attendanceMonth,
       favoriteRole,
       recentCampaigns,
       topWeaponsPvp,
@@ -1072,38 +1078,48 @@ router.get('/api/profile/:userId', auth.requireMember, async (req, res) => {
 // as-is for the single-member profile page, this is the guild-wide view.
 async function computeAttendanceLeaderboard() {
   const events = await eventsStore.loadEvents();
-  const counts = new Map(); // userId -> { PVP, PVE, Gank }
+  const weekCutoff = Date.now() - 7 * 24 * 60 * 60 * 1000;
+  const monthCutoff = Date.now() - 30 * 24 * 60 * 60 * 1000;
+  // userId -> { all, week, month }, each a {PVP,PVE,Gank} counter — same
+  // single-pass-over-events approach as computeProfileStats, just tallied
+  // for every member at once instead of one at a time.
+  const counts = new Map();
+  const emptyBucket = () => ({ PVP: 0, PVE: 0, Gank: 0 });
 
   for (const event of Object.values(events)) {
     if (!event.closed) continue;
     const bucket = attendanceBucketFor(event.type);
     if (!bucket) continue;
     const noShows = new Set(event.noShows || []);
+    const createdAt = event.createdAt || 0;
     for (const userId of eventsStore.getSignedUpUserIds(event)) {
       if (noShows.has(userId)) continue;
-      if (!counts.has(userId)) counts.set(userId, { PVP: 0, PVE: 0, Gank: 0 });
-      counts.get(userId)[bucket] += 1;
+      if (!counts.has(userId)) counts.set(userId, { all: emptyBucket(), week: emptyBucket(), month: emptyBucket() });
+      const c = counts.get(userId);
+      c.all[bucket] += 1;
+      if (createdAt >= monthCutoff) c.month[bucket] += 1;
+      if (createdAt >= weekCutoff) c.week[bucket] += 1;
     }
   }
 
   const members = await fetchDahaloMembers();
   const positions = await rosterStore.loadPositions();
+  const withTotal = (b) => ({ ...b, total: b.PVP + b.PVE + b.Gank });
 
   const rows = members.map((m) => {
-    const c = counts.get(m.id) || { PVP: 0, PVE: 0, Gank: 0 };
+    const c = counts.get(m.id) || { all: emptyBucket(), week: emptyBucket(), month: emptyBucket() };
     return {
       id: m.id,
       username: m.username,
       avatar: m.avatar,
       tier: rosterStore.getEntry(positions, m.id).tier,
-      PVP: c.PVP,
-      PVE: c.PVE,
-      Gank: c.Gank,
-      total: c.PVP + c.PVE + c.Gank,
+      all: withTotal(c.all),
+      week: withTotal(c.week),
+      month: withTotal(c.month),
     };
   });
 
-  rows.sort((a, b) => b.total - a.total || a.username.localeCompare(b.username));
+  rows.sort((a, b) => b.all.total - a.all.total || a.username.localeCompare(b.username));
   return rows;
 }
 

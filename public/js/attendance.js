@@ -10,6 +10,7 @@
 const TIER_LABELS = { gm: 'Guild Master', right_hand: 'Right Hand', officer: 'Officer', member: 'Dahalo' };
 
 let leaderboard = [];
+let currentRange = 'all';
 
 function escapeHtml(s) {
   return String(s || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -29,6 +30,7 @@ function renderRows(rows) {
   tbody.innerHTML = rows.map((m, i) => {
     const avatarUrl = window.discordAvatarUrl(m.id, m.avatar, 48);
     const tierLabel = TIER_LABELS[m.tier] || 'Dahalo';
+    const stats = m[currentRange];
     return `
       <tr>
         <td class="attendance-rank">${i + 1}</td>
@@ -39,17 +41,20 @@ function renderRows(rows) {
             <span class="attendance-tier">${escapeHtml(tierLabel)}</span>
           </a>
         </td>
-        <td class="num" data-label="PVP">${m.PVP}</td>
-        <td class="num" data-label="PVE">${m.PVE}</td>
-        <td class="num" data-label="Gank">${m.Gank}</td>
-        <td class="num attendance-total" data-label="Total">${m.total}</td>
+        <td class="num" data-label="PVP">${stats.PVP}</td>
+        <td class="num" data-label="PVE">${stats.PVE}</td>
+        <td class="num" data-label="Gank">${stats.Gank}</td>
+        <td class="num attendance-total" data-label="Total">${stats.total}</td>
       </tr>`;
   }).join('');
 }
 
 function applyFilter() {
   const query = document.getElementById('attendance-search').value.trim().toLowerCase();
-  const filtered = query ? leaderboard.filter(m => m.username.toLowerCase().includes(query)) : leaderboard;
+  const filtered = query ? leaderboard.filter(m => m.username.toLowerCase().includes(query)) : leaderboard.slice();
+  // Re-rank for whichever range is selected — the server only pre-sorts
+  // by all-time total, since that's the default view.
+  filtered.sort((a, b) => b[currentRange].total - a[currentRange].total || a.username.localeCompare(b.username));
   renderRows(filtered);
   const label = document.getElementById('attendance-count-label');
   label.textContent = query ? `${filtered.length} of ${leaderboard.length} members` : `${leaderboard.length} members`;
@@ -74,6 +79,14 @@ async function init() {
   try {
     await loadLeaderboard();
     document.getElementById('attendance-search').addEventListener('input', applyFilter);
+    const rangeToggle = document.getElementById('attendance-range-toggle');
+    rangeToggle.addEventListener('click', (e) => {
+      const btn = e.target.closest('.filter-btn');
+      if (!btn) return;
+      rangeToggle.querySelectorAll('.filter-btn').forEach(b => b.classList.toggle('active', b === btn));
+      currentRange = btn.dataset.range;
+      applyFilter();
+    });
   } catch (err) {
     document.getElementById('attendance-empty').textContent = 'Failed to load the attendance leaderboard.';
     document.getElementById('attendance-empty').style.display = '';

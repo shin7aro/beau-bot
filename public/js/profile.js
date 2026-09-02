@@ -159,7 +159,7 @@ function renderBanner(profile) {
 // switching ranges never needs a second request (both attendance objects
 // came back in the same /api/profile/:id response).
 function renderAttendanceRows(profile, range) {
-  const attendance = range === 'week' ? profile.attendanceWeek : profile.attendance;
+  const attendance = range === 'week' ? profile.attendanceWeek : range === 'month' ? profile.attendanceMonth : profile.attendance;
   const totalEvents = attendance.PVP + attendance.PVE + attendance.Gank;
   const rows = document.getElementById('ledger-attendance-rows');
   if (!rows) return;
@@ -189,6 +189,7 @@ function renderLedger(profile) {
         <div class="filter-group officer-only" id="attendance-range-toggle">
           <button class="filter-btn active" type="button" data-range="all">All-time</button>
           <button class="filter-btn" type="button" data-range="week">Weekly</button>
+          <button class="filter-btn" type="button" data-range="month">Monthly</button>
         </div>
       </div>
       <div id="ledger-attendance-rows"></div>
