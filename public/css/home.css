@@ -85,12 +85,21 @@
   100% { opacity: 0.94; transform: translate(-50%,-50%) rotate(-7deg) scale(1); }
 }
 
-/* Quote box now fills the hero's right column (where the stamp used to be). */
-.hero-quote {
+/* Guild banner image fills the hero's right column. */
+.hero-banner {
   justify-self: center;
   align-self: center;
-  max-width: 360px;
-  padding: 30px 26px;
+  max-width: 380px;
+  width: 100%;
+  opacity: 0;
+  animation: heroUp 0.6s 0.3s ease forwards;
+}
+.hero-banner-img {
+  display: block;
+  width: 100%;
+  height: auto;
+  border-radius: 14px;
+  box-shadow: 0 24px 50px -18px rgba(0,0,0,0.65);
 }
 
 /* Stamp now fills the About section's right column (where the quote used
@@ -246,6 +255,16 @@
   font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--ink-faint); letter-spacing: 0.04em;
 }
 
+/* Quote moved below the quicklinks — centered on the page */
+.about-quote-centered {
+  max-width: 560px;
+  margin: 0 auto;
+  text-align: center;
+}
+.about-quote-centered::before { left: 50%; transform: translateX(-50%); }
+.about-quote-centered blockquote { padding-left: 0; }
+.about-quote-centered cite { text-align: center; }
+
 /* ── legibility: text sitting directly on the image (no card backing) ── */
 .hero-eyebrow,
 .stat .stat-num, .stat .stat-label,
@@ -258,6 +277,7 @@
 @media (max-width: 980px) {
   .hero { grid-template-columns: 1fr; padding-top: 56px; padding-bottom: 64px; }
   .hero-visual { height: 280px; margin-top: 12px; }
+  .hero-banner { max-width: 320px; margin: 12px auto 0; }
   .cards-grid { grid-template-columns: repeat(2, 1fr); }
   .about { grid-template-columns: 1fr; gap: 28px; }
 }
