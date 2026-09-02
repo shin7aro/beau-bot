@@ -185,6 +185,7 @@ const ITEM_MAP = {
   "Mistwalker Hood": "T8_HEAD_LEATHER_FEY",
   "Hood of Tenacity": "T8_HEAD_LEATHER_AVALON",
   "Royal Hood": "T8_HEAD_LEATHER_ROYAL",
+  "Dragonslayer Hood": "T8_HEAD_LEATHER_DRAGON",
   "Scholar Cowl": "T8_HEAD_CLOTH_SET1",
   "Cleric Cowl": "T8_HEAD_CLOTH_SET2",
   "Mage Cowl": "T8_HEAD_CLOTH_SET3",
@@ -213,6 +214,7 @@ const ITEM_MAP = {
   "Mistwalker Jacket": "T8_ARMOR_LEATHER_FEY",
   "Jacket of Tenacity": "T8_ARMOR_LEATHER_AVALON",
   "Royal Jacket": "T8_ARMOR_LEATHER_ROYAL",
+  "Dragonslayer Jacket": "T8_ARMOR_LEATHER_DRAGON",
   "Scholar Robe": "T8_ARMOR_CLOTH_SET1",
   "Cleric Robe": "T8_ARMOR_CLOTH_SET2",
   "Mage Robe": "T8_ARMOR_CLOTH_SET3",
@@ -241,6 +243,7 @@ const ITEM_MAP = {
   "Mistwalker Shoes": "T8_SHOES_LEATHER_FEY",
   "Shoes of Tenacity": "T8_SHOES_LEATHER_AVALON",
   "Royal Shoes": "T8_SHOES_LEATHER_ROYAL",
+  "Dragonslayer Shoes": "T8_SHOES_LEATHER_DRAGON",
   "Scholar Sandals": "T8_SHOES_CLOTH_SET1",
   "Cleric Sandals": "T8_SHOES_CLOTH_SET2",
   "Mage Sandals": "T8_SHOES_CLOTH_SET3",
@@ -280,6 +283,7 @@ const ITEM_MAP = {
   "Acid Potion": "T7_POTION_ACID",
   "Healing Potion": "T6_POTION_HEAL",
   "Energy Potion": "T6_POTION_ENERGY",
+  "Lifeward Potion": "T8_POTION_LIFEWARD",
   // Food
   "Pork Pie": "T7_MEAL_PIE",
   "Pork Omelette": "T7_MEAL_OMELETTE",
@@ -292,6 +296,7 @@ const ITEM_MAP = {
   "Avalonian Beef Sandwich": "T8_MEAL_SANDWICH_AVALON",
   "Roast Pork": "T7_MEAL_ROAST",
   "Roasted Puremist Snapper": "T7_MEAL_ROAST_FISH",
+  "Dragonbound Leyfin Omelette": "T7_MEAL_OMELETTE_DRAGONAREA",
 };
 
 // Weapons only (136 entries) — same derivation as public/js/item-map.js's
