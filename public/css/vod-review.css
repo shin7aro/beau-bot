@@ -132,11 +132,21 @@ body.app-shell .site-header { flex-shrink: 0; }
 .vod-toolbar-field input[type="range"] { accent-color: var(--accent); width: 90px; }
 .vod-toolbar-value { color: var(--ink-dim); font-weight: 600; text-transform: none; letter-spacing: 0; min-width: 34px; }
 
-.vod-timeline { flex-shrink: 0; display: flex; flex-direction: column; gap: 4px; }
+.vod-timeline { flex-shrink: 0; display: flex; align-items: center; gap: 10px; }
+.vod-timeline-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.vod-play-btn {
+  flex-shrink: 0; width: 32px; height: 32px; border-radius: 50%; border: none;
+  background: var(--accent); color: var(--accent-ink); display: flex; align-items: center; justify-content: center;
+  cursor: pointer; padding: 0; transition: transform 0.1s, opacity 0.15s;
+}
+.vod-play-btn svg { width: 16px; height: 16px; }
+.vod-play-btn:hover { transform: scale(1.06); }
+.vod-play-btn:disabled { opacity: 0.35; cursor: not-allowed; transform: none; background: var(--surface-3); color: var(--ink-faint); }
 .vod-timeline-track {
   position: relative; height: 14px; border-radius: 999px; background: var(--surface-3);
   cursor: pointer; overflow: visible;
 }
+.vod-timeline-track.is-locked { cursor: not-allowed; }
 .vod-timeline-fill { position: absolute; top: 0; bottom: 0; left: 0; width: 0; border-radius: 999px; background: var(--accent-dim); pointer-events: none; }
 .vod-timeline-marks { position: absolute; inset: 0; pointer-events: none; }
 .vod-timeline-mark {
@@ -149,7 +159,8 @@ body.app-shell .site-header { flex-shrink: 0; }
   position: absolute; top: 50%; width: 14px; height: 14px; border-radius: 50%;
   background: var(--accent); transform: translate(-50%, -50%); box-shadow: 0 0 0 3px var(--accent-dim);
 }
-.vod-timeline-times { display: flex; justify-content: space-between; font-size: 11px; color: var(--ink-faint); font-variant-numeric: tabular-nums; }
+.vod-timeline-times { display: flex; justify-content: space-between; align-items: center; font-size: 11px; color: var(--ink-faint); font-variant-numeric: tabular-nums; }
+#vod-timeline-note { font-variant-numeric: normal; font-style: italic; }
 
 /* ── SIDE PANEL: comments ── */
 .vod-side-col {

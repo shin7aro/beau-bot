@@ -80,6 +80,7 @@
     </button>
     <div class="vod-room-status" id="vod-room-status"></div>
     <button class="btn vod-danger-btn officer-only" id="vod-end-review-btn">End review</button>
+    <button class="btn vod-danger-btn officer-only" id="vod-delete-review-btn">Delete</button>
     <div class="vod-room-title" id="vod-room-title">—</div>
     <div class="vod-presence" id="vod-presence">
       <span id="vod-presence-count">— watching</span>
@@ -112,14 +113,20 @@
       </div>
 
       <div class="vod-timeline" id="vod-timeline">
-        <div class="vod-timeline-track" id="vod-timeline-track">
-          <div class="vod-timeline-fill" id="vod-timeline-fill"></div>
-          <div class="vod-timeline-marks" id="vod-timeline-marks"></div>
-          <div class="vod-timeline-scrubber" id="vod-timeline-scrubber"></div>
-        </div>
-        <div class="vod-timeline-times">
-          <span id="vod-time-current">0:00</span>
-          <span id="vod-time-duration">0:00</span>
+        <button class="vod-play-btn" id="vod-play-btn" type="button" title="Play/Pause">
+          <svg viewBox="0 0 24 24" fill="currentColor" id="vod-play-icon"><path d="M8 5v14l11-7z"/></svg>
+        </button>
+        <div class="vod-timeline-body">
+          <div class="vod-timeline-track" id="vod-timeline-track">
+            <div class="vod-timeline-fill" id="vod-timeline-fill"></div>
+            <div class="vod-timeline-marks" id="vod-timeline-marks"></div>
+            <div class="vod-timeline-scrubber" id="vod-timeline-scrubber"></div>
+          </div>
+          <div class="vod-timeline-times">
+            <span id="vod-time-current">0:00</span>
+            <span id="vod-timeline-note"></span>
+            <span id="vod-time-duration">0:00</span>
+          </div>
         </div>
       </div>
     </div>

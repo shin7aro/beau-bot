@@ -1928,11 +1928,15 @@ router.post('/api/vod/requests/:id/end', auth.requireOfficer, async (req, res) =
 
 router.delete('/api/vod/requests/:id', auth.requireOfficer, async (req, res) => {
   try {
-    const { ok, error } = await vodStore.deleteRequest(req.params.id);
+    const { ok, error, request } = await vodStore.deleteRequest(req.params.id);
     if (error === 'not_found') return res.status(404).json({ error: 'VOD request not found.' });
-    if (error === 'in_progress') return res.status(409).json({ error: 'End the review before deleting it.' });
     if (ok) {
-      activityStore.log(req.user, 'vod.request.delete', 'Deleted a VOD request');
+      activityStore.log(req.user, 'vod.request.delete', `Deleted a VOD request${request && request.title ? `: "${request.title}"` : ''}`);
+      if (request && request.status === 'reviewing') {
+        // Anyone currently watching gets kicked out immediately rather than
+        // left talking to a room whose underlying data no longer exists.
+        vodWs.notifyRoomLifecycle(req.params.id, 'deleted', { status: 'deleted' });
+      }
       vodWs.broadcastLobbyChanged();
     }
     res.json({ ok: true });

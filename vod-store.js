@@ -158,11 +158,14 @@ async function deleteRequest(id) {
   const db = await loadDb();
   const request = db.requests[id];
   if (!request) return { error: 'not_found' };
-  if (request.status === 'reviewing') return { error: 'in_progress' };
+  // Officers/admins can delete a request at any stage, including one
+  // that's currently live — vod-ws.js is responsible for kicking anyone
+  // connected to that room out when this happens (see notifyRoomLifecycle
+  // call in api.js's DELETE route).
   delete db.requests[id];
   delete db.reviews[id];
   await saveDb(db);
-  return { ok: true };
+  return { ok: true, request };
 }
 
 // ---------- review data (drawings + comments) ----------

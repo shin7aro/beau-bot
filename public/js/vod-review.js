@@ -138,7 +138,6 @@ function renderQueue(requests) {
     if (r.status === 'pending') {
       if (isOfficerOrAdmin()) {
         actions += `<button class="btn" data-action="start" data-id="${r.id}">Start review</button>`;
-        actions += `<button class="btn vod-danger-btn" data-action="cancel" data-id="${r.id}">Cancel</button>`;
       } else {
         actions += `<span class="vod-request-meta">Waiting for an officer to start it</span>`;
       }
@@ -146,6 +145,9 @@ function renderQueue(requests) {
       actions += `<button class="cta-primary" data-action="join" data-id="${r.id}">Join live</button>`;
     } else {
       actions += `<button class="btn" data-action="join" data-id="${r.id}">View replay</button>`;
+    }
+    if (isOfficerOrAdmin()) {
+      actions += `<button class="btn vod-danger-btn" data-action="delete" data-id="${r.id}" data-status="${r.status}">Delete</button>`;
     }
 
     card.innerHTML = `
@@ -163,11 +165,11 @@ function renderQueue(requests) {
   }
 
   wrap.querySelectorAll('button[data-action]').forEach((btn) => {
-    btn.addEventListener('click', () => handleQueueAction(btn.dataset.action, btn.dataset.id));
+    btn.addEventListener('click', () => handleQueueAction(btn.dataset.action, btn.dataset.id, btn.dataset.status));
   });
 }
 
-async function handleQueueAction(action, id) {
+async function handleQueueAction(action, id, status) {
   if (action === 'join') {
     location.href = `vod-review.html?review=${encodeURIComponent(id)}`;
     return;
@@ -181,11 +183,14 @@ async function handleQueueAction(action, id) {
     }
     return;
   }
-  if (action === 'cancel') {
-    if (!confirm('Cancel this VOD request?')) return;
+  if (action === 'delete') {
+    const msg = status === 'reviewing'
+      ? 'This review is currently live — deleting it will end it for everyone watching. Delete it anyway?'
+      : 'Delete this VOD request? This can\u2019t be undone.';
+    if (!confirm(msg)) return;
     try {
       await api(`/api/vod/requests/${id}`, { method: 'DELETE' });
-      showToast('Request cancelled.');
+      showToast('VOD request deleted.');
       refreshList();
     } catch (err) {
       showToast(err.message);
@@ -346,7 +351,12 @@ function loadYouTubeApi(onReady) {
 function createPlayer(videoId) {
   room.player = new YT.Player('vod-yt-player', {
     videoId,
-    playerVars: { rel: 0, modestbranding: 1, playsinline: 1 },
+    // controls: 0 hides YouTube's own play/pause/seek bar entirely — we
+    // draw our own play button + timeline below instead, driven through
+    // the IFrame API either way. (YouTube's small logo/title on hover is
+    // baked into the embed and can't be removed — that's the one thing
+    // that isn't actually a "control".)
+    playerVars: { rel: 0, modestbranding: 1, playsinline: 1, controls: 0, disablekb: 1, fs: 0, iv_load_policy: 3 },
     events: {
       onReady: () => {
         room.duration = room.player.getDuration() || 0;
@@ -451,6 +461,11 @@ function handleRoomMessage(msg) {
       showToast('This review has ended.');
       if (ws) { ws.close(); ws = null; }
       break;
+    case 'deleted':
+      showToast('This VOD request was deleted.');
+      if (ws) { ws.close(); ws = null; }
+      location.href = 'vod-review.html';
+      break;
     case 'error':
       showToast(msg.message);
       break;
@@ -489,6 +504,7 @@ function startTicking() {
     }
     redrawCanvas(t);
     highlightActiveComment(t);
+    updatePlayButton();
   }, DRAW_TICK_MS);
 }
 
@@ -497,6 +513,33 @@ function highlightActiveComment(t) {
     const ts = Number(el.dataset.ts);
     el.classList.toggle('is-active', Math.abs(ts - t) < 1.5);
   });
+}
+
+// Whether THIS client is allowed to actually move the shared playhead:
+// always true once a review is done (private replay, nothing to keep in
+// sync), and while it's live, only for the officer/admin driving it —
+// otherwise everyone's view would be fighting for control of one stream.
+function canOperatePlayer() {
+  return room.status === 'done' || (room.status === 'reviewing' && room.canControl);
+}
+
+function updatePlayButton() {
+  const btn = document.getElementById('vod-play-btn');
+  const icon = document.getElementById('vod-play-icon');
+  const track = document.getElementById('vod-timeline-track');
+  const note = document.getElementById('vod-timeline-note');
+  if (!btn || !room.player || typeof room.player.getPlayerState !== 'function') return;
+
+  const allowed = canOperatePlayer();
+  btn.disabled = !allowed;
+  track.classList.toggle('is-locked', !allowed);
+  note.textContent = allowed ? '' : 'Only the reviewing officer/admin controls playback';
+
+  const isPlaying = room.player.getPlayerState() === YT.PlayerState.PLAYING;
+  icon.innerHTML = isPlaying
+    ? '<path d="M6 5h4v14H6zM14 5h4v14h-4z"/>'   // pause glyph
+    : '<path d="M8 5v14l11-7z"/>';                // play glyph
+  btn.title = isPlaying ? 'Pause' : 'Play';
 }
 
 /* ---------- drawing canvas ---------- */
@@ -632,17 +675,29 @@ function redrawCanvas(currentTime) {
 function wireTimeline() {
   const track = document.getElementById('vod-timeline-track');
   track.addEventListener('click', (e) => {
-    if (room.duration <= 0) return;
+    if (room.duration <= 0 || !canOperatePlayer()) return;
     const rect = track.getBoundingClientRect();
     const pct = Math.min(1, Math.max(0, (e.clientX - rect.left) / rect.width));
     const time = pct * room.duration;
-    if (room.status === 'done') {
-      room.player.seekTo(time, true);
-    } else if (room.canControl) {
-      room.player.seekTo(time, true);
-      sendWs({ type: 'control', action: 'seek', time, playing: room.player.getPlayerState() === YT.PlayerState.PLAYING });
-    }
+    seekPlayer(time);
   });
+
+  document.getElementById('vod-play-btn').addEventListener('click', () => {
+    if (!canOperatePlayer() || !room.player || typeof room.player.getPlayerState !== 'function') return;
+    if (room.player.getPlayerState() === YT.PlayerState.PLAYING) room.player.pauseVideo();
+    else room.player.playVideo();
+  });
+}
+
+// Shared by the timeline click and the comment-timestamp click: moves the
+// local player, and — only when we're actually allowed to drive playback —
+// tells everyone else where to jump to as well.
+function seekPlayer(time) {
+  if (!room.player) return;
+  room.player.seekTo(time, true);
+  if (room.status === 'reviewing' && room.canControl) {
+    sendWs({ type: 'control', action: 'seek', time, playing: room.player.getPlayerState() === YT.PlayerState.PLAYING });
+  }
 }
 
 function renderTimelineMarks() {
@@ -711,6 +766,20 @@ function wireCommentComposer() {
       showToast(err.message);
     }
   });
+
+  document.getElementById('vod-delete-review-btn').addEventListener('click', async () => {
+    const msg = room.status === 'reviewing'
+      ? 'This review is currently live — deleting it will end it for everyone watching. Delete it anyway?'
+      : 'Delete this VOD request? This can\u2019t be undone.';
+    if (!confirm(msg)) return;
+    try {
+      await api(`/api/vod/requests/${room.id}`, { method: 'DELETE' });
+      showToast('VOD request deleted.');
+      location.href = 'vod-review.html';
+    } catch (err) {
+      showToast(err.message);
+    }
+  });
 }
 
 function setComposerEnabled(enabled) {
@@ -746,14 +815,8 @@ function renderCommentList() {
 
   list.querySelectorAll('.vod-comment-ts').forEach((el) => {
     el.addEventListener('click', () => {
-      const time = Number(el.dataset.seek);
-      if (!room.player) return;
-      if (room.status === 'done') {
-        room.player.seekTo(time, true);
-      } else if (room.canControl) {
-        room.player.seekTo(time, true);
-        sendWs({ type: 'control', action: 'seek', time, playing: room.player.getPlayerState() === YT.PlayerState.PLAYING });
-      }
+      if (!canOperatePlayer()) return;
+      seekPlayer(Number(el.dataset.seek));
     });
   });
 }
