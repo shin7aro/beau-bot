@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<script>(function(){try{if(localStorage.getItem('rod-theme')==='new')document.documentElement.setAttribute('data-theme','new');}catch(e){}})();</script>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>VOD Review — Rise of Dahalo</title>
+<meta name="description" content="Request, run, and watch live VOD reviews together — draw and comment on the footage, timestamped, in real time.">
+<link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+<link rel="icon" href="assets/favicon.ico" sizes="any">
+<link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
+<link rel="stylesheet" href="css/base.css">
+<link rel="stylesheet" href="css/home.css">
+<link rel="stylesheet" href="css/vod-review.css">
+<link rel="stylesheet" href="css/theme-gilded.css">
+</head>
+<body class="app-shell">
+
+<!-- HEADER -->
+<header class="site-header">
+  <a href="index.html" class="brand">
+    <div class="guild-mark">
+      <svg viewBox="0 0 24 24"><path d="M12 2L4 6v6c0 5.5 3.4 9.7 8 11 4.6-1.3 8-5.5 8-11V6l-8-4z"/><path d="M12 7v9M9 10l3-3 3 3" stroke="#0d0d0f" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>
+    </div>
+    <div class="header-text">
+      <h1>RISE OF DAHALO</h1>
+      <span class="eyebrow">VOD Review <span class="vod-beta-chip">Beta</span></span>
+    </div>
+  </a>
+  <nav class="site-nav">
+    <a href="index.html">Home</a>
+    <a href="builds.html">Builds</a>
+    <a href="roster.html">Roster</a>
+    <a href="events.html" class="logged-in-only">Events</a>
+    <a href="loot.html" class="logged-in-only">Loot Manager</a>
+    <a href="comps.html" class="officer-only">Compositions</a>
+  </nav>
+  <div class="header-actions">
+    <div id="auth-control"></div>
+  </div>
+</header>
+
+<!-- GATE: shown until we know the visitor is at least a logged-in Discord member -->
+<div class="wrap section" id="gate-message" style="display:none">
+  <div class="section-head">
+    <h2 class="section-title">Members only</h2>
+    <p class="section-sub">VOD Review is for guild members — log in with your Discord account to request or watch a review.</p>
+  </div>
+  <a class="cta-primary" href="/auth/login?returnTo=/vod-review.html" style="display:inline-flex">Log in with Discord</a>
+</div>
+
+<!-- LOADING STATE -->
+<div class="wrap section" id="vod-loading-view">
+  <div class="loading-state">
+    <div class="spinner spinner-lg"></div>
+    <span>Loading VOD Review…</span>
+  </div>
+</div>
+
+<!-- QUEUE / LIST VIEW -->
+<div class="app-main" id="vod-list-view" style="display:none">
+  <div class="controls">
+    <div class="vod-controls-head">
+      <h2 class="section-title">VOD Review queue</h2>
+      <p class="section-sub">Drop a YouTube link, an officer starts the review, and everyone connected can watch, draw, and comment on it live.</p>
+    </div>
+    <button class="cta-primary" id="new-request-btn"><span class="btn-label">+ Request a review</span></button>
+  </div>
+
+  <div class="vod-queue" id="vod-queue"></div>
+  <div class="empty-state" id="vod-empty" style="display:none">No VOD requests yet — be the first to drop a link above.</div>
+</div>
+
+<!-- REVIEW ROOM VIEW -->
+<div class="app-main vod-room" id="vod-room-view" style="display:none">
+  <div class="vod-room-topbar">
+    <button class="detail-back-btn" id="vod-back-btn">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+      Back to queue
+    </button>
+    <div class="vod-room-title" id="vod-room-title">—</div>
+    <div class="vod-room-status" id="vod-room-status"></div>
+    <div class="vod-presence" id="vod-presence" title="Connected now"></div>
+  </div>
+
+  <div class="vod-room-layout">
+    <div class="vod-player-col">
+      <div class="vod-player-wrap" id="vod-player-wrap">
+        <div id="vod-yt-player"></div>
+        <canvas id="vod-draw-canvas"></canvas>
+        <div class="vod-draw-hint" id="vod-draw-hint">Click and drag on the video to draw. It'll show up again for everyone right when playback reaches this moment.</div>
+      </div>
+
+      <div class="vod-toolbar" id="vod-toolbar">
+        <div class="vod-color-swatches" id="vod-color-swatches"></div>
+        <label class="vod-toolbar-field">
+          <span>Width</span>
+          <input type="range" id="vod-width-range" min="2" max="14" value="4">
+        </label>
+        <label class="vod-toolbar-field">
+          <span>Hold</span>
+          <input type="range" id="vod-hold-range" min="1" max="10" value="4">
+          <span class="vod-toolbar-value" id="vod-hold-value">4.0s</span>
+        </label>
+        <button class="btn" id="vod-clear-local-btn" title="Clear drawings currently on screen (doesn't delete them)">Clear view</button>
+      </div>
+
+      <div class="vod-timeline" id="vod-timeline">
+        <div class="vod-timeline-track" id="vod-timeline-track">
+          <div class="vod-timeline-fill" id="vod-timeline-fill"></div>
+          <div class="vod-timeline-marks" id="vod-timeline-marks"></div>
+          <div class="vod-timeline-scrubber" id="vod-timeline-scrubber"></div>
+        </div>
+        <div class="vod-timeline-times">
+          <span id="vod-time-current">0:00</span>
+          <span id="vod-time-duration">0:00</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="vod-side-col">
+      <div class="vod-side-head">
+        <span>Review</span>
+        <span class="vod-side-count" id="vod-comment-count">0 comments</span>
+      </div>
+      <div class="vod-comment-list" id="vod-comment-list">
+        <div class="vod-comment-empty" id="vod-comment-empty">No comments yet. Scrub to a moment and write what you saw.</div>
+      </div>
+      <div class="vod-comment-composer" id="vod-comment-composer">
+        <div class="vod-comment-ts-badge" id="vod-comment-ts-badge">0:00</div>
+        <textarea id="vod-comment-input" placeholder="What happened here?" rows="2"></textarea>
+        <div class="vod-comment-composer-row">
+          <label class="vod-pause-toggle">
+            <input type="checkbox" id="vod-pause-on-comment" checked>
+            <span>Pause on commenting</span>
+          </label>
+          <button class="cta-primary" id="vod-comment-send-btn">Comment</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="vod-officer-bar officer-only" id="vod-officer-bar">
+    <span id="vod-officer-bar-label">You're reviewing this VOD — playback you control is synced to everyone watching.</span>
+    <button class="btn vod-danger-btn" id="vod-end-review-btn">End review</button>
+  </div>
+</div>
+
+<!-- NEW REQUEST MODAL -->
+<div class="modal-overlay" id="vod-request-overlay" style="display:none">
+  <div class="modal-card">
+    <h2>Request a VOD review</h2>
+    <div class="modal-field">
+      <label for="vod-request-url">YouTube link</label>
+      <input type="text" id="vod-request-url" placeholder="https://youtube.com/watch?v=…" autocomplete="off">
+    </div>
+    <div class="modal-field">
+      <label for="vod-request-title">Title <span class="modal-hint-inline">(optional)</span></label>
+      <input type="text" id="vod-request-title" placeholder="e.g. ZvZ at Blackscale, 2 Sept" autocomplete="off">
+    </div>
+    <p class="modal-hint">An officer or admin will start the review when they're ready — you'll see it move to "Live" in the queue.</p>
+    <div class="modal-actions">
+      <button class="btn" id="vod-request-cancel-btn">Cancel</button>
+      <button class="cta-primary" id="vod-request-submit-btn">Submit request</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script src="js/theme.js"></script>
+<script src="js/auth.js"></script>
+<script src="js/vod-review.js"></script>
+</body>
+</html>

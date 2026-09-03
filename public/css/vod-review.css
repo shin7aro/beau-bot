@@ -1,0 +1,212 @@
+/* ─────────────────────────────────────────
+   VOD REVIEW — queue list + live review room
+   Self-contained beyond base.css/home.css:
+   defines its own .app-shell/.app-main/
+   .controls/.empty-state/.detail-back-btn
+   instead of pulling in builds.css, since
+   this page doesn't need the rest of it.
+───────────────────────────────────────── */
+
+.vod-beta-chip {
+  display: inline-block; margin-left: 6px; padding: 1px 6px; border-radius: 999px;
+  background: var(--accent-dim); color: var(--accent); font-size: 9px; font-weight: 700;
+  letter-spacing: 0.06em; text-transform: uppercase; vertical-align: middle;
+}
+
+body.app-shell { height: 100vh; height: 100dvh; display: flex; flex-direction: column; overflow: hidden; }
+body.app-shell .site-header { flex-shrink: 0; }
+.app-main { flex: 1; display: flex; flex-direction: column; overflow: hidden; min-height: 0; padding: 20px 28px; gap: 16px; }
+.app-main > .controls { flex-shrink: 0; }
+
+.empty-state { padding: 48px 16px; text-align: center; color: var(--ink-dim); font-size: 13px; }
+
+.detail-back-btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 8px 12px; border-radius: 8px; border: 1px solid var(--line-2);
+  background: var(--surface-2); color: var(--ink-dim); font: inherit; font-size: 12.5px; font-weight: 600;
+  cursor: pointer; transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+.detail-back-btn:hover { color: var(--ink); border-color: var(--accent); }
+
+/* ── QUEUE LIST ── */
+.controls { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+.vod-controls-head .section-title { font-size: 24px; margin-bottom: 4px; }
+.vod-controls-head .section-sub { margin-top: 0; max-width: 62ch; }
+
+.vod-queue { display: flex; flex-direction: column; gap: 10px; overflow-y: auto; padding-bottom: 8px; }
+.vod-request-card {
+  display: flex; align-items: center; gap: 14px; padding: 14px 16px;
+  background: var(--surface); border: 1px solid var(--line); border-radius: 12px;
+  transition: border-color 0.15s, background 0.15s;
+}
+.vod-request-card:hover { border-color: var(--line-2); }
+.vod-request-card.is-live { border-color: rgba(107,171,122,0.5); background: linear-gradient(180deg, rgba(107,171,122,0.08), transparent 60%); }
+
+.vod-request-thumb {
+  width: 96px; height: 54px; flex-shrink: 0; border-radius: 8px; overflow: hidden;
+  background: var(--surface-3); position: relative;
+}
+.vod-request-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+
+.vod-request-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.vod-request-title { font-size: 14px; font-weight: 700; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.vod-request-meta { font-size: 11.5px; color: var(--ink-faint); display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+
+.vod-status-pill {
+  font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em;
+  padding: 3px 8px; border-radius: 999px; flex-shrink: 0;
+}
+.vod-status-pill.pending { background: rgba(207,157,63,0.16); color: var(--support); }
+.vod-status-pill.done { background: var(--surface-3); color: var(--ink-faint); }
+.vod-status-pill.reviewing {
+  background: rgba(107,171,122,0.18); color: var(--healer);
+  display: inline-flex; align-items: center; gap: 5px;
+}
+.vod-status-pill.reviewing::before {
+  content: ''; width: 6px; height: 6px; border-radius: 50%; background: var(--healer);
+  animation: vodLivePulse 1.4s ease-in-out infinite;
+}
+@keyframes vodLivePulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
+
+.vod-request-actions { display: flex; gap: 8px; flex-shrink: 0; }
+
+@media (max-width: 640px) {
+  .app-main { padding: 16px; }
+  .vod-request-thumb { display: none; }
+}
+
+/* ── ROOM VIEW ── */
+.vod-room { padding: 14px 24px 18px; gap: 12px; }
+.vod-room-topbar { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; flex-shrink: 0; }
+.vod-room-title { font-size: 15px; font-weight: 700; color: var(--ink); flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.vod-room-status { flex-shrink: 0; }
+.vod-presence {
+  display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--ink-dim);
+  padding: 5px 10px; border-radius: 999px; background: var(--surface-2); border: 1px solid var(--line);
+}
+.vod-presence::before { content: '●'; color: var(--healer); font-size: 9px; }
+
+.vod-room-layout { flex: 1; display: grid; grid-template-columns: 1fr 300px; gap: 16px; min-height: 0; overflow: hidden; }
+.vod-player-col { display: flex; flex-direction: column; gap: 10px; min-height: 0; }
+
+.vod-player-wrap {
+  position: relative; width: 100%; aspect-ratio: 16 / 9; background: #000;
+  border-radius: 12px; overflow: hidden; border: 1px solid var(--line); flex-shrink: 0;
+}
+#vod-yt-player, #vod-yt-player iframe { position: absolute; inset: 0; width: 100%; height: 100%; }
+#vod-draw-canvas { position: absolute; inset: 0; width: 100%; height: 100%; touch-action: none; cursor: crosshair; }
+.vod-draw-hint {
+  position: absolute; left: 10px; bottom: 10px; right: 10px; pointer-events: none;
+  font-size: 11px; color: rgba(255,255,255,0.75); background: rgba(0,0,0,0.45);
+  padding: 6px 9px; border-radius: 7px; opacity: 1; transition: opacity 0.3s;
+}
+.vod-draw-hint.hide { opacity: 0; }
+
+.vod-toolbar {
+  display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+  background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 10px 14px; flex-shrink: 0;
+}
+.vod-color-swatches { display: flex; align-items: center; gap: 6px; }
+.vod-color-swatch {
+  width: 22px; height: 22px; border-radius: 50%; border: 2px solid transparent; cursor: pointer;
+  padding: 0; box-shadow: 0 0 0 1px var(--line-2) inset;
+}
+.vod-color-swatch.active { border-color: var(--ink); transform: scale(1.12); }
+.vod-toolbar-field { display: flex; align-items: center; gap: 8px; font-size: 11.5px; color: var(--ink-faint); font-weight: 600; text-transform: uppercase; letter-spacing: 0.03em; }
+.vod-toolbar-field input[type="range"] { accent-color: var(--accent); width: 90px; }
+.vod-toolbar-value { color: var(--ink-dim); font-weight: 600; text-transform: none; letter-spacing: 0; min-width: 34px; }
+
+.vod-timeline { flex-shrink: 0; display: flex; flex-direction: column; gap: 4px; }
+.vod-timeline-track {
+  position: relative; height: 14px; border-radius: 999px; background: var(--surface-3);
+  cursor: pointer; overflow: visible;
+}
+.vod-timeline-fill { position: absolute; top: 0; bottom: 0; left: 0; width: 0; border-radius: 999px; background: var(--accent-dim); pointer-events: none; }
+.vod-timeline-marks { position: absolute; inset: 0; pointer-events: none; }
+.vod-timeline-mark {
+  position: absolute; top: 50%; width: 6px; height: 6px; border-radius: 50%;
+  transform: translate(-50%, -50%); box-shadow: 0 0 0 2px var(--surface);
+}
+.vod-timeline-mark.mark-comment { background: var(--tank); }
+.vod-timeline-mark.mark-drawing { background: var(--dps); }
+.vod-timeline-scrubber {
+  position: absolute; top: 50%; width: 14px; height: 14px; border-radius: 50%;
+  background: var(--accent); transform: translate(-50%, -50%); box-shadow: 0 0 0 3px var(--accent-dim);
+}
+.vod-timeline-times { display: flex; justify-content: space-between; font-size: 11px; color: var(--ink-faint); font-variant-numeric: tabular-nums; }
+
+/* ── SIDE PANEL: comments ── */
+.vod-side-col {
+  display: flex; flex-direction: column; min-height: 0;
+  background: var(--surface); border: 1px solid var(--line); border-radius: 12px; overflow: hidden;
+}
+.vod-side-head {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 12px 14px; border-bottom: 1px solid var(--line);
+  font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--ink-faint);
+}
+.vod-side-count { text-transform: none; letter-spacing: 0; font-weight: 600; color: var(--ink-dim); }
+
+.vod-comment-list { flex: 1; overflow-y: auto; padding: 10px 12px; display: flex; flex-direction: column; gap: 10px; }
+.vod-comment-empty { color: var(--ink-faint); font-size: 12.5px; text-align: center; padding: 24px 8px; }
+
+.vod-comment-item { display: flex; flex-direction: column; gap: 3px; padding: 8px 10px; border-radius: 9px; transition: background 0.15s; }
+.vod-comment-item:hover { background: var(--surface-2); }
+.vod-comment-item.is-active { background: var(--accent-dim); }
+.vod-comment-item-head { display: flex; align-items: baseline; gap: 7px; }
+.vod-comment-author { font-size: 12.5px; font-weight: 700; color: var(--ink); }
+.vod-comment-ts { font-size: 11px; color: var(--accent); font-weight: 600; cursor: pointer; font-variant-numeric: tabular-nums; }
+.vod-comment-text { font-size: 12.5px; color: var(--ink-dim); line-height: 1.5; white-space: pre-wrap; word-break: break-word; }
+
+.vod-comment-composer { border-top: 1px solid var(--line); padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; flex-shrink: 0; }
+.vod-comment-ts-badge {
+  align-self: flex-start; font-size: 11px; font-weight: 700; color: var(--accent);
+  background: var(--accent-dim); padding: 3px 9px; border-radius: 999px; font-variant-numeric: tabular-nums;
+}
+.vod-comment-composer textarea {
+  width: 100%; resize: vertical; min-height: 54px;
+  background: var(--surface-2); border: 1px solid var(--line-2); border-radius: 8px; color: var(--ink);
+  font: inherit; font-size: 13px; padding: 9px 11px;
+}
+.vod-comment-composer textarea:focus { outline: none; border-color: var(--accent); }
+.vod-comment-composer-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.vod-pause-toggle { display: flex; align-items: center; gap: 6px; font-size: 11.5px; color: var(--ink-faint); cursor: pointer; }
+.vod-pause-toggle input { accent-color: var(--accent); }
+#vod-comment-send-btn { padding: 8px 16px; font-size: 12.5px; }
+
+.vod-officer-bar {
+  flex-shrink: 0; display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 10px 14px; border-radius: 10px; background: var(--surface-2); border: 1px solid var(--line);
+  font-size: 12px; color: var(--ink-dim);
+}
+.vod-danger-btn:hover { color: #e0685a; border-color: #e0685a; }
+/* Higher specificity than .officer-only.visible on purpose — once a review
+   ends there's no "End review" button to show even to an officer/admin. */
+#vod-officer-bar.vod-ended { display: none !important; }
+
+@media (max-width: 980px) {
+  .vod-room-layout { grid-template-columns: 1fr; overflow-y: auto; }
+  .vod-side-col { min-height: 260px; }
+}
+
+/* ── SHARED MODAL (self-contained — this page doesn't load events.css) ── */
+.modal-overlay {
+  position: fixed; inset: 0; background: rgba(10,8,16,0.65); backdrop-filter: blur(2px);
+  display: flex; align-items: flex-start; justify-content: center; padding: 40px 16px; overflow-y: auto; z-index: 100;
+}
+.modal-card {
+  background: var(--surface); border: 1px solid var(--line-2); border-radius: 14px; padding: 22px;
+  width: 100%; max-width: 480px; display: flex; flex-direction: column; gap: 14px;
+  box-shadow: 0 16px 48px rgba(0,0,0,0.45);
+}
+.modal-card h2 { font-size: 17px; margin: 0; color: var(--ink); }
+.modal-field { display: flex; flex-direction: column; gap: 5px; }
+.modal-field label { font-size: 11.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em; color: var(--ink-faint); }
+.modal-hint-inline { text-transform: none; font-weight: 500; color: var(--ink-faint); letter-spacing: 0; }
+.modal-field input {
+  background: var(--surface-2); border: 1px solid var(--line-2); border-radius: 8px; color: var(--ink);
+  font: inherit; font-size: 13px; padding: 9px 11px;
+}
+.modal-field input:focus { outline: none; border-color: var(--accent); }
+.modal-hint { font-size: 11.5px; color: var(--ink-faint); line-height: 1.5; }
+.modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 4px; }

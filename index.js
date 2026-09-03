@@ -2,6 +2,7 @@ require('./deploy-commands.js');
 require('dns').setDefaultResultOrder('ipv4first');
 require('./deploy-commands.js');
 const path = require('path');
+const http = require('http');
 const express = require('express');
 const app = express();
 // Website (index.html / builds.html / comps.html + assets) lives in /public
@@ -9,7 +10,13 @@ const app = express();
 app.use(express.static(path.join(__dirname, 'public')));
 // Auth + builds/comps/home REST API used by the site (see api.js).
 app.use(require('./api.js'));
-app.listen(process.env.PORT || 3000, () => console.log('Web server running'));
+// Wrapped in a plain http.Server (instead of app.listen's implicit one) so
+// the VOD Review tool's websocket rooms (see vod-ws.js) can hang an
+// 'upgrade' handler off the SAME port — no second Render service, no extra
+// env vars, just one more thing this one process serves.
+const server = http.createServer(app);
+require('./vod-ws').attach(server);
+server.listen(process.env.PORT || 3000, () => console.log('Web server running'));
 
 // Albion Event Bot - index.js
 // Posts sign-up forms for guild activities (CTA, Group Dungeon, Tracking, Ava

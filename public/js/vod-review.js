@@ -1,0 +1,701 @@
+/* ─────────────────────────────────────────
+   VOD REVIEW (beta) — queue list + live room
+   Server side: vod-store.js (data) + vod-ws.js
+   (websocket) + the /api/vod/* routes in api.js.
+
+   Two views living in one page (same pattern as
+   events.js's list/detail split), switched by a
+   `?review=<id>` query param:
+     - list view  : the request queue
+     - room view  : the actual review — video,
+       drawing canvas, timeline, comments
+
+   Anyone logged in can request a review, draw,
+   and comment. Only officers/admins can start,
+   control playback of, or end one — enforced
+   server-side; this file just hides/disables the
+   controls that would 403 anyway.
+───────────────────────────────────────── */
+
+const VOD_COLORS = ['#ff5c3f', '#f0c419', '#6bab7a', '#5d8fc9', '#9b72c4', '#ffffff'];
+const DRAW_TICK_MS = 150;      // how often we repaint the canvas / advance the timeline
+const RESYNC_INTERVAL_MS = 4000; // host -> everyone periodic time nudge, covers drift from scrubbing without pausing
+const CONTROL_APPLY_GUARD_MS = 400; // ignore our own player events for a moment after we programmatically move it
+
+let ws = null;
+let lobbyWs = null;
+let lobbyPollTimer = null;
+
+function escapeHtml(s) {
+  return String(s || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+async function api(path, opts) {
+  const res = await fetch(path, {
+    credentials: 'same-origin',
+    headers: { 'Content-Type': 'application/json' },
+    ...opts,
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.error || `Request failed (${res.status})`);
+  }
+  return res.status === 204 ? null : res.json();
+}
+
+function showToast(message) {
+  const toast = document.getElementById('toast');
+  if (!toast) { alert(message); return; }
+  toast.innerHTML = escapeHtml(message);
+  toast.classList.add('show');
+  clearTimeout(showToast._t);
+  showToast._t = setTimeout(() => toast.classList.remove('show'), 3200);
+}
+
+function formatTime(totalSeconds) {
+  const s = Math.max(0, Math.floor(Number(totalSeconds) || 0));
+  const m = Math.floor(s / 60);
+  const r = s % 60;
+  return `${m}:${String(r).padStart(2, '0')}`;
+}
+
+function wsUrl(path) {
+  const scheme = location.protocol === 'https:' ? 'wss://' : 'ws://';
+  return `${scheme}${location.host}${path}`;
+}
+
+function getReviewIdFromUrl() {
+  return new URLSearchParams(location.search).get('review');
+}
+
+/* ---------- boot ---------- */
+document.addEventListener('DOMContentLoaded', () => {
+  window.SITE_AUTH_READY.then(init);
+});
+
+function init() {
+  const loading = document.getElementById('vod-loading-view');
+  if (!isLoggedIn()) {
+    if (loading) loading.style.display = 'none';
+    document.getElementById('gate-message').style.display = '';
+    return;
+  }
+  loading.style.display = 'none';
+
+  wireRequestModal();
+
+  const reviewId = getReviewIdFromUrl();
+  if (reviewId) {
+    document.getElementById('vod-room-view').style.display = '';
+    initRoom(reviewId);
+  } else {
+    document.getElementById('vod-list-view').style.display = '';
+    initList();
+  }
+}
+
+/* ==========================================================
+   LIST VIEW
+========================================================== */
+
+async function initList() {
+  connectLobby();
+  await refreshList();
+}
+
+async function refreshList() {
+  let requests;
+  try {
+    requests = await api('/api/vod/requests');
+  } catch (err) {
+    showToast(err.message);
+    return;
+  }
+  renderQueue(requests);
+}
+
+function renderQueue(requests) {
+  const wrap = document.getElementById('vod-queue');
+  const empty = document.getElementById('vod-empty');
+  wrap.innerHTML = '';
+  if (requests.length === 0) {
+    empty.style.display = '';
+    return;
+  }
+  empty.style.display = 'none';
+
+  for (const r of requests) {
+    const card = document.createElement('div');
+    card.className = `vod-request-card${r.status === 'reviewing' ? ' is-live' : ''}`;
+
+    const statusLabel = { pending: 'Pending', reviewing: 'Live', done: 'Reviewed' }[r.status] || r.status;
+    const metaBits = [];
+    if (r.status === 'pending') metaBits.push(`Requested by ${escapeHtml(r.requestedByUsername)}`);
+    else if (r.status === 'reviewing') metaBits.push(`Reviewing with ${escapeHtml(r.startedByUsername)}`);
+    else metaBits.push(`Reviewed by ${escapeHtml(r.startedByUsername || '—')}`);
+
+    let actions = '';
+    if (r.status === 'pending') {
+      if (isOfficerOrAdmin()) {
+        actions += `<button class="btn" data-action="start" data-id="${r.id}">Start review</button>`;
+        actions += `<button class="btn vod-danger-btn" data-action="cancel" data-id="${r.id}">Cancel</button>`;
+      } else {
+        actions += `<span class="vod-request-meta">Waiting for an officer to start it</span>`;
+      }
+    } else if (r.status === 'reviewing') {
+      actions += `<button class="cta-primary" data-action="join" data-id="${r.id}">Join live</button>`;
+    } else {
+      actions += `<button class="btn" data-action="join" data-id="${r.id}">View replay</button>`;
+    }
+
+    card.innerHTML = `
+      <div class="vod-request-thumb"><img src="https://i.ytimg.com/vi/${escapeHtml(r.videoId)}/mqdefault.jpg" alt="" loading="lazy"></div>
+      <div class="vod-request-main">
+        <div class="vod-request-title">${escapeHtml(r.title || 'Untitled VOD')}</div>
+        <div class="vod-request-meta">
+          <span class="vod-status-pill ${r.status}">${statusLabel}</span>
+          <span>${metaBits.join(' · ')}</span>
+        </div>
+      </div>
+      <div class="vod-request-actions">${actions}</div>
+    `;
+    wrap.appendChild(card);
+  }
+
+  wrap.querySelectorAll('button[data-action]').forEach((btn) => {
+    btn.addEventListener('click', () => handleQueueAction(btn.dataset.action, btn.dataset.id));
+  });
+}
+
+async function handleQueueAction(action, id) {
+  if (action === 'join') {
+    location.href = `vod-review.html?review=${encodeURIComponent(id)}`;
+    return;
+  }
+  if (action === 'start') {
+    try {
+      await api(`/api/vod/requests/${id}/start`, { method: 'POST' });
+      location.href = `vod-review.html?review=${encodeURIComponent(id)}`;
+    } catch (err) {
+      showToast(err.message);
+    }
+    return;
+  }
+  if (action === 'cancel') {
+    if (!confirm('Cancel this VOD request?')) return;
+    try {
+      await api(`/api/vod/requests/${id}`, { method: 'DELETE' });
+      showToast('Request cancelled.');
+      refreshList();
+    } catch (err) {
+      showToast(err.message);
+    }
+  }
+}
+
+function connectLobby() {
+  try {
+    lobbyWs = new WebSocket(wsUrl('/ws/vod-lobby'));
+    lobbyWs.addEventListener('message', (evt) => {
+      const msg = JSON.parse(evt.data);
+      if (msg.type === 'requests-changed') refreshList();
+    });
+    lobbyWs.addEventListener('close', startLobbyFallbackPolling);
+    lobbyWs.addEventListener('error', startLobbyFallbackPolling);
+  } catch {
+    startLobbyFallbackPolling();
+  }
+}
+
+// If websockets can't connect at all (locked-down network, proxy that
+// strips Upgrade headers, etc), the list still works — it just refreshes
+// on a timer instead of instantly.
+function startLobbyFallbackPolling() {
+  if (lobbyPollTimer) return;
+  lobbyPollTimer = setInterval(refreshList, 15000);
+}
+
+function wireRequestModal() {
+  const overlay = document.getElementById('vod-request-overlay');
+  const openBtn = document.getElementById('new-request-btn');
+  const cancelBtn = document.getElementById('vod-request-cancel-btn');
+  const submitBtn = document.getElementById('vod-request-submit-btn');
+  const urlInput = document.getElementById('vod-request-url');
+  const titleInput = document.getElementById('vod-request-title');
+  if (!openBtn) return; // room view doesn't have this modal's trigger visible, but overlay markup is shared
+
+  const close = () => { overlay.style.display = 'none'; urlInput.value = ''; titleInput.value = ''; };
+  openBtn.addEventListener('click', () => { overlay.style.display = ''; urlInput.focus(); });
+  cancelBtn.addEventListener('click', close);
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
+
+  submitBtn.addEventListener('click', async () => {
+    const youtubeUrl = urlInput.value.trim();
+    const title = titleInput.value.trim();
+    if (!youtubeUrl) { showToast('Paste a YouTube link first.'); return; }
+    submitBtn.disabled = true;
+    try {
+      await api('/api/vod/requests', { method: 'POST', body: JSON.stringify({ youtubeUrl, title }) });
+      showToast('VOD request submitted.');
+      close();
+      refreshList();
+    } catch (err) {
+      showToast(err.message);
+    } finally {
+      submitBtn.disabled = false;
+    }
+  });
+}
+
+/* ==========================================================
+   ROOM VIEW
+========================================================== */
+
+const room = {
+  id: null,
+  status: null,          // 'pending' | 'reviewing' | 'done'
+  videoId: null,
+  canControl: false,
+  drawings: [],
+  comments: [],
+  player: null,
+  duration: 0,
+  applyingRemoteControl: false,
+  autoPausedForComment: false,
+  activeStroke: null,    // { points: [[x,y],...] } while pointer is down
+  color: VOD_COLORS[0],
+};
+
+async function initRoom(id) {
+  room.id = id;
+  document.getElementById('vod-back-btn').addEventListener('click', () => { location.href = 'vod-review.html'; });
+
+  let data;
+  try {
+    data = await api(`/api/vod/requests/${id}`);
+  } catch (err) {
+    showToast(err.message);
+    location.href = 'vod-review.html';
+    return;
+  }
+
+  room.status = data.status;
+  room.videoId = data.videoId;
+  room.drawings = data.drawings || [];
+  room.comments = data.comments || [];
+
+  document.getElementById('vod-room-title').textContent = data.title || 'Untitled VOD';
+  setRoomStatusBadge(data.status);
+
+  if (data.status === 'pending') {
+    showToast('This review hasn\u2019t started yet.');
+    location.href = 'vod-review.html';
+    return;
+  }
+
+  wireToolbar();
+  wireTimeline();
+  wireCommentComposer();
+  loadYouTubeApi(() => createPlayer(data.videoId));
+
+  if (data.status === 'reviewing') {
+    connectRoomSocket(id);
+  } else {
+    // finished review: read-only replay, no websocket needed
+    room.canControl = false;
+    setComposerEnabled(false);
+    document.getElementById('vod-draw-hint').textContent = 'This review has ended — you can still scrub through and read what was flagged.';
+    renderCommentList();
+  }
+}
+
+function setRoomStatusBadge(status) {
+  const el = document.getElementById('vod-room-status');
+  const label = { reviewing: 'Live', done: 'Ended', pending: 'Pending' }[status] || status;
+  el.innerHTML = `<span class="vod-status-pill ${status}">${label}</span>`;
+}
+
+function loadYouTubeApi(onReady) {
+  if (window.YT && window.YT.Player) { onReady(); return; }
+  const prev = window.onYouTubeIframeAPIReady;
+  window.onYouTubeIframeAPIReady = () => { if (prev) prev(); onReady(); };
+  if (!document.getElementById('vod-yt-api-script')) {
+    const tag = document.createElement('script');
+    tag.id = 'vod-yt-api-script';
+    tag.src = 'https://www.youtube.com/iframe_api';
+    document.head.appendChild(tag);
+  }
+}
+
+function createPlayer(videoId) {
+  room.player = new YT.Player('vod-yt-player', {
+    videoId,
+    playerVars: { rel: 0, modestbranding: 1, playsinline: 1 },
+    events: {
+      onReady: () => {
+        room.duration = room.player.getDuration() || 0;
+        document.getElementById('vod-time-duration').textContent = formatTime(room.duration);
+        renderTimelineMarks();
+        startTicking();
+      },
+      onStateChange: onPlayerStateChange,
+    },
+  });
+}
+
+function onPlayerStateChange(evt) {
+  if (!room.canControl || room.status !== 'reviewing') return;
+  if (room.applyingRemoteControl) return; // this state change is US applying someone else's command — don't echo it back
+
+  if (evt.data === YT.PlayerState.PLAYING) {
+    sendWs({ type: 'control', action: 'play', time: room.player.getCurrentTime() });
+  } else if (evt.data === YT.PlayerState.PAUSED) {
+    sendWs({ type: 'control', action: 'pause', time: room.player.getCurrentTime() });
+  }
+}
+
+function applyRemoteControl({ action, time, playing }) {
+  if (!room.player || typeof room.player.seekTo !== 'function') return;
+  room.applyingRemoteControl = true;
+  const current = room.player.getCurrentTime ? room.player.getCurrentTime() : 0;
+  if (action === 'seek' || Math.abs(current - time) > 1) {
+    room.player.seekTo(time, true);
+  }
+  if (playing) room.player.playVideo(); else room.player.pauseVideo();
+  setTimeout(() => { room.applyingRemoteControl = false; }, CONTROL_APPLY_GUARD_MS);
+}
+
+// Host-side periodic nudge so followers stay aligned even through a scrub
+// that doesn't cross a play/pause boundary (YouTube's API has no discrete
+// "seek" event to hook, so play/pause + this heartbeat covers it).
+setInterval(() => {
+  if (!room.canControl || room.status !== 'reviewing' || !room.player) return;
+  if (typeof room.player.getPlayerState !== 'function') return;
+  if (room.player.getPlayerState() !== YT.PlayerState.PLAYING) return;
+  sendWs({ type: 'control', action: 'seek', time: room.player.getCurrentTime() });
+}, RESYNC_INTERVAL_MS);
+
+/* ---------- websocket (live rooms only) ---------- */
+
+function connectRoomSocket(id) {
+  ws = new WebSocket(wsUrl(`/ws/vod/${encodeURIComponent(id)}`));
+  ws.addEventListener('message', (evt) => handleRoomMessage(JSON.parse(evt.data)));
+  ws.addEventListener('close', () => {
+    if (room.status === 'reviewing') showToast('Lost the live connection — reload to rejoin.');
+  });
+  ws.addEventListener('error', () => {});
+}
+
+function sendWs(payload) {
+  if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(payload));
+}
+
+function handleRoomMessage(msg) {
+  switch (msg.type) {
+    case 'sync': {
+      room.drawings = msg.drawings || [];
+      room.comments = msg.comments || [];
+      room.canControl = !!(msg.you && msg.you.canControl);
+      renderCommentList();
+      renderTimelineMarks();
+      setComposerEnabled(true);
+      document.getElementById('vod-presence').textContent = `${msg.count} watching`;
+      // #vod-officer-bar's visibility is handled by the same .officer-only
+      // class/CSS every other officer-gated control on the site uses (see
+      // auth.js's renderAuthControl) — canControl here is just the same
+      // role check, so there's nothing extra to toggle.
+      if (msg.playback && (msg.playback.playing || msg.playback.time > 0)) {
+        applyRemoteControl({ action: 'seek', time: msg.playback.time, playing: msg.playback.playing });
+      }
+      break;
+    }
+    case 'presence':
+      document.getElementById('vod-presence').textContent = `${msg.count} watching`;
+      break;
+    case 'draw':
+      room.drawings.push(msg.drawing);
+      renderTimelineMarks();
+      break;
+    case 'comment':
+      room.comments.push(msg.comment);
+      renderCommentList();
+      renderTimelineMarks();
+      break;
+    case 'control':
+      applyRemoteControl(msg);
+      break;
+    case 'ended':
+      room.status = 'done';
+      room.canControl = false;
+      setRoomStatusBadge('done');
+      setComposerEnabled(false);
+      document.getElementById('vod-officer-bar').classList.add('vod-ended');
+      document.getElementById('vod-draw-hint').textContent = 'This review just ended — you can still scrub through and read what was flagged.';
+      showToast('This review has ended.');
+      if (ws) { ws.close(); ws = null; }
+      break;
+    case 'error':
+      showToast(msg.message);
+      break;
+  }
+}
+
+/* ---------- ticking: timeline, active-drawing overlay, active comment ---------- */
+
+function startTicking() {
+  setInterval(() => {
+    if (!room.player || typeof room.player.getCurrentTime !== 'function') return;
+    const t = room.player.getCurrentTime();
+    document.getElementById('vod-time-current').textContent = formatTime(t);
+    document.getElementById('vod-comment-ts-badge').textContent = formatTime(t);
+    if (room.duration > 0) {
+      const pct = Math.min(100, (t / room.duration) * 100);
+      document.getElementById('vod-timeline-fill').style.width = `${pct}%`;
+      document.getElementById('vod-timeline-scrubber').style.left = `${pct}%`;
+    }
+    redrawCanvas(t);
+    highlightActiveComment(t);
+  }, DRAW_TICK_MS);
+}
+
+function highlightActiveComment(t) {
+  document.querySelectorAll('.vod-comment-item').forEach((el) => {
+    const ts = Number(el.dataset.ts);
+    el.classList.toggle('is-active', Math.abs(ts - t) < 1.5);
+  });
+}
+
+/* ---------- drawing canvas ---------- */
+
+function wireToolbar() {
+  const swatchWrap = document.getElementById('vod-color-swatches');
+  VOD_COLORS.forEach((color, i) => {
+    const btn = document.createElement('button');
+    btn.className = `vod-color-swatch${i === 0 ? ' active' : ''}`;
+    btn.style.background = color;
+    btn.addEventListener('click', () => {
+      room.color = color;
+      swatchWrap.querySelectorAll('.vod-color-swatch').forEach((el) => el.classList.remove('active'));
+      btn.classList.add('active');
+    });
+    swatchWrap.appendChild(btn);
+  });
+
+  const widthRange = document.getElementById('vod-width-range');
+  const holdRange = document.getElementById('vod-hold-range');
+  const holdValue = document.getElementById('vod-hold-value');
+  holdRange.addEventListener('input', () => { holdValue.textContent = `${Number(holdRange.value).toFixed(1)}s`; });
+
+  document.getElementById('vod-clear-local-btn').addEventListener('click', () => {
+    const canvas = document.getElementById('vod-draw-canvas');
+    canvas.getContext('2d').clearRect(0, 0, canvas.width, canvas.height);
+  });
+
+  const canvas = document.getElementById('vod-draw-canvas');
+  const wrap = document.getElementById('vod-player-wrap');
+  const hint = document.getElementById('vod-draw-hint');
+
+  function resizeCanvas() {
+    const rect = wrap.getBoundingClientRect();
+    canvas.width = rect.width;
+    canvas.height = rect.height;
+  }
+  resizeCanvas();
+  window.addEventListener('resize', resizeCanvas);
+
+  canvas.addEventListener('pointerdown', (e) => {
+    if (!canDraw()) return;
+    hint.classList.add('hide');
+    const p = pointFromEvent(e, canvas);
+    room.activeStroke = { points: [p] };
+    canvas.setPointerCapture(e.pointerId);
+  });
+  canvas.addEventListener('pointermove', (e) => {
+    if (!room.activeStroke) return;
+    room.activeStroke.points.push(pointFromEvent(e, canvas));
+  });
+  canvas.addEventListener('pointerup', () => finishStroke(Number(widthRange.value), Number(holdRange.value)));
+  canvas.addEventListener('pointercancel', () => { room.activeStroke = null; });
+}
+
+function canDraw() {
+  return room.status === 'reviewing' && (ws && ws.readyState === WebSocket.OPEN);
+}
+
+function pointFromEvent(e, canvas) {
+  const rect = canvas.getBoundingClientRect();
+  return [
+    Math.min(1, Math.max(0, (e.clientX - rect.left) / rect.width)),
+    Math.min(1, Math.max(0, (e.clientY - rect.top) / rect.height)),
+  ];
+}
+
+function finishStroke(width, hold) {
+  if (!room.activeStroke || room.activeStroke.points.length < 2) { room.activeStroke = null; return; }
+  const points = room.activeStroke.points;
+  room.activeStroke = null;
+  const timestamp = room.player && room.player.getCurrentTime ? room.player.getCurrentTime() : 0;
+  sendWs({ type: 'draw', timestamp, color: room.color, width, hold, points });
+}
+
+function strokePath(ctx, canvas, points, color, width) {
+  if (points.length < 2) return;
+  ctx.strokeStyle = color;
+  ctx.lineWidth = width;
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  ctx.beginPath();
+  ctx.moveTo(points[0][0] * canvas.width, points[0][1] * canvas.height);
+  for (let i = 1; i < points.length; i++) ctx.lineTo(points[i][0] * canvas.width, points[i][1] * canvas.height);
+  ctx.stroke();
+}
+
+function redrawCanvas(currentTime) {
+  const canvas = document.getElementById('vod-draw-canvas');
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  for (const d of room.drawings) {
+    const elapsed = currentTime - d.timestamp;
+    if (elapsed < 0 || elapsed > d.hold) continue;
+    // fade out over the last 25% of the hold window instead of popping off abruptly
+    const fadeStart = d.hold * 0.75;
+    const opacity = elapsed > fadeStart ? Math.max(0, 1 - (elapsed - fadeStart) / (d.hold - fadeStart)) : 1;
+    ctx.globalAlpha = opacity;
+    strokePath(ctx, canvas, d.points, d.color, d.width);
+  }
+  ctx.globalAlpha = 1;
+
+  if (room.activeStroke) strokePath(ctx, canvas, room.activeStroke.points, room.color, Number(document.getElementById('vod-width-range').value));
+}
+
+/* ---------- timeline ---------- */
+
+function wireTimeline() {
+  const track = document.getElementById('vod-timeline-track');
+  track.addEventListener('click', (e) => {
+    if (room.duration <= 0) return;
+    const rect = track.getBoundingClientRect();
+    const pct = Math.min(1, Math.max(0, (e.clientX - rect.left) / rect.width));
+    const time = pct * room.duration;
+    if (room.status === 'done') {
+      room.player.seekTo(time, true);
+    } else if (room.canControl) {
+      room.player.seekTo(time, true);
+      sendWs({ type: 'control', action: 'seek', time, playing: room.player.getPlayerState() === YT.PlayerState.PLAYING });
+    }
+  });
+}
+
+function renderTimelineMarks() {
+  const wrap = document.getElementById('vod-timeline-marks');
+  if (room.duration <= 0) return;
+  wrap.innerHTML = '';
+  for (const c of room.comments) {
+    const pct = Math.min(100, (c.timestamp / room.duration) * 100);
+    const el = document.createElement('div');
+    el.className = 'vod-timeline-mark mark-comment';
+    el.style.left = `${pct}%`;
+    el.title = `Comment at ${formatTime(c.timestamp)}`;
+    wrap.appendChild(el);
+  }
+  for (const d of room.drawings) {
+    const pct = Math.min(100, (d.timestamp / room.duration) * 100);
+    const el = document.createElement('div');
+    el.className = 'vod-timeline-mark mark-drawing';
+    el.style.left = `${pct}%`;
+    el.title = `Drawing at ${formatTime(d.timestamp)}`;
+    wrap.appendChild(el);
+  }
+}
+
+/* ---------- comments ---------- */
+
+function wireCommentComposer() {
+  const input = document.getElementById('vod-comment-input');
+  const pauseToggle = document.getElementById('vod-pause-on-comment');
+  const sendBtn = document.getElementById('vod-comment-send-btn');
+
+  input.addEventListener('focus', () => {
+    if (!pauseToggle.checked || !room.player || typeof room.player.getPlayerState !== 'function') return;
+    if (room.player.getPlayerState() === YT.PlayerState.PLAYING) {
+      room.player.pauseVideo();
+      room.autoPausedForComment = true;
+    }
+  });
+
+  function resumeIfAutoPaused() {
+    if (room.autoPausedForComment && room.player) {
+      room.player.playVideo();
+      room.autoPausedForComment = false;
+    }
+  }
+  input.addEventListener('blur', () => { if (!input.value.trim()) resumeIfAutoPaused(); });
+
+  sendBtn.addEventListener('click', () => {
+    const text = input.value.trim();
+    if (!text) return;
+    if (!canDraw()) { showToast('Comments need a live connection.'); return; }
+    const timestamp = room.player && room.player.getCurrentTime ? room.player.getCurrentTime() : 0;
+    sendWs({ type: 'comment', timestamp, text });
+    input.value = '';
+    resumeIfAutoPaused();
+  });
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendBtn.click(); }
+  });
+
+  document.getElementById('vod-end-review-btn').addEventListener('click', async () => {
+    if (!confirm('End this review for everyone?')) return;
+    try {
+      await api(`/api/vod/requests/${room.id}/end`, { method: 'POST' });
+    } catch (err) {
+      showToast(err.message);
+    }
+  });
+}
+
+function setComposerEnabled(enabled) {
+  document.getElementById('vod-comment-input').disabled = !enabled;
+  document.getElementById('vod-comment-send-btn').disabled = !enabled;
+  const canvas = document.getElementById('vod-draw-canvas');
+  canvas.style.pointerEvents = enabled && room.status === 'reviewing' ? 'auto' : 'none';
+  document.getElementById('vod-toolbar').style.opacity = enabled && room.status === 'reviewing' ? '1' : '0.5';
+}
+
+function renderCommentList() {
+  const list = document.getElementById('vod-comment-list');
+  const empty = document.getElementById('vod-comment-empty');
+  const sorted = [...room.comments].sort((a, b) => a.timestamp - b.timestamp);
+  document.getElementById('vod-comment-count').textContent = `${sorted.length} comment${sorted.length === 1 ? '' : 's'}`;
+
+  if (sorted.length === 0) {
+    list.innerHTML = '';
+    list.appendChild(empty);
+    empty.style.display = '';
+    return;
+  }
+  empty.style.display = 'none';
+  list.innerHTML = sorted.map((c) => `
+    <div class="vod-comment-item" data-ts="${c.timestamp}">
+      <div class="vod-comment-item-head">
+        <span class="vod-comment-author">${escapeHtml(c.authorUsername)}</span>
+        <span class="vod-comment-ts" data-seek="${c.timestamp}">${formatTime(c.timestamp)}</span>
+      </div>
+      <div class="vod-comment-text">${escapeHtml(c.text)}</div>
+    </div>
+  `).join('');
+
+  list.querySelectorAll('.vod-comment-ts').forEach((el) => {
+    el.addEventListener('click', () => {
+      const time = Number(el.dataset.seek);
+      if (!room.player) return;
+      if (room.status === 'done') {
+        room.player.seekTo(time, true);
+      } else if (room.canControl) {
+        room.player.seekTo(time, true);
+        sendWs({ type: 'control', action: 'seek', time, playing: room.player.getPlayerState() === YT.PlayerState.PLAYING });
+      }
+    });
+  });
+}

@@ -23,6 +23,8 @@ const rosterStore = require('./roster-store');
 const weaponEmojiStore = require('./weapon-emoji-store');
 const weaponAliasStore = require('./weapon-alias-store');
 const themeStore = require('./theme-store');
+const vodStore = require('./vod-store');
+const vodWs = require('./vod-ws');
 
 const router = express.Router();
 router.use(cookieParser());
@@ -1834,6 +1836,109 @@ router.post('/api/events/:id/leave', auth.requireMember, async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Failed to leave event.' });
+  }
+});
+
+// ── VOD REVIEW (beta) ──────────────────────────────────────────────────
+// Any logged-in member can submit a request or take part once a review is
+// live (drawing/commenting); only officers/admins can start, end, or
+// cancel one. Currently only linked from the officer/admin profile
+// dropdown (see public/js/auth.js) while it's being tried out — see the
+// note at the top of vod-store.js.
+//
+// The live part (playback sync, drawings, comments appearing in real
+// time for everyone watching) all happens over the websocket in vod-ws.js,
+// not here — these routes only cover the request queue and lifecycle, plus
+// a plain snapshot fetch for a request that isn't currently live (so a
+// finished review can still be scrubbed back through afterwards).
+
+router.get('/api/vod/requests', auth.requireMember, async (req, res) => {
+  try {
+    res.json(await vodStore.listRequests());
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to load VOD requests.' });
+  }
+});
+
+router.post('/api/vod/requests', auth.requireMember, async (req, res) => {
+  try {
+    const { youtubeUrl, title } = req.body || {};
+    const { request, error } = await vodStore.createRequest({
+      youtubeUrl,
+      title,
+      userId: req.user.id,
+      username: req.user.username,
+    });
+    if (error === 'invalid_youtube_url') {
+      return res.status(400).json({ error: 'That doesn\u2019t look like a valid YouTube link.' });
+    }
+    activityStore.log(req.user, 'vod.request.create', `Requested a VOD review${request.title ? `: "${request.title}"` : ''}`);
+    vodWs.broadcastLobbyChanged();
+    res.json(request);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to submit that VOD request.' });
+  }
+});
+
+router.get('/api/vod/requests/:id', auth.requireMember, async (req, res) => {
+  try {
+    const request = await vodStore.getRequest(req.params.id);
+    if (!request) return res.status(404).json({ error: 'VOD request not found.' });
+    const reviewData = await vodStore.getReviewData(req.params.id);
+    res.json({ ...request, ...reviewData });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to load that VOD request.' });
+  }
+});
+
+router.post('/api/vod/requests/:id/start', auth.requireOfficer, async (req, res) => {
+  try {
+    const { request, error } = await vodStore.startReview(req.params.id, {
+      userId: req.user.id,
+      username: req.user.username,
+    });
+    if (error === 'not_found') return res.status(404).json({ error: 'VOD request not found.' });
+    if (error === 'not_pending') return res.status(409).json({ error: 'That review has already been started or finished.' });
+    activityStore.log(req.user, 'vod.review.start', `Started reviewing "${request.title || request.youtubeUrl}"`);
+    vodWs.broadcastLobbyChanged();
+    res.json(request);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to start that review.' });
+  }
+});
+
+router.post('/api/vod/requests/:id/end', auth.requireOfficer, async (req, res) => {
+  try {
+    const { request, error } = await vodStore.endReview(req.params.id);
+    if (error === 'not_found') return res.status(404).json({ error: 'VOD request not found.' });
+    if (error === 'not_reviewing') return res.status(409).json({ error: 'That review isn\u2019t currently live.' });
+    activityStore.log(req.user, 'vod.review.end', `Ended the review of "${request.title || request.youtubeUrl}"`);
+    vodWs.notifyRoomLifecycle(req.params.id, 'ended', { status: 'done' });
+    vodWs.broadcastLobbyChanged();
+    res.json(request);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to end that review.' });
+  }
+});
+
+router.delete('/api/vod/requests/:id', auth.requireOfficer, async (req, res) => {
+  try {
+    const { ok, error } = await vodStore.deleteRequest(req.params.id);
+    if (error === 'not_found') return res.status(404).json({ error: 'VOD request not found.' });
+    if (error === 'in_progress') return res.status(409).json({ error: 'End the review before deleting it.' });
+    if (ok) {
+      activityStore.log(req.user, 'vod.request.delete', 'Deleted a VOD request');
+      vodWs.broadcastLobbyChanged();
+    }
+    res.json({ ok: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to delete that VOD request.' });
   }
 });
 
