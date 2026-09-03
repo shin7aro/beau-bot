@@ -78,16 +78,22 @@
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
       Back to queue
     </button>
-    <div class="vod-room-title" id="vod-room-title">—</div>
     <div class="vod-room-status" id="vod-room-status"></div>
-    <div class="vod-presence" id="vod-presence" title="Connected now"></div>
+    <button class="btn vod-danger-btn officer-only" id="vod-end-review-btn">End review</button>
+    <div class="vod-room-title" id="vod-room-title">—</div>
+    <div class="vod-presence" id="vod-presence">
+      <span id="vod-presence-count">— watching</span>
+      <div class="vod-presence-popover" id="vod-presence-popover"></div>
+    </div>
   </div>
 
   <div class="vod-room-layout">
     <div class="vod-player-col">
       <div class="vod-player-wrap" id="vod-player-wrap">
-        <div id="vod-yt-player"></div>
-        <canvas id="vod-draw-canvas"></canvas>
+        <div class="vod-player-frame" id="vod-player-frame">
+          <div id="vod-yt-player"></div>
+          <canvas id="vod-draw-canvas"></canvas>
+        </div>
         <div class="vod-draw-hint" id="vod-draw-hint">Click and drag on the video to draw. It'll show up again for everyone right when playback reaches this moment.</div>
       </div>
 
@@ -138,11 +144,6 @@
         </div>
       </div>
     </div>
-  </div>
-
-  <div class="vod-officer-bar officer-only" id="vod-officer-bar">
-    <span id="vod-officer-bar-label">You're reviewing this VOD — playback you control is synced to everyone watching.</span>
-    <button class="btn vod-danger-btn" id="vod-end-review-btn">End review</button>
   </div>
 </div>
 

@@ -296,15 +296,19 @@ async function initRoom(id) {
   wireToolbar();
   wireTimeline();
   wireCommentComposer();
+  wirePresencePopover();
   loadYouTubeApi(() => createPlayer(data.videoId));
 
   if (data.status === 'reviewing') {
     connectRoomSocket(id);
   } else {
-    // finished review: read-only replay, no websocket needed
+    // finished review: read-only replay, no websocket needed, so there's no
+    // live presence to track — just hide that indicator entirely.
     room.canControl = false;
     setComposerEnabled(false);
     document.getElementById('vod-draw-hint').textContent = 'This review has ended — you can still scrub through and read what was flagged.';
+    document.getElementById('vod-end-review-btn').classList.add('vod-ended');
+    document.getElementById('vod-presence').style.display = 'none';
     renderCommentList();
   }
 }
@@ -313,6 +317,18 @@ function setRoomStatusBadge(status) {
   const el = document.getElementById('vod-room-status');
   const label = { reviewing: 'Live', done: 'Ended', pending: 'Pending' }[status] || status;
   el.innerHTML = `<span class="vod-status-pill ${status}">${label}</span>`;
+}
+
+// Hover shows the "who's watching" popover on desktop for free (see CSS);
+// this just adds a tap-to-toggle fallback for touch devices, where :hover
+// doesn't really work, plus closes it when you tap elsewhere.
+function wirePresencePopover() {
+  const presence = document.getElementById('vod-presence');
+  presence.addEventListener('click', (e) => {
+    e.stopPropagation();
+    presence.classList.toggle('is-open');
+  });
+  document.addEventListener('click', () => presence.classList.remove('is-open'));
 }
 
 function loadYouTubeApi(onReady) {
@@ -399,8 +415,8 @@ function handleRoomMessage(msg) {
       renderCommentList();
       renderTimelineMarks();
       setComposerEnabled(true);
-      document.getElementById('vod-presence').textContent = `${msg.count} watching`;
-      // #vod-officer-bar's visibility is handled by the same .officer-only
+      renderPresence(msg);
+      // #vod-end-review-btn's visibility is handled by the same .officer-only
       // class/CSS every other officer-gated control on the site uses (see
       // auth.js's renderAuthControl) — canControl here is just the same
       // role check, so there's nothing extra to toggle.
@@ -410,7 +426,7 @@ function handleRoomMessage(msg) {
       break;
     }
     case 'presence':
-      document.getElementById('vod-presence').textContent = `${msg.count} watching`;
+      renderPresence(msg);
       break;
     case 'draw':
       room.drawings.push(msg.drawing);
@@ -429,7 +445,8 @@ function handleRoomMessage(msg) {
       room.canControl = false;
       setRoomStatusBadge('done');
       setComposerEnabled(false);
-      document.getElementById('vod-officer-bar').classList.add('vod-ended');
+      document.getElementById('vod-end-review-btn').classList.add('vod-ended');
+      document.getElementById('vod-presence').style.display = 'none';
       document.getElementById('vod-draw-hint').textContent = 'This review just ended — you can still scrub through and read what was flagged.';
       showToast('This review has ended.');
       if (ws) { ws.close(); ws = null; }
@@ -438,6 +455,23 @@ function handleRoomMessage(msg) {
       showToast(msg.message);
       break;
   }
+}
+
+// Updates both the "N watching" count and the hover popover listing who —
+// used by both the initial `sync` payload and every later `presence` ping.
+function renderPresence({ count, users }) {
+  document.getElementById('vod-presence-count').textContent = `${count} watching`;
+  const popover = document.getElementById('vod-presence-popover');
+  if (!users || users.length === 0) {
+    popover.innerHTML = '<div class="vod-presence-empty">Nobody else here yet</div>';
+    return;
+  }
+  popover.innerHTML = users.map((u) => `
+    <div class="vod-presence-user">
+      <span>${escapeHtml(u.username)}</span>
+      ${u.role === 'officer' || u.role === 'admin' ? `<span class="vod-presence-user-role">${escapeHtml(u.role)}</span>` : ''}
+    </div>
+  `).join('');
 }
 
 /* ---------- ticking: timeline, active-drawing overlay, active comment ---------- */
@@ -467,6 +501,36 @@ function highlightActiveComment(t) {
 
 /* ---------- drawing canvas ---------- */
 
+// The video needs to keep a true 16:9 shape no matter what odd size the
+// column ends up being (narrow sidebar, short viewport, mobile, etc), but
+// it must NEVER just claim however much height it wants — that's exactly
+// what was pushing the toolbar/timeline off-screen before. So `.vod-player-
+// wrap` gets whatever space is left after the toolbar+timeline (flex
+// handles that), and this only ever shrinks the video to fit inside
+// whatever that turns out to be, letterboxing with the wrap's own black
+// background rather than overflowing it.
+function layoutPlayerFrame() {
+  const wrap = document.getElementById('vod-player-wrap');
+  const frame = document.getElementById('vod-player-frame');
+  const canvas = document.getElementById('vod-draw-canvas');
+  if (!wrap || !frame) return;
+  const rect = wrap.getBoundingClientRect();
+  if (rect.width <= 0 || rect.height <= 0) return;
+
+  let width = rect.width;
+  let height = width * 9 / 16;
+  if (height > rect.height) {
+    height = rect.height;
+    width = height * 16 / 9;
+  }
+  frame.style.width = `${Math.round(width)}px`;
+  frame.style.height = `${Math.round(height)}px`;
+  if (canvas) {
+    canvas.width = Math.round(width);
+    canvas.height = Math.round(height);
+  }
+}
+
 function wireToolbar() {
   const swatchWrap = document.getElementById('vod-color-swatches');
   VOD_COLORS.forEach((color, i) => {
@@ -492,16 +556,10 @@ function wireToolbar() {
   });
 
   const canvas = document.getElementById('vod-draw-canvas');
-  const wrap = document.getElementById('vod-player-wrap');
   const hint = document.getElementById('vod-draw-hint');
-
-  function resizeCanvas() {
-    const rect = wrap.getBoundingClientRect();
-    canvas.width = rect.width;
-    canvas.height = rect.height;
-  }
-  resizeCanvas();
-  window.addEventListener('resize', resizeCanvas);
+  layoutPlayerFrame();
+  window.addEventListener('resize', layoutPlayerFrame);
+  new ResizeObserver(layoutPlayerFrame).observe(document.getElementById('vod-player-wrap'));
 
   canvas.addEventListener('pointerdown', (e) => {
     if (!canDraw()) return;

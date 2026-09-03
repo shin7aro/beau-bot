@@ -77,24 +77,40 @@ body.app-shell .site-header { flex-shrink: 0; }
 
 /* ── ROOM VIEW ── */
 .vod-room { padding: 14px 24px 18px; gap: 12px; }
-.vod-room-topbar { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; flex-shrink: 0; }
+.vod-room-topbar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; flex-shrink: 0; }
 .vod-room-title { font-size: 15px; font-weight: 700; color: var(--ink); flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .vod-room-status { flex-shrink: 0; }
 .vod-presence {
-  display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--ink-dim);
+  position: relative; display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--ink-dim);
   padding: 5px 10px; border-radius: 999px; background: var(--surface-2); border: 1px solid var(--line);
+  cursor: default; flex-shrink: 0;
 }
 .vod-presence::before { content: '●'; color: var(--healer); font-size: 9px; }
+.vod-presence-popover {
+  display: none; position: absolute; top: calc(100% + 8px); right: 0; z-index: 20;
+  min-width: 160px; max-width: 240px; max-height: 220px; overflow-y: auto;
+  background: var(--surface); border: 1px solid var(--line-2); border-radius: 10px;
+  box-shadow: 0 12px 32px rgba(0,0,0,0.4); padding: 8px; flex-direction: column; gap: 2px;
+}
+.vod-presence:hover .vod-presence-popover, .vod-presence:focus-within .vod-presence-popover, .vod-presence.is-open .vod-presence-popover { display: flex; }
+.vod-presence-user {
+  display: flex; align-items: center; gap: 7px; padding: 5px 7px; border-radius: 6px; font-size: 12px; color: var(--ink);
+}
+.vod-presence-user:hover { background: var(--surface-2); }
+.vod-presence-user-role { font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--ink-faint); }
+.vod-presence-empty { font-size: 12px; color: var(--ink-faint); padding: 6px 7px; }
 
 .vod-room-layout { flex: 1; display: grid; grid-template-columns: 1fr 300px; gap: 16px; min-height: 0; overflow: hidden; }
 .vod-player-col { display: flex; flex-direction: column; gap: 10px; min-height: 0; }
 
 .vod-player-wrap {
-  position: relative; width: 100%; aspect-ratio: 16 / 9; background: #000;
-  border-radius: 12px; overflow: hidden; border: 1px solid var(--line); flex-shrink: 0;
+  position: relative; flex: 1 1 auto; min-height: 160px;
+  background: #000; border-radius: 12px; overflow: hidden; border: 1px solid var(--line);
+  display: flex; align-items: center; justify-content: center;
 }
-#vod-yt-player, #vod-yt-player iframe { position: absolute; inset: 0; width: 100%; height: 100%; }
-#vod-draw-canvas { position: absolute; inset: 0; width: 100%; height: 100%; touch-action: none; cursor: crosshair; }
+.vod-player-frame { position: relative; } /* actual width/height set in px by JS to keep a true 16:9 area that always leaves room for the toolbar + timeline below it */
+#vod-yt-player, #vod-yt-player iframe, #vod-draw-canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+#vod-draw-canvas { touch-action: none; cursor: crosshair; }
 .vod-draw-hint {
   position: absolute; left: 10px; bottom: 10px; right: 10px; pointer-events: none;
   font-size: 11px; color: rgba(255,255,255,0.75); background: rgba(0,0,0,0.45);
@@ -174,15 +190,10 @@ body.app-shell .site-header { flex-shrink: 0; }
 .vod-pause-toggle input { accent-color: var(--accent); }
 #vod-comment-send-btn { padding: 8px 16px; font-size: 12.5px; }
 
-.vod-officer-bar {
-  flex-shrink: 0; display: flex; align-items: center; justify-content: space-between; gap: 12px;
-  padding: 10px 14px; border-radius: 10px; background: var(--surface-2); border: 1px solid var(--line);
-  font-size: 12px; color: var(--ink-dim);
-}
 .vod-danger-btn:hover { color: #e0685a; border-color: #e0685a; }
 /* Higher specificity than .officer-only.visible on purpose — once a review
    ends there's no "End review" button to show even to an officer/admin. */
-#vod-officer-bar.vod-ended { display: none !important; }
+#vod-end-review-btn.vod-ended { display: none !important; }
 
 @media (max-width: 980px) {
   .vod-room-layout { grid-template-columns: 1fr; overflow-y: auto; }
