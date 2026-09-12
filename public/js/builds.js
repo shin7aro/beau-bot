@@ -270,7 +270,7 @@ function createTab(opts) {
     if (!b) return;
     const editable = canEdit();
 
-    document.querySelectorAll(`#${tbodyId} tr`).forEach(r =>
+    document.getElementById(tbodyId).querySelectorAll('tr').forEach(r =>
       r.classList.toggle('selected', parseInt(r.dataset.idx) === idx)
     );
 
@@ -405,7 +405,7 @@ function createTab(opts) {
     activeRole = 'all'; searchStr = '';
     const searchInput = document.getElementById(searchId);
     if (searchInput) searchInput.value = '';
-    document.querySelectorAll(`#${filterId} .filter-btn`).forEach(btn =>
+    document.getElementById(filterId).querySelectorAll('.filter-btn').forEach(btn =>
       btn.classList.toggle('active', btn.dataset.role === 'all')
     );
 
@@ -425,7 +425,7 @@ function createTab(opts) {
     spawnRipple(e.clientX, e.clientY);
     pulseButton(btn);
     activeRole = btn.dataset.role;
-    document.querySelectorAll(`#${filterId} .filter-btn`).forEach(b => b.classList.toggle('active', b === btn));
+    document.getElementById(filterId).querySelectorAll('.filter-btn').forEach(b => b.classList.toggle('active', b === btn));
     applyFilters();
   });
 
