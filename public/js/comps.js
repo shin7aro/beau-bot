@@ -520,7 +520,7 @@ function renderPartyColumn(p) {
     const rows = itemsInParty.map(({ it, originalIdx: i }) => {
       if (it.options) {
         const optionsHtml = it.options.map((opt, oi) => {
-          const matchingBuilds = buildOptions.filter(b => b.role === cat.toLowerCase() && b.weapon === opt.name);
+          const matchingBuilds = buildOptions.filter(b => b.weapon === opt.name);
           const currentVal = (opt.buildTab && opt.buildId !== null) ? `${opt.buildTab}:${opt.buildId}` : '';
           const buildOptionsHtml = `<option value="">No linked build</option>` +
             matchingBuilds.map(b => `<option value="${buildOptionValue(b)}" ${currentVal === buildOptionValue(b) ? 'selected' : ''}>[${getCategoryLabel(b.tab)}] ${escapeHtml(b.weapon)}</option>`).join('');
@@ -545,7 +545,7 @@ function renderPartyColumn(p) {
           </div>`;
       }
 
-      const matchingBuilds = buildOptions.filter(b => b.role === cat.toLowerCase() && b.weapon === it.name);
+      const matchingBuilds = buildOptions.filter(b => b.weapon === it.name);
       const currentVal = (it.buildTab && it.buildId !== null) ? `${it.buildTab}:${it.buildId}` : '';
       const buildOptionsHtml = `<option value="">No linked build</option>` +
         matchingBuilds.map(b => `<option value="${buildOptionValue(b)}" ${currentVal === buildOptionValue(b) ? 'selected' : ''}>[${getCategoryLabel(b.tab)}] ${escapeHtml(b.weapon)}</option>`).join('');
