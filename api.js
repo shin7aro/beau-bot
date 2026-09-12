@@ -190,13 +190,16 @@ router.post('/api/builds/categories', auth.requireOfficer, async (req, res) => {
     await buildsStore.saveCategories(categories);
     activityStore.log(req.user, 'builds.category.create', `Created category: ${label}`);
     
-    // Secondary/optional: initialize an empty builds list for this category.
-    // This must never turn a successful category creation into a 500 — the
-    // category itself is already saved above, so a hiccup here is non-fatal.
+    // Secondary/optional: reset this id's builds list to empty. This must
+    // never turn a successful category creation into a 500 — the category
+    // itself is already saved above, so a hiccup here is non-fatal to the
+    // response — but it retries and verifies the write so a same-named
+    // category reused after a deletion can't inherit old leftover builds.
     try {
-      const allBuilds = await buildsStore.loadAllBuilds();
-      allBuilds[id] = [];
-      await storage.saveJSON('builds', require('path').join(__dirname, 'builds.json'), allBuilds);
+      const reset = await buildsStore.purgeOrResetCategoryBuilds(id, []);
+      if (!reset) {
+        console.error(`builds.category.create: could not confirm builds reset for "${id}" after retries`);
+      }
     } catch (secondaryErr) {
       console.error('builds.category.create: secondary builds init failed (non-fatal)', secondaryErr);
     }
@@ -250,12 +253,15 @@ router.delete('/api/builds/categories/:id', auth.requireOfficer, async (req, res
     await buildsStore.saveCategories(categories);
     activityStore.log(req.user, 'builds.category.delete', `Deleted category: ${req.params.id}`);
     
-    // Secondary/optional: clean up that category's builds data. Non-fatal —
-    // the category is already gone, so a hiccup here must not return a 500.
+    // Secondary/optional: clean up that category's builds data. Non-fatal to
+    // this response — the category is already gone from the list — but this
+    // retries and verifies the write actually landed, so the builds don't
+    // silently survive in storage and reappear if the category is recreated.
     try {
-      const allBuilds = await buildsStore.loadAllBuilds();
-      delete allBuilds[req.params.id];
-      await storage.saveJSON('builds', require('path').join(__dirname, 'builds.json'), allBuilds);
+      const purged = await buildsStore.purgeOrResetCategoryBuilds(req.params.id);
+      if (!purged) {
+        console.error(`builds.category.delete: could not confirm builds purge for "${req.params.id}" after retries`);
+      }
     } catch (secondaryErr) {
       console.error('builds.category.delete: secondary builds cleanup failed (non-fatal)', secondaryErr);
     }

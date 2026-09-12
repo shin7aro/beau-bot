@@ -72,6 +72,34 @@ async function saveTab(tab, list) {
   return all[tab];
 }
 
+// Permanently clears a category's builds from storage — used when a
+// category is deleted (newValue left undefined, drops the key entirely)
+// and when a category is created/reused (newValue = [], guarantees a
+// fresh id never inherits a previous category's leftover builds).
+//
+// storage.saveJSON never throws on a failed write (by design, so a
+// flaky save can't crash an in-progress request elsewhere) — which
+// previously meant a failed cleanup here was silent and permanent:
+// the category would vanish from the list while its old builds stayed
+// behind in Redis forever, ready to reappear the moment someone
+// recreated a category with the same name. This retries a few times
+// and actually reads the value back to confirm the write landed before
+// giving up, so "deleted" means deleted.
+async function purgeOrResetCategoryBuilds(id, newValue, attempts = 3) {
+  for (let i = 0; i < attempts; i++) {
+    const all = await loadAllBuilds();
+    if (newValue === undefined) delete all[id]; else all[id] = newValue;
+    await storage.saveJSON(REDIS_KEY, DB_PATH, all);
+
+    const verify = await storage.loadJSON(REDIS_KEY, DB_PATH);
+    const landed = newValue === undefined
+      ? !(id in verify)
+      : Array.isArray(verify[id]) && verify[id].length === newValue.length;
+    if (landed) return true;
+  }
+  return false;
+}
+
 // Flat, cross-tab list used by the comps editor's "link to a build" picker.
 async function listAllForLinking() {
   const all = await loadAllBuilds();
@@ -92,5 +120,6 @@ module.exports = {
   saveTab, 
   listAllForLinking,
   loadCategories,
-  saveCategories
+  saveCategories,
+  purgeOrResetCategoryBuilds
 };
