@@ -275,6 +275,11 @@
 .build-link-tag-blank { border: 1px dashed var(--line-2); }
 .build-link-item { justify-content: flex-start; }
 
+/* Wider than the plain weapon popover, and no ellipsis truncation on the
+   label — full build names need to stay readable with the icons after them. */
+.build-link-popover { width: 380px; max-width: 92vw; }
+.build-link-popover .build-link-label { white-space: normal; overflow: visible; text-overflow: clip; }
+
 .comp-add-item-btn {
   background: transparent; border: 1px dashed var(--line-2); border-radius: 7px;
   color: var(--ink-dim); font: inherit; font-size: 12px; padding: 6px 10px; cursor: pointer; white-space: nowrap;
