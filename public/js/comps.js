@@ -7,7 +7,7 @@ const CATEGORY_ORDER = ['Tank', 'Support', 'DPS', 'Healer', 'Battlemount'];
 const EVENT_TYPE_LABELS = { PVP: 'PvP', PVE: 'PvE', Gank: 'Gank' };
 
 let allComps = [];       // [{ key, label, categories, eventType, updatedAt, ... }]
-let buildOptions = [];   // [{ tab, index, role, weapon }]
+let buildOptions = [];   // [{ tab, index, role, weapon, offhand, head, chest, feet, cape }]
 let weaponEmojiMap = {}; // { "Broadsword": "<:tag:id>", ... } from /api/weapon-emojis
 let allBuildsCache = null; // lazy-loaded full builds list
 let buildCategoriesCache = null; // lazy-loaded categories list
@@ -522,15 +522,13 @@ function renderPartyColumn(p) {
         const optionsHtml = it.options.map((opt, oi) => {
           const matchingBuilds = buildOptions.filter(b => b.weapon === opt.name);
           const currentVal = (opt.buildTab && opt.buildId !== null) ? `${opt.buildTab}:${opt.buildId}` : '';
-          const buildOptionsHtml = `<option value="">No linked build</option>` +
-            matchingBuilds.map(b => `<option value="${buildOptionValue(b)}" ${currentVal === buildOptionValue(b) ? 'selected' : ''}>[${getCategoryLabel(b.tab)}] ${escapeHtml(b.weapon)}</option>`).join('');
 
           return `
             <div class="comp-item-option" data-cat="${cat}" data-i="${i}" data-oi="${oi}">
               <button type="button" class="comp-item-weapon-btn comp-item-option-weapon-btn">
                 ${weaponPreviewHtml(opt.name)}
               </button>
-              <select class="comp-item-option-build">${buildOptionsHtml}</select>
+              <button type="button" class="comp-item-option-build">${buildLinkButtonHtml(matchingBuilds, currentVal)}</button>
               <button type="button" class="comp-item-option-remove" title="Remove this choice">✕</button>
             </div>`;
         }).join('');
@@ -547,15 +545,13 @@ function renderPartyColumn(p) {
 
       const matchingBuilds = buildOptions.filter(b => b.weapon === it.name);
       const currentVal = (it.buildTab && it.buildId !== null) ? `${it.buildTab}:${it.buildId}` : '';
-      const buildOptionsHtml = `<option value="">No linked build</option>` +
-        matchingBuilds.map(b => `<option value="${buildOptionValue(b)}" ${currentVal === buildOptionValue(b) ? 'selected' : ''}>[${getCategoryLabel(b.tab)}] ${escapeHtml(b.weapon)}</option>`).join('');
 
       return `
         <div class="comp-item-row" data-cat="${cat}" data-i="${i}">
           <button type="button" class="comp-item-weapon-btn">
             ${weaponPreviewHtml(it.name)}
           </button>
-          <select class="comp-item-build">${buildOptionsHtml}</select>
+          <button type="button" class="comp-item-build">${buildLinkButtonHtml(matchingBuilds, currentVal)}</button>
           <button type="button" class="btn comp-item-add-choice-btn" data-cat="${cat}" data-i="${i}">+ Choice</button>
           <button type="button" class="comp-item-remove" title="Remove line">${TRASH_ICON}</button>
         </div>`;
@@ -621,11 +617,9 @@ function renderEditor() {
     const row = btn.closest('.comp-item-row');
     openWeaponPopover(btn, row.dataset.cat, +row.dataset.i);
   }));
-  card.querySelectorAll('.comp-item-build:not(.comp-item-option-build)').forEach(sel => sel.addEventListener('change', e => {
-    const row = e.target.closest('.comp-item-row');
-    const item = draft.categories[row.dataset.cat].items[+row.dataset.i];
-    if (!e.target.value) { item.buildTab = null; item.buildId = null; }
-    else { const [tab, idx] = e.target.value.split(':'); item.buildTab = tab; item.buildId = parseInt(idx, 10); }
+  card.querySelectorAll('.comp-item-build:not(.comp-item-option-build)').forEach(btn => btn.addEventListener('click', () => {
+    const row = btn.closest('.comp-item-row');
+    openBuildLinkPopover(btn, row.dataset.cat, +row.dataset.i);
   }));
   card.querySelectorAll('.comp-item-remove').forEach(btn => btn.addEventListener('click', e => {
     const row = e.target.closest('.comp-item-row');
@@ -655,11 +649,9 @@ function renderEditor() {
     const opt = btn.closest('.comp-item-option');
     openWeaponPopover(btn, opt.dataset.cat, +opt.dataset.i, +opt.dataset.oi);
   }));
-  card.querySelectorAll('.comp-item-option-build').forEach(sel => sel.addEventListener('change', e => {
-    const opt = e.target.closest('.comp-item-option');
-    const option = draft.categories[opt.dataset.cat].items[+opt.dataset.i].options[+opt.dataset.oi];
-    if (!e.target.value) { option.buildTab = null; option.buildId = null; }
-    else { const [tab, idx] = e.target.value.split(':'); option.buildTab = tab; option.buildId = parseInt(idx, 10); }
+  card.querySelectorAll('.comp-item-option-build').forEach(btn => btn.addEventListener('click', () => {
+    const opt = btn.closest('.comp-item-option');
+    openBuildLinkPopover(btn, opt.dataset.cat, +opt.dataset.i, +opt.dataset.oi);
   }));
   card.querySelectorAll('.comp-item-add-option-btn').forEach(btn => btn.addEventListener('click', () => {
     draft.categories[btn.dataset.cat].items[+btn.dataset.i].options.push({ name: '', emoji: null, buildId: null, buildTab: null });
@@ -897,6 +889,82 @@ function openIconWeaponPopover(anchorBtn) {
   renderList();
   input.addEventListener('input', e => renderList(e.target.value));
   setTimeout(() => input.focus(), 20);
+
+  setTimeout(() => document.addEventListener('mousedown', handleWeaponPopoverOutsideClick, true), 0);
+}
+
+/* ─────────────────────────────────────────
+   Build-link picker — a popover (not a native
+   <select>, since <option> can't hold images)
+   that shows each candidate build as its tab
+   label + weapon name followed by small gear
+   icons, so builds sharing a weapon+category
+   are still tellable apart at a glance.
+───────────────────────────────────────── */
+function buildTagsHtml(b) {
+  const tags = ['offhand', 'head', 'chest', 'feet', 'cape']
+    .map(slot => b[slot])
+    .filter(Boolean)
+    .map(name => {
+      const url = window.imgUrl ? window.imgUrl(name) : null;
+      return url
+        ? `<img class="build-link-tag" src="${url}" alt="" title="${escapeHtml(name)}" loading="lazy">`
+        : `<span class="build-link-tag build-link-tag-blank" title="${escapeHtml(name)}"></span>`;
+    }).join('');
+  return `<span class="build-link-tags">${tags}</span>`;
+}
+
+function buildLinkLabel(b) {
+  return `${escapeHtml(getCategoryLabel(b.tab))} · ${escapeHtml(b.weapon)}`;
+}
+
+function buildLinkButtonHtml(matchingBuilds, currentVal) {
+  const chosen = currentVal ? matchingBuilds.find(b => buildOptionValue(b) === currentVal) : null;
+  if (!chosen) return `<span class="build-link-label build-link-label-empty">No linked build</span>`;
+  return `<span class="build-link-label">${buildLinkLabel(chosen)}</span>${buildTagsHtml(chosen)}`;
+}
+
+function openBuildLinkPopover(anchorBtn, cat, itemIndex, optionIndex = null) {
+  closeWeaponPopover();
+
+  const item = draft.categories[cat].items[itemIndex];
+  const weaponName = optionIndex !== null ? item.options[optionIndex].name : item.name;
+  const matchingBuilds = buildOptions.filter(b => b.weapon === weaponName);
+
+  const pop = document.createElement('div');
+  pop.id = 'weapon-popover';
+  pop.className = 'weapon-popover build-link-popover';
+  pop.innerHTML = `<div class="weapon-popover-list"></div>`;
+  document.body.appendChild(pop);
+
+  const rect = anchorBtn.getBoundingClientRect();
+  pop.style.top = `${window.scrollY + rect.bottom + 6}px`;
+  pop.style.left = `${window.scrollX + rect.left}px`;
+
+  const list = pop.querySelector('.weapon-popover-list');
+  const optionRows = matchingBuilds.map(b => `
+    <button type="button" class="weapon-popover-item build-link-item" data-value="${buildOptionValue(b)}">
+      <span class="build-link-label">${buildLinkLabel(b)}</span>${buildTagsHtml(b)}
+    </button>`).join('');
+
+  list.innerHTML = `
+    <button type="button" class="weapon-popover-item build-link-item" data-value="">
+      <span class="build-link-label build-link-label-empty">No linked build</span>
+    </button>
+    ${optionRows || `<div class="weapon-popover-empty">No builds tagged with this weapon yet</div>`}`;
+
+  list.querySelectorAll('.build-link-item').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const value = btn.dataset.value;
+      const target = optionIndex !== null
+        ? draft.categories[cat].items[itemIndex].options[optionIndex]
+        : draft.categories[cat].items[itemIndex];
+      if (!value) { target.buildTab = null; target.buildId = null; }
+      else { const [tab, idx] = value.split(':'); target.buildTab = tab; target.buildId = parseInt(idx, 10); }
+      closeWeaponPopover();
+      renderEditor();
+    });
+  });
 
   setTimeout(() => document.addEventListener('mousedown', handleWeaponPopoverOutsideClick, true), 0);
 }

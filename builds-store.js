@@ -108,7 +108,13 @@ async function listAllForLinking() {
   for (const cat of categories) {
     for (let i = 0; i < (all[cat.id] || []).length; i++) {
       const b = all[cat.id][i];
-      rows.push({ tab: cat.id, index: i, role: b.role, weapon: b.weapon || 'Unnamed build' });
+      rows.push({
+        tab: cat.id, index: i, role: b.role, weapon: b.weapon || 'Unnamed build',
+        // Gear slots included so the comp editor's build-link picker can show
+        // icon snippets that tell apart multiple builds of the same weapon
+        // in the same category, instead of just a bracketed tab label.
+        offhand: b.offhand || '', head: b.head || '', chest: b.chest || '', feet: b.feet || '', cape: b.cape || '',
+      });
     }
   }
   return rows;

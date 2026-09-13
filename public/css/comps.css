@@ -259,6 +259,22 @@
 .weapon-popover-item img { width: 20px; height: 20px; object-fit: contain; flex-shrink: 0; }
 .weapon-popover-empty { color: var(--ink-faint); font-size: 12px; padding: 6px 4px; }
 
+/* Build-link picker button (replaces the old native <select> — options
+   can't hold images, so this opens the .build-link-popover below instead) */
+.comp-item-build, .comp-item-option-build {
+  background: var(--surface); border: 1px solid var(--line-2); border-radius: 7px;
+  color: var(--ink); font: inherit; font-size: 12.5px; padding: 7px 9px; min-width: 0;
+  display: flex; align-items: center; gap: 8px; cursor: pointer; text-align: left; width: 100%;
+}
+.comp-item-build:hover, .comp-item-build:focus,
+.comp-item-option-build:hover, .comp-item-option-build:focus { outline: none; border-color: var(--accent); }
+.build-link-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.build-link-label-empty { color: var(--ink-faint); }
+.build-link-tags { display: flex; align-items: center; gap: 4px; flex-shrink: 0; margin-left: auto; }
+.build-link-tag { width: 18px; height: 18px; border-radius: 4px; object-fit: contain; flex-shrink: 0; background: var(--surface-2); }
+.build-link-tag-blank { border: 1px dashed var(--line-2); }
+.build-link-item { justify-content: flex-start; }
+
 .comp-add-item-btn {
   background: transparent; border: 1px dashed var(--line-2); border-radius: 7px;
   color: var(--ink-dim); font: inherit; font-size: 12px; padding: 6px 10px; cursor: pointer; white-space: nowrap;
