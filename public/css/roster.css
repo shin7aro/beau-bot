@@ -1,0 +1,118 @@
+/* ─────────────────────────────────────────
+   ROSTER PAGE
+   (builds on tokens + shared classes from
+   base.css / home.css / events.css —
+   .wrap, .section, .cta-*, .modal-*,
+   .search-wrap, .filter-btn, .empty-state
+   are all defined there)
+───────────────────────────────────────── */
+
+/* ---------- roster grid ----------
+   One flat, ordered grid, no hierarchy lines: GM first, then Right Hand,
+   then Officers, then everyone else — the ordering itself communicates
+   rank, the layout doesn't try to. Every person gets the same box:
+   avatar, name, and a small role line underneath. Rank colors — gold /
+   silver / bronze — apply to the whole card (border + avatar ring + tag),
+   not just the avatar, so GM/Right Hand/Officer read as a medal color at
+   a glance. */
+.roster-grid-section { padding-bottom: 12px; }
+.controls .roster-count { font-size: 12.5px; color: var(--ink-faint); margin-left: auto; }
+
+:root {
+  --rank-gold:       #e3bb47;
+  --rank-gold-dim:   rgba(227,187,71,0.20);
+  --rank-silver:     #c7ccd8;
+  --rank-silver-dim: rgba(199,204,216,0.20);
+  --rank-bronze:     #cd7f4e;
+  --rank-bronze-dim: rgba(205,127,78,0.20);
+}
+
+.roster-grid {
+  display: flex; flex-wrap: wrap;
+  gap: 14px;
+  padding: 4px 0 8px;
+}
+
+.roster-card {
+  width: 168px; min-height: 122px;
+  background: var(--surface); border: 1px solid var(--line-2); border-radius: 14px;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px;
+  padding: 14px 10px;
+  box-shadow: 0 10px 26px -14px rgba(0,0,0,0.5);
+  flex-shrink: 0;
+  text-decoration: none; color: inherit; cursor: pointer;
+  transition: transform 0.12s ease, border-color 0.12s ease;
+}
+.roster-card:hover { transform: translateY(-2px); }
+.roster-card-member:hover { border-color: var(--accent); }
+.roster-card-gm:hover { box-shadow: 0 10px 26px -14px rgba(0,0,0,0.5), 0 0 0 2px var(--rank-gold); }
+.roster-card-rh:hover { box-shadow: 0 10px 26px -14px rgba(0,0,0,0.5), 0 0 0 2px var(--rank-silver); }
+.roster-card-officer:hover { box-shadow: 0 10px 26px -14px rgba(0,0,0,0.5), 0 0 0 2px var(--rank-bronze); }
+.roster-card-avatar {
+  width: 52px; height: 52px; border-radius: 50%; object-fit: cover;
+  border: 2px solid var(--line-2); background: var(--surface-2);
+}
+.roster-card-name {
+  font-family: 'Big Shoulders Display', sans-serif; font-weight: 700; font-size: 15px;
+  color: var(--ink); text-align: center; line-height: 1.2;
+  max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.roster-card-tag {
+  font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em;
+  color: var(--ink-faint);
+}
+
+.roster-card-gm { border-color: var(--rank-gold); }
+.roster-card-gm .roster-card-avatar { border-color: var(--rank-gold); box-shadow: 0 0 0 4px var(--rank-gold-dim); }
+.roster-card-gm .roster-card-tag { color: var(--rank-gold); }
+
+.roster-card-rh { border-color: var(--rank-silver); }
+.roster-card-rh .roster-card-avatar { border-color: var(--rank-silver); box-shadow: 0 0 0 4px var(--rank-silver-dim); }
+.roster-card-rh .roster-card-tag { color: var(--rank-silver); }
+
+.roster-card-officer { border-color: var(--rank-bronze); }
+.roster-card-officer .roster-card-avatar { border-color: var(--rank-bronze); box-shadow: 0 0 0 4px var(--rank-bronze-dim); }
+.roster-card-officer .roster-card-tag { color: var(--rank-bronze); }
+
+
+/* ---------- hierarchy editor modal ---------- */
+.roster-editor-card { max-width: 720px; }
+.roster-editor-list {
+  display: flex; flex-direction: column; gap: 6px;
+  max-height: 50vh; overflow-y: auto; padding-right: 4px;
+}
+.roster-editor-row {
+  display: grid; grid-template-columns: 40px 1fr 128px auto auto;
+  align-items: center; gap: 10px;
+  padding: 8px; border-radius: 8px; border: 1px solid var(--line);
+}
+.roster-editor-row.inactive { opacity: 0.55; }
+.roster-editor-row img { width: 36px; height: 36px; border-radius: 50%; object-fit: cover; background: var(--surface-2); }
+.roster-editor-row-name { font-size: 13px; color: var(--ink); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: flex; align-items: center; gap: 6px; }
+.roster-editor-inactive-tag {
+  font-size: 9.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em;
+  color: var(--dps); background: var(--dps-bg); border: 1px solid var(--dps);
+  border-radius: 999px; padding: 1px 7px; flex-shrink: 0;
+}
+.roster-editor-tier-select {
+  background: var(--surface-2); border: 1px solid var(--line-2); border-radius: 7px;
+  color: var(--ink); font: inherit; font-size: 12px; padding: 6px 8px;
+}
+.roster-editor-order-btns { display: flex; gap: 2px; }
+.roster-editor-order-btn {
+  background: transparent; border: 1px solid var(--line-2); border-radius: 6px;
+  color: var(--ink-faint); cursor: pointer; width: 26px; height: 26px;
+  display: flex; align-items: center; justify-content: center;
+}
+.roster-editor-order-btn:hover:not(:disabled) { color: var(--accent); border-color: var(--accent); }
+.roster-editor-order-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+.roster-editor-inactive-btn { font-size: 11px; padding: 6px 10px; min-height: 0; white-space: nowrap; }
+
+@media (max-width: 640px) {
+  .roster-editor-row { grid-template-columns: 32px 1fr; grid-template-areas: "avatar name" "tier tier" "order inactive"; }
+  .roster-editor-row img { grid-area: avatar; width: 28px; height: 28px; }
+  .roster-editor-row-name { grid-area: name; }
+  .roster-editor-tier-select { grid-area: tier; }
+  .roster-editor-order-btns { grid-area: order; }
+  .roster-editor-inactive-btn { grid-area: inactive; justify-self: end; }
+}
