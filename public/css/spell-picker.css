@@ -14,7 +14,24 @@
   font-size: 13px;
 }
 
-.sp-intro { margin-bottom: 16px; }
+/* .main is `display:flex` (row) by default (builds.css), built for that
+   page's two-pane tab layout — same issue emoji-linking.css hit: it put
+   .sp-intro and #spell-picker-list side by side as flex items, and since
+   neither had an explicit height, .sp-intro's own box stretched to fill
+   the full row height (flex's default align-items:stretch), showing as a
+   large blank area next to a squeezed-narrow list. Stack them in a column
+   instead and let the list own the scrolling, exactly like #emoji-linking-app
+   does in emoji-linking.css. */
+#spell-picker-app .main { display: flex; flex-direction: column; }
+
+.sp-intro { margin-bottom: 16px; padding: 0 28px; flex-shrink: 0; }
+
+#spell-picker-list {
+  flex: 1;
+  overflow-y: auto;
+  min-height: 0;
+  padding: 0 28px 40px;
+}
 
 .sp-category-heading {
   font-size: 13px;
@@ -84,10 +101,17 @@
 }
 .spell-option:hover { border-color: var(--ink-dim); transform: translateY(-1px); }
 .spell-option img { width: 100%; height: 100%; object-fit: contain; border-radius: 4px; }
+.spell-option-fallback {
+  width: 100%; height: 100%; border-radius: 4px;
+  background: var(--surface-3, var(--surface-2));
+  display: flex; align-items: center; justify-content: center;
+  font-size: 11px; font-weight: 700; color: var(--ink-dim);
+}
 .spell-option.selected {
   border-color: var(--accent);
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 35%, transparent);
 }
+.spell-option.selected .spell-option-fallback { color: var(--accent); }
 .spell-option.saving { opacity: 0.5; pointer-events: none; }
 
 @media (max-width: 640px) {

@@ -32,15 +32,41 @@ async function api(path, opts) {
   return res.status === 204 ? null : res.json();
 }
 
+function initials(name) {
+  return (name || '?').trim().split(/\s+/).slice(0, 2).map(w => w[0]).join('').toUpperCase();
+}
+
+// render.albiononline.com has no single consistent spell-icon naming
+// scheme (see spell-map.js's header) — try each candidate URL in turn,
+// and if every one 404s, swap the <img> for a plain initials badge
+// instead of leaving a broken-image icon on screen.
+function wireSpellIcon(img, candidate) {
+  const urls = window.spellIconCandidates(candidate);
+  let i = 0;
+  img.src = urls[i];
+  img.onerror = () => {
+    i += 1;
+    if (i < urls.length) {
+      img.src = urls[i];
+      return;
+    }
+    const badge = document.createElement('span');
+    badge.className = 'spell-option-fallback';
+    badge.textContent = initials(candidate.name);
+    img.replaceWith(badge);
+  };
+}
+
 function spellOptionHtml(candidate, groupKey, selectedId, buildKey, slotKey) {
-  const url = window.spellIconUrl(candidate.icon);
   const selected = candidate.spell === selectedId;
+  const candidateJson = escapeHtml(JSON.stringify(candidate));
   return `
     <button type="button" class="spell-option${selected ? ' selected' : ''}"
       data-build="${escapeHtml(buildKey)}" data-slot="${escapeHtml(slotKey)}"
       data-group="${escapeHtml(groupKey)}" data-spell="${escapeHtml(candidate.spell)}"
-      title="${escapeHtml(candidate.spell)}">
-      ${url ? `<img src="${url}" alt="${escapeHtml(candidate.spell)}" onerror="this.style.opacity='0.15'">` : ''}
+      data-candidate="${candidateJson}"
+      title="${escapeHtml(candidate.name)}">
+      <img alt="${escapeHtml(candidate.name)}" data-spell-icon>
     </button>`;
 }
 
@@ -119,7 +145,11 @@ function render() {
 
   list.innerHTML = sections.trim() ? sections : '<p class="el-empty">No matching builds.</p>';
 
-  list.querySelectorAll('.spell-option').forEach(btn => btn.addEventListener('click', onSpellClick));
+  list.querySelectorAll('.spell-option').forEach(btn => {
+    btn.addEventListener('click', onSpellClick);
+    const candidate = JSON.parse(btn.dataset.candidate);
+    wireSpellIcon(btn.querySelector('[data-spell-icon]'), candidate);
+  });
 }
 
 async function onSpellClick(e) {
