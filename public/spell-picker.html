@@ -48,7 +48,7 @@
 <div class="wrap section" id="gate-message" style="display:none">
   <div class="section-head">
     <h2 class="section-title">Not your page</h2>
-    <p class="section-sub">This page picks which spell each build's gear should use. It's restricted to a single account.</p>
+    <p class="section-sub">This page lists every gear piece's spell icons for verification. It's restricted to a single account.</p>
   </div>
 </div>
 
@@ -63,16 +63,17 @@
 <!-- MAIN APP (hidden until authorized) -->
 <div id="spell-picker-app" class="app-main" style="display:none">
   <div class="controls">
-    <input type="text" id="build-search" class="weapon-search-input" placeholder="Search by weapon or role…" autocomplete="off">
+    <input type="text" id="build-search" class="weapon-search-input" placeholder="Search gear name…" autocomplete="off">
     <select id="category-filter" class="sp-category-select"></select>
   </div>
 
   <div class="main">
     <p class="section-sub sp-intro">
-      Click a spell icon to make it that row's active choice for this build —
-      only one spell per row can be active in Albion, so picking a new one
-      replaces whatever was picked before it. Nothing here is retroactive:
-      each build keeps its own picks, even for two builds sharing the same gear.
+      Every weapon/head/chest/feet piece, grouped the way Albion itself
+      groups them, with its spell rows below it — one row per choice
+      ("row" = a set of mutually-exclusive spells; only one is active in
+      Albion at a time). This page only browses: clicking an icon just
+      highlights it for your own scanning, nothing is saved.
     </p>
     <div id="spell-picker-list"></div>
   </div>
