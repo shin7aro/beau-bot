@@ -22,6 +22,8 @@ const lootRender = require('./loot-render');
 const rosterStore = require('./roster-store');
 const weaponEmojiStore = require('./weapon-emoji-store');
 const weaponAliasStore = require('./weapon-alias-store');
+const buildSpellStore = require('./build-spell-store');
+const spellMap = require('./spell-map');
 const themeStore = require('./theme-store');
 const vodStore = require('./vod-store');
 const vodWs = require('./vod-ws');
@@ -457,6 +459,52 @@ router.put('/api/weapon-aliases/:weapon', auth.requireEmojiAdmin, async (req, re
   const map = await weaponAliasStore.setWeaponAlias(weapon, alias);
   activityStore.log(req.user, 'weapon-alias.update', alias ? `Renamed "${weapon}" to "${alias}"` : `Cleared custom name for "${weapon}"`);
   res.json(map);
+});
+
+// ── BUILD SPELL CHOICES (Shin7aro-only) ──────────────────────────────────
+// The persistent per-build spell-row choices the (Shin7aro-only) "Spell
+// Picker" admin page maintains — see spell-map.js for the underlying
+// gear -> spell-row data (generated from Albion's binary dumps) and
+// build-spell-store.js for the storage shape. Both read and write are
+// requireEmojiAdmin: unlike the emoji map above, this has no shared read
+// side yet, since nothing else on the site consumes these choices yet.
+
+router.get('/api/build-spells', auth.requireEmojiAdmin, async (req, res) => {
+  res.json(await buildSpellStore.loadAllBuildSpells());
+});
+
+router.put('/api/build-spells/:tab/:index', auth.requireEmojiAdmin, async (req, res) => {
+  const { tab, index } = req.params;
+  const idx = parseInt(index, 10);
+  if (!Number.isInteger(idx) || idx < 0) return res.status(400).json({ error: 'Invalid build index.' });
+
+  const { slot, group, spell } = req.body || {};
+  if (!slot || !group) return res.status(400).json({ error: 'Missing slot or group.' });
+
+  const allBuilds = await buildsStore.loadAllBuilds();
+  const build = (allBuilds[tab] || [])[idx];
+  if (!build) return res.status(404).json({ error: 'Build not found.' });
+
+  // The row a click belongs to depends on which gear piece is actually
+  // equipped in that slot on this build — look its spell rows up fresh
+  // rather than trusting the client, so a stale page can't save a spell
+  // that doesn't belong to this build's current gear.
+  const gearName = build[slot];
+  const gearEntry = gearName && spellMap.SPELL_MAP[gearName];
+  const groupDef = gearEntry && gearEntry.groups.find((g) => g.key === group);
+  if (!groupDef) return res.status(400).json({ error: `"${gearName || '(empty)'}" has no "${group}" spell row.` });
+
+  const spellId = (typeof spell === 'string' && spell.trim()) || null;
+  if (spellId && !groupDef.spells.some((s) => s.spell === spellId)) {
+    return res.status(400).json({ error: 'That spell is not a valid choice for this row.' });
+  }
+
+  const buildKey = `${tab}:${idx}`;
+  const saved = await buildSpellStore.setBuildSpellChoice(buildKey, slot, group, spellId);
+  activityStore.log(req.user, 'build-spell.update', spellId
+    ? `Set "${gearName}"'s ${groupDef.label} to ${spellId} on ${tab}#${idx}`
+    : `Cleared "${gearName}"'s ${groupDef.label} on ${tab}#${idx}`);
+  res.json(saved);
 });
 
 // ── HOME PAGE CONTENT ─────────────────────────────────────────────────────

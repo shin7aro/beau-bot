@@ -89,6 +89,7 @@ function renderAuthControl() {
         ${(role === 'officer' || role === 'admin') ? '<a class="auth-menu-item auth-menu-item-beta" href="vod-review.html">VOD Review <span class="auth-menu-beta-pill">Beta</span></a>' : ''}
         ${role === 'admin' ? '<a class="auth-menu-item" href="history.html">History</a>' : ''}
         ${window.SITE_AUTH.emojiAdmin ? '<a class="auth-menu-item" href="emoji-linking.html">Emoji Linking</a>' : ''}
+        ${window.SITE_AUTH.emojiAdmin ? '<a class="auth-menu-item" href="spell-picker.html">Spell Picker</a>' : ''}
         ${window.SITE_AUTH.themeManager ? `
         <div class="auth-menu-divider"></div>
         <div class="auth-menu-section-label">Site theme</div>
