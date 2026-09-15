@@ -1309,3 +1309,30 @@ window.spellIconCandidates = function spellIconCandidates(candidate) {
   const ids = [candidate.confirmed, candidate.spell, candidate.name, candidate.icon].filter(Boolean);
   return [...new Set(ids)].map(id => `https://render.albiononline.com/v1/spell/${encodeURIComponent(id)}.png`);
 };
+
+// Shared fallback-chain wiring for a spell <img> — used by both
+// spell-picker.js (the Spell Picker admin page) and builds.js (spell
+// choices on real builds), so the "try every candidate, then fall back
+// to an initials badge" behavior only lives in one place. Applies the
+// flip transform (see spell-map.js's header) when the candidate needs it.
+window.spellIconInitials = function spellIconInitials(name) {
+  return (name || '?').trim().split(/\s+/).slice(0, 2).map(w => w[0]).join('').toUpperCase();
+};
+
+window.wireSpellIcon = function wireSpellIcon(img, candidate) {
+  if (candidate.flip) img.classList.add('spell-icon-flip');
+  const urls = window.spellIconCandidates(candidate);
+  let i = 0;
+  img.src = urls[i];
+  img.onerror = () => {
+    i += 1;
+    if (i < urls.length) {
+      img.src = urls[i];
+      return;
+    }
+    const badge = document.createElement('span');
+    badge.className = 'spell-option-fallback';
+    badge.textContent = window.spellIconInitials(candidate.name);
+    img.replaceWith(badge);
+  };
+};

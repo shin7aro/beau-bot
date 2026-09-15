@@ -461,19 +461,23 @@ router.put('/api/weapon-aliases/:weapon', auth.requireEmojiAdmin, async (req, re
   res.json(map);
 });
 
-// ── BUILD SPELL CHOICES (Shin7aro-only) ──────────────────────────────────
-// The persistent per-build spell-row choices the (Shin7aro-only) "Spell
-// Picker" admin page maintains — see spell-map.js for the underlying
-// gear -> spell-row data (generated from Albion's binary dumps) and
-// build-spell-store.js for the storage shape. Both read and write are
-// requireEmojiAdmin: unlike the emoji map above, this has no shared read
-// side yet, since nothing else on the site consumes these choices yet.
+// ── BUILD SPELL CHOICES ──────────────────────────────────────────────────
+// The persistent per-build spell-row choices, now surfaced on the real
+// Builds page (public/js/builds.js) — every gear slot shows the spell
+// chosen for THAT build, independent of any other build using the same
+// gear (see build-spell-store.js's header: keyed by "<tab>:<index>", one
+// entry per build, not per gear piece). See spell-map.js for the
+// underlying gear -> spell-row data (generated from Albion's binary
+// dumps + hand-verified corrections). Read is public — same as
+// /api/builds above, everyone viewing a build sees its spell choices —
+// write is requireOfficer, matching how build edits themselves are
+// gated (PUT /api/builds/:tab below).
 
-router.get('/api/build-spells', auth.requireEmojiAdmin, async (req, res) => {
+router.get('/api/build-spells', async (req, res) => {
   res.json(await buildSpellStore.loadAllBuildSpells());
 });
 
-router.put('/api/build-spells/:tab/:index', auth.requireEmojiAdmin, async (req, res) => {
+router.put('/api/build-spells/:tab/:index', auth.requireOfficer, async (req, res) => {
   const { tab, index } = req.params;
   const idx = parseInt(index, 10);
   if (!Number.isInteger(idx) || idx < 0) return res.status(400).json({ error: 'Invalid build index.' });

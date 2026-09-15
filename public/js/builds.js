@@ -61,20 +61,59 @@ function imgTag(name, size) {
 
 const PENCIL_SVG = `<svg class="slot-edit-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.85 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>`;
 
-function slotCard(label, name, slotKey) {
-  if (!name && !label) return `<div class="slot-card empty spacer"></div>`;
-  const editable = slotKey ? ` editable" data-slot="${slotKey}` : '';
+function spacerCard() {
+  return `<div class="slot-card empty spacer"></div>`;
+}
+
+// One compact icon per spell "row" this gear piece has (e.g. a weapon's
+// Q/W/E/passive) — shows the build's own chosen spell for that row, or
+// (editors only) a "+" placeholder for a row nobody's picked yet. Reads
+// from ALL_BUILD_SPELLS, keyed per-build (buildKey), so two builds using
+// the same gear never share a choice — see build-spell-store.js.
+function gearSpellRowHtml(name, slotKey, buildKey, editable) {
+  const entry = window.SPELL_MAP && window.SPELL_MAP[name];
+  if (!entry) return '';
+  const choices = (ALL_BUILD_SPELLS[buildKey] || {})[slotKey] || {};
+
+  const buttons = entry.groups.map(g => {
+    const chosenId = choices[g.key];
+    const chosen = chosenId ? g.spells.find(s => s.spell === chosenId) : null;
+    if (!chosen && !editable) return ''; // nothing to show a plain viewer for this row
+
+    const candidateJson = chosen ? escapeHtml(JSON.stringify(chosen)) : '';
+    const title = chosen ? chosen.name : `${g.label} — click to set`;
+    return `
+      <button type="button" class="gear-spell-btn${chosen ? '' : ' unset'}${editable ? ' editable' : ''}"
+        data-group="${g.key}" data-candidate="${candidateJson}" title="${escapeHtml(title)}">
+        ${chosen ? '<img data-spell-icon alt="">' : '<span class="gear-spell-unset">+</span>'}
+      </button>`;
+  }).join('');
+
+  return buttons ? `<div class="gear-spell-row">${buttons}</div>` : '';
+}
+
+function wireGearSpellIcons(container) {
+  container.querySelectorAll('.gear-spell-btn img[data-spell-icon]').forEach(img => {
+    const candidateJson = img.closest('.gear-spell-btn').dataset.candidate;
+    if (!candidateJson) return;
+    window.wireSpellIcon(img, JSON.parse(candidateJson));
+  });
+}
+
+function slotCard(name, slotKey, editable, buildKey) {
+  const editableAttr = editable ? ` editable" data-slot="${slotKey}` : '';
   if (!name) return `
-    <div class="slot-card empty${editable}">
+    <div class="slot-card empty${editableAttr}">
+      <span class="slot-name">—</span>
       <div class="slot-empty-icon"></div>
-      <div class="slot-info"><span class="slot-label">${label}</span><span class="slot-name">—</span></div>
-      ${slotKey ? PENCIL_SVG : ''}
+      ${editable ? PENCIL_SVG : ''}
     </div>`;
   return `
-    <div class="slot-card${editable}">
+    <div class="slot-card${editableAttr}">
+      <span class="slot-name" title="${name}">${name}</span>
       ${imgTag(name, 56)}
-      <div class="slot-info"><span class="slot-label">${label}</span><span class="slot-name" title="${name}">${name}</span></div>
-      ${slotKey ? PENCIL_SVG : ''}
+      ${gearSpellRowHtml(name, slotKey, buildKey, editable)}
+      ${editable ? PENCIL_SVG : ''}
     </div>`;
 }
 
@@ -118,14 +157,29 @@ function ensurePicker() {
 
 function openPicker(slotKey, allowClear, onPick) {
   ensurePicker();
-  pickerTarget = { slotKey, allowClear, onPick };
+  pickerTarget = { mode: 'item', slotKey, allowClear, onPick };
   document.getElementById('item-picker-title').textContent = `Choose ${SLOT_LABELS[slotKey] || slotKey}`;
   const overlay = document.getElementById('item-picker-overlay');
   overlay.classList.add('open');
   const search = document.getElementById('item-picker-search');
   search.value = '';
+  search.style.display = '';
   renderPickerGrid('');
   setTimeout(() => search.focus(), 30);
+}
+
+// Same modal, reused for picking one spell within a single row (e.g. just
+// this weapon's Q options) — see renderPickerGrid()'s mode branch below.
+function openSpellPicker(title, spells, currentSpellId, onPick) {
+  ensurePicker();
+  pickerTarget = { mode: 'spell', spells, currentSpellId, onPick };
+  document.getElementById('item-picker-title').textContent = `Choose ${title}`;
+  const overlay = document.getElementById('item-picker-overlay');
+  overlay.classList.add('open');
+  const search = document.getElementById('item-picker-search');
+  search.value = '';
+  search.style.display = 'none'; // a row only ever has a handful of options — search adds no value
+  renderPickerGrid('');
 }
 
 function closePicker() {
@@ -137,6 +191,33 @@ function closePicker() {
 function renderPickerGrid(q) {
   const grid = document.getElementById('item-picker-grid');
   if (!pickerTarget) return;
+
+  if (pickerTarget.mode === 'spell') {
+    const clearTile = `<div class="item-pick-tile item-pick-clear" data-spell="">
+      <div class="slot-empty-icon" style="width:44px;height:44px;"></div>
+      <span>None</span>
+    </div>`;
+    const spellTiles = pickerTarget.spells.map(c => `
+      <div class="item-pick-tile${c.spell === pickerTarget.currentSpellId ? ' selected' : ''}" data-spell="${escapeHtml(c.spell)}">
+        <img class="spell-pick-icon" data-candidate="${escapeHtml(JSON.stringify(c))}" alt="">
+        <span title="${escapeHtml(c.name)}">${escapeHtml(c.name)}</span>
+      </div>`).join('');
+
+    grid.innerHTML = clearTile + spellTiles;
+    grid.querySelectorAll('.spell-pick-icon').forEach(img => {
+      window.wireSpellIcon(img, JSON.parse(img.dataset.candidate));
+    });
+    grid.querySelectorAll('.item-pick-tile').forEach(tile => {
+      tile.addEventListener('click', () => {
+        const spellId = tile.dataset.spell;
+        const onPick = pickerTarget.onPick;
+        closePicker();
+        onPick(spellId || null);
+      });
+    });
+    return;
+  }
+
   const query = q.toLowerCase();
   const items = (ITEMS_BY_SLOT[pickerTarget.slotKey] || []).filter(name => !query || name.toLowerCase().includes(query));
 
@@ -191,12 +272,36 @@ function pulseButton(btn) {
    /api/builds. No more per-device localStorage.
 ───────────────────────────────────────── */
 let ALL_BUILDS = null; // { brawl: [...], kite: [...], tracking: [...], ... }
+let ALL_BUILD_SPELLS = {}; // { "<tab>:<index>": { <slotKey>: { <groupKey>: spellUniquename } } }
 let currentTab = 'brawl'; // Track active tab
 
 async function fetchAllBuilds() {
   const res = await fetch('/api/builds');
   if (!res.ok) throw new Error('Failed to load builds');
   return res.json();
+}
+
+async function fetchAllBuildSpells() {
+  const res = await fetch('/api/build-spells');
+  if (!res.ok) return {}; // non-fatal — builds still work without spell data
+  return res.json();
+}
+
+async function saveBuildSpellChoice(tabKey, idx, slot, group, spell) {
+  const res = await fetch(`/api/build-spells/${tabKey}/${idx}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'same-origin',
+    body: JSON.stringify({ slot, group, spell }),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    alert(body.error || 'Could not save that spell choice.');
+    throw new Error('spell save failed');
+  }
+  const saved = await res.json();
+  ALL_BUILD_SPELLS[`${tabKey}:${idx}`] = saved;
+  return saved;
 }
 
 async function saveTabToServer(tabKey, list) {
@@ -283,6 +388,7 @@ function createTab(opts) {
     pane.classList.add('open');
 
     const color = ROLE_COLORS[b.role];
+    const buildKey = `${opts.tabKey}:${workingBuilds.indexOf(b)}`;
 
     card.innerHTML = `
       <div class="card-header">
@@ -301,21 +407,23 @@ function createTab(opts) {
       <div>
         <div class="section-label">Build ${editable ? '<small class="section-hint">click any slot to change it</small>' : ''}</div>
         <div class="slots-grid">
-          ${slotCard('', '')}
-          ${slotCard('Head', b.head, editable ? 'head' : null)}
-          ${slotCard('Cape', b.cape, editable ? 'cape' : null)}
-          ${slotCard('Weapon', b.weapon, editable ? 'weapon' : null)}
-          ${slotCard('Chest', b.chest, editable ? 'chest' : null)}
-          ${slotCard('Offhand', b.offhand, editable ? 'offhand' : null)}
-          ${slotCard('Potion', b.potion, editable ? 'potion' : null)}
-          ${slotCard('Feet', b.feet, editable ? 'feet' : null)}
-          ${slotCard('Food', b.food, editable ? 'food' : null)}
+          ${spacerCard()}
+          ${slotCard(b.head, 'head', editable, buildKey)}
+          ${slotCard(b.cape, 'cape', editable, buildKey)}
+          ${slotCard(b.weapon, 'weapon', editable, buildKey)}
+          ${slotCard(b.chest, 'chest', editable, buildKey)}
+          ${slotCard(b.offhand, 'offhand', editable, buildKey)}
+          ${slotCard(b.potion, 'potion', editable, buildKey)}
+          ${slotCard(b.feet, 'feet', editable, buildKey)}
+          ${slotCard(b.food, 'food', editable, buildKey)}
         </div>
       </div>
       ${(b.note || editable) ? `
       <div class="card-note-block${b.note ? '' : ' empty'}"${editable ? ' title="Click to edit note"' : ''}>
         ${FLAG_SVG}<span class="card-note-text">${b.note ? escapeHtml(b.note) : 'Add a note…'}</span>
       </div>` : ''}`;
+
+    wireGearSpellIcons(card);
 
     if (editable) {
       // Slot clicks open the item picker for that slot.
@@ -326,6 +434,28 @@ function createTab(opts) {
           openPicker(slotKey, allowClear, (name) => {
             b[slotKey] = name;
             refreshAfterEdit(b);
+          });
+        });
+      });
+
+      // Spell-row clicks open a small picker scoped to that one row
+      // (e.g. just this weapon's Q options) — stopPropagation so it
+      // doesn't also trigger the parent slot-card's "change gear" click.
+      card.querySelectorAll('.gear-spell-btn.editable').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const slotEl = btn.closest('.slot-card');
+          const slotKey = slotEl.dataset.slot;
+          const groupKey = btn.dataset.group;
+          const gearName = b[slotKey];
+          const entry = window.SPELL_MAP && window.SPELL_MAP[gearName];
+          const group = entry && entry.groups.find(g => g.key === groupKey);
+          if (!group) return;
+          const idx2 = workingBuilds.indexOf(b);
+          const currentId = ((ALL_BUILD_SPELLS[`${opts.tabKey}:${idx2}`] || {})[slotKey] || {})[groupKey];
+          openSpellPicker(group.label, group.spells, currentId, async (spellId) => {
+            await saveBuildSpellChoice(opts.tabKey, idx2, slotKey, groupKey, spellId);
+            select(currentList.indexOf(b));
           });
         });
       });
@@ -501,6 +631,7 @@ async function initTabs() {
   // Load categories first, then builds
   await loadCategories();
   ALL_BUILDS = await fetchAllBuilds();
+  ALL_BUILD_SPELLS = await fetchAllBuildSpells();
   window.ALL_BUILDS = ALL_BUILDS; // Expose globally for builds-categories.js
 
   createTab({ tabKey: 'brawl',    searchId: 'search',          filterId: 'filter-group',          countId: 'count-label',          tbodyId: 'tbody',          emptyId: 'empty',          placeholderId: 'detail-placeholder',          cardId: 'detail-card',          paneId: 'brawl-detail-pane',    addBtnId: 'add-build-btn',          resetBtnId: 'reset-build-btn',          roles: ['dps','healer','support','tank'] });

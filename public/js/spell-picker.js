@@ -51,29 +51,11 @@ function escapeHtml(s) {
 }
 
 function initials(name) {
-  return (name || '?').trim().split(/\s+/).slice(0, 2).map(w => w[0]).join('').toUpperCase();
+  return window.spellIconInitials(name);
 }
 
-// render.albiononline.com has no single consistent spell-icon naming
-// scheme (see spell-map.js's header) — try each candidate URL in turn,
-// and if every one 404s, swap the <img> for a plain initials badge
-// instead of leaving a broken-image icon on screen.
 function wireSpellIcon(img, candidate) {
-  if (candidate.flip) img.classList.add('spell-icon-flip');
-  const urls = window.spellIconCandidates(candidate);
-  let i = 0;
-  img.src = urls[i];
-  img.onerror = () => {
-    i += 1;
-    if (i < urls.length) {
-      img.src = urls[i];
-      return;
-    }
-    const badge = document.createElement('span');
-    badge.className = 'spell-option-fallback';
-    badge.textContent = initials(candidate.name);
-    img.replaceWith(badge);
-  };
+  window.wireSpellIcon(img, candidate);
 }
 
 function spellOptionHtml(candidate) {
