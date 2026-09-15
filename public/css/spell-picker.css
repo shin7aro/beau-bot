@@ -101,7 +101,7 @@
 }
 .spell-option:hover { border-color: var(--ink-dim); transform: translateY(-1px); }
 .spell-option img { width: 100%; height: 100%; object-fit: contain; border-radius: 4px; }
-.spell-option img.spell-icon-flip { transform: scaleX(-1); }
+.spell-option img.spell-icon-flip { transform: scaleY(-1); }
 .spell-option-fallback {
   width: 100%; height: 100%; border-radius: 4px;
   background: var(--surface-3, var(--surface-2));
