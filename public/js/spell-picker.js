@@ -59,6 +59,7 @@ function initials(name) {
 // and if every one 404s, swap the <img> for a plain initials badge
 // instead of leaving a broken-image icon on screen.
 function wireSpellIcon(img, candidate) {
+  if (candidate.flip) img.classList.add('spell-icon-flip');
   const urls = window.spellIconCandidates(candidate);
   let i = 0;
   img.src = urls[i];

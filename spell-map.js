@@ -17,36 +17,33 @@
 // at all — every weapon in a family (including "basic" 1H/2H versions,
 // not just named artifacts) references back to one shared spell list in
 // the dump. All 136 weapons' third abilities were hand-verified against
-// the Albion Wiki's "Comparison of Equipment/Spells" master table
-// (https://wiki.albiononline.com/wiki/Comparison_of_Equipment/Spells),
-// then matched to their internal spell uniquename via localization.xml.
+// the Albion Wiki's "Comparison of Equipment/Spells" master table, then
+// matched to their internal spell uniquename via localization.xml.
 //
-// NAME-COLLISION CANDIDATES (armor): a handful of armor abilities share
-// their plain display name with a completely unrelated ability
-// elsewhere in the game (the wiki itself disambiguates these, e.g. its
-// page titles "Hush (Active)" and "Rush (Hunter Shoes)") — when that's
-// confirmed, the candidate carries an extra "altName" field with the
-// disambiguated wiki title, tried before icon/name/spell, since the
-// plain name alone is what was rendering the WRONG (but real) ability's
-// icon. Only added where confirmed against the wiki; other entries may
-// have the same issue undiagnosed.
-//
-// IMPORTANT CAVEAT ON ICONS: render.albiononline.com's spell endpoint
-// does NOT use a single consistent identifier scheme. "icon" here is
-// the spell's own @uisprite value from spells.xml — the same field
-// Albion's client itself uses to choose which icon to show — so
-// (after altName, when present) it's tried next; "name" (the real
-// @SPELLS_<uniquename> display text from localization.xml) and "spell"
-// (the raw internal uniquename) are best-effort fallbacks for when
-// uisprite doesn't resolve. None is guaranteed to hit, and a small
-// number of very new items (e.g. Dragonslayer Hood, added in the 31
-// August 2026 Dragonfire update) may simply not have their icon
-// indexed on the CDN yet regardless of which identifier is tried.
+// ICON IDENTIFIER PRIORITY: render.albiononline.com has no single
+// consistent naming scheme, and — contrary to the initial assumption —
+// the spell's own @uisprite ("icon" below) is frequently WRONG on this
+// specific endpoint even though it's what Albion's client itself uses
+// internally; several confirmed cases (Heroic Cleave, Elevated Nature,
+// Spirit Animal, Magma Sphere, Hush, Rush) all needed the plain internal
+// uniquename ("spell") instead. Priority is therefore:
+//   1. "confirmed" — a URL manually verified working in-browser (see
+//      the CONFIRMED list this was built from, in the chat history this
+//      file was generated from). Always correct when present.
+//   2. "spell" — the raw internal uniquename. Empirically the most
+//      reliable fallback.
+//   3. "name" — the real @SPELLS_<uniquename> display text.
+//   4. "icon" — the @uisprite value. Kept last, not first, per above.
+// No query string is appended (?size=&locale= was tested and is not
+// needed — confirmed URLs work as bare `.../<id>.png`).
+// A candidate with "flip: true" renders visually upside-down and needs
+// a CSS flip on the client (see spell-picker.js's wireSpellIcon()).
 //
 // GENERATED from Albion Online's binary dumps (ao-data/ao-bin-dumps —
 // items.xml's @shopsubcategory1 per item, spells.xml's uisprite per
 // spell, localization.xml for display names) plus the wiki-verified
-// corrections above, on 2026-09-14/15.
+// third-ability corrections and the user-verified icon corrections
+// above, on 2026-09-15.
 
 const SPELL_MAP = {
   // Weapons
@@ -135,7 +132,7 @@ const SPELL_MAP = {
   "Blight Staff": { itemId: "T8_2H_NATURESTAFF_HELL", slot: "weapon", category: "naturestaff", groups: [
       { key: "active1", label: "Active slot 1", spells: [{ spell: "REJUVENATION", icon: "HEAL_HOT", name: "Rejuvenation" }, { spell: "THORNSAREA", icon: "THORNSAREA", name: "Thorn Growth" }, { spell: "REJUVMUSHROOM_GRENADE", icon: "NATURE_HEALING_SPELL", name: "Rejuvmushroom Grenade" }] },
       { key: "active2", label: "Active slot 2", spells: [{ spell: "BRAMBLESEED", icon: "THORNS", name: "Brambleseed" }, { spell: "REANIMATE", icon: "REANIMATE", name: "Revitalize" }, { spell: "NATURERESILIENCE", icon: "REJUVMUSHROOM", name: "Protection of Nature" }, { spell: "CLEANSEHEAL", icon: "CLEANSEHEAL", name: "Cleanse Heal" }, { spell: "REJUVENATING_BREEZE", icon: "REJUVINATING_BREEZE", name: "Rejuvenating Breeze" }] },
-      { key: "active3", label: "Active slot 3", spells: [{ spell: "ROTTENVINES", icon: "RUTHLESS_NATURE", name: "Elevated Nature" }] },
+      { key: "active3", label: "Active slot 3", spells: [{ spell: "ROTTENVINES", icon: "RUTHLESS_NATURE", name: "Elevated Nature", confirmed: "ROTTENVINES" }] },
       { key: "passive", label: "Passive", spells: [{ spell: "PASSIVE_HEALPOWERCHANCE", icon: "PASSIVE_VITALITY_1", name: "Adrenaline Driven Charity" }, { spell: "PASSIVE_ENERGYCHANCE_NATURESTAFF", icon: "PASSIVE_TACTICIAN", name: "Passive Energychance Naturestaff" }, { spell: "PASSIVE_ARMOR_CASTER_NATURESTAFF", icon: "PASSIVEEFFECT_GUARD", name: "Passive Armor Caster Naturestaff" }, { spell: "PASSIVE_MOVESPEED_CHANCE_NATURESTAFF", icon: "PASSIVE_AGILITY_1", name: "Passive Movespeed Chance Naturestaff" }] }
   ] },
   "Bloodletter": { itemId: "T8_MAIN_RAPIER_MORGANA", slot: "weapon", category: "dagger", groups: [
@@ -193,7 +190,7 @@ const SPELL_MAP = {
       { key: "passive", label: "Passive", spells: [{ spell: "PASSIVE_BURN", icon: "PASSIVE_FURY_1", name: "Burn" }, { spell: "PASSIVE_ENERGYCHANCE_FIRESTAFF", icon: "PASSIVE_TACTICIAN", name: "Passive Energychance Firestaff" }, { spell: "PASSIVE_CASTINGSPEED_CHANCE_FIRESTAFF", icon: "PASSIVE_SHARPSHOOTER", name: "Passive Castingspeed Chance Firestaff" }, { spell: "PASSIVE_SPELLPOWER_CASTER_FIRESTAFF", icon: "PASSIVE_PARALYSIS", name: "Passive Spellpower Caster Firestaff" }] }
   ] },
   "Broadsword": { itemId: "T8_MAIN_SWORD", slot: "weapon", category: "sword", groups: [
-      { key: "active1", label: "Active slot 1", spells: [{ spell: "HEROICSTRIKE2", icon: "DECAPITATE", name: "Heroic Strike" }, { spell: "CLEAVE", icon: "CLEAVE_SWORD", name: "Heroic Cleave" }] },
+      { key: "active1", label: "Active slot 1", spells: [{ spell: "HEROICSTRIKE2", icon: "DECAPITATE", name: "Heroic Strike" }, { spell: "CLEAVE", icon: "CLEAVE_SWORD", name: "Heroic Cleave", confirmed: "CLEAVE" }] },
       { key: "active2", label: "Active slot 2", spells: [{ spell: "SWORD_SPIN", icon: "SWORD_SPIN", name: "Blade Cyclone" }, { spell: "INTERRUPT2", icon: "INTERRUPT_BLUNT", name: "Interrupt" }, { spell: "SPLITTINGSLASH", icon: "SPLITTING_SMASH", name: "Splitting Slash" }, { spell: "HAMSTRINGSWORD", icon: "HAMSTRING", name: "Hamstring" }, { spell: "PARRY", icon: "BLOCK", name: "Parry Strike" }, { spell: "DEFENSERUN", icon: "MELEE_BUFF", name: "Iron Will" }] },
       { key: "active3", label: "Active slot 3", spells: [{ spell: "MIGHTYBLOW", icon: "WHIRLWIND_SWORD", name: "Mighty Blow" }] },
       { key: "passive", label: "Passive", spells: [{ spell: "PASSIVE_BLEEDCHANCE", icon: "PASSIVE_FURY_1", name: "Deep Cuts" }, { spell: "PASSIVE_REDUCE_DMG_SWORD", icon: "PASSIVE_TACTICIAN", name: "Weakening" }, { spell: "PASSIVE_HEROICSTACK", icon: "PASSIVE_PARALYSIS", name: "Heroic Fighting" }, { spell: "PASSIVE_ARMORCHANCE_SWORD", icon: "PASSIVEEFFECT_GUARD", name: "Passive Armorchance Sword" }] }
@@ -211,7 +208,7 @@ const SPELL_MAP = {
       { key: "passive", label: "Passive", spells: [{ spell: "PASSIVE_BLEEDCHANCE", icon: "PASSIVE_FURY_1", name: "Deep Cuts" }, { spell: "PASSIVE_HEALTHCHANCE_AXE", icon: "PASSIVE_VITALITY_1", name: "Passive Healthchance Axe" }, { spell: "PASSIVE_ARMORCHANCE_AXE", icon: "PASSIVEEFFECT_GUARD", name: "Passive Armorchance Axe" }, { spell: "PASSIVE_SPELLPOWER_CHANCE_AXE", icon: "PASSIVE_PARALYSIS", name: "Passive Spellpower Chance Axe" }] }
   ] },
   "Carving Sword": { itemId: "T8_2H_CLEAVER_HELL", slot: "weapon", category: "sword", groups: [
-      { key: "active1", label: "Active slot 1", spells: [{ spell: "HEROICSTRIKE2", icon: "DECAPITATE", name: "Heroic Strike" }, { spell: "CLEAVE", icon: "CLEAVE_SWORD", name: "Heroic Cleave" }] },
+      { key: "active1", label: "Active slot 1", spells: [{ spell: "HEROICSTRIKE2", icon: "DECAPITATE", name: "Heroic Strike" }, { spell: "CLEAVE", icon: "CLEAVE_SWORD", name: "Heroic Cleave", confirmed: "CLEAVE" }] },
       { key: "active2", label: "Active slot 2", spells: [{ spell: "SWORD_SPIN", icon: "SWORD_SPIN", name: "Blade Cyclone" }, { spell: "INTERRUPT2", icon: "INTERRUPT_BLUNT", name: "Interrupt" }, { spell: "SPLITTINGSLASH", icon: "SPLITTING_SMASH", name: "Splitting Slash" }, { spell: "HAMSTRINGSWORD", icon: "HAMSTRING", name: "Hamstring" }, { spell: "PARRY", icon: "BLOCK", name: "Parry Strike" }, { spell: "DEFENSERUN", icon: "MELEE_BUFF", name: "Iron Will" }] },
       { key: "active3", label: "Active slot 3", spells: [{ spell: "CLAYMORESLASH", icon: "FEARLESS_STRIKE", name: "Fearless Strike" }] },
       { key: "passive", label: "Passive", spells: [{ spell: "PASSIVE_BLEEDCHANCE", icon: "PASSIVE_FURY_1", name: "Deep Cuts" }, { spell: "PASSIVE_REDUCE_DMG_SWORD", icon: "PASSIVE_TACTICIAN", name: "Weakening" }, { spell: "PASSIVE_HEROICSTACK", icon: "PASSIVE_PARALYSIS", name: "Heroic Fighting" }, { spell: "PASSIVE_ARMORCHANCE_SWORD", icon: "PASSIVEEFFECT_GUARD", name: "Passive Armorchance Sword" }] }
@@ -223,7 +220,7 @@ const SPELL_MAP = {
       { key: "passive", label: "Passive", spells: [{ spell: "PASSIVE_FROST", icon: "PASSIVE_FURY_1", name: "Frost" }, { spell: "PASSIVE_ENERGYCHANCE_FROSTSTAFF", icon: "PASSIVE_TACTICIAN", name: "Passive Energychance Froststaff" }, { spell: "PASSIVE_CASTINGSPEED_CHANCE_FROSTSTAFF", icon: "PASSIVE_SHARPSHOOTER", name: "Passive Castingspeed Chance Froststaff" }, { spell: "PASSIVE_SPELLPOWER_CASTER_FROSTSTAFF", icon: "PASSIVE_PARALYSIS", name: "Passive Spellpower Caster Froststaff" }] }
   ] },
   "Clarent Blade": { itemId: "T8_MAIN_SCIMITAR_MORGANA", slot: "weapon", category: "sword", groups: [
-      { key: "active1", label: "Active slot 1", spells: [{ spell: "HEROICSTRIKE2", icon: "DECAPITATE", name: "Heroic Strike" }, { spell: "CLEAVE", icon: "CLEAVE_SWORD", name: "Heroic Cleave" }] },
+      { key: "active1", label: "Active slot 1", spells: [{ spell: "HEROICSTRIKE2", icon: "DECAPITATE", name: "Heroic Strike" }, { spell: "CLEAVE", icon: "CLEAVE_SWORD", name: "Heroic Cleave", confirmed: "CLEAVE" }] },
       { key: "active2", label: "Active slot 2", spells: [{ spell: "SWORD_SPIN", icon: "SWORD_SPIN", name: "Blade Cyclone" }, { spell: "INTERRUPT2", icon: "INTERRUPT_BLUNT", name: "Interrupt" }, { spell: "SPLITTINGSLASH", icon: "SPLITTING_SMASH", name: "Splitting Slash" }, { spell: "HAMSTRINGSWORD", icon: "HAMSTRING", name: "Hamstring" }, { spell: "PARRY", icon: "BLOCK", name: "Parry Strike" }, { spell: "DEFENSERUN", icon: "MELEE_BUFF", name: "Iron Will" }] },
       { key: "active3", label: "Active slot 3", spells: [{ spell: "MIGHTYSWING", icon: "CRESCENT_SLASH_2", name: "Crescent Slash" }] },
       { key: "passive", label: "Passive", spells: [{ spell: "PASSIVE_BLEEDCHANCE", icon: "PASSIVE_FURY_1", name: "Deep Cuts" }, { spell: "PASSIVE_REDUCE_DMG_SWORD", icon: "PASSIVE_TACTICIAN", name: "Weakening" }, { spell: "PASSIVE_HEROICSTACK", icon: "PASSIVE_PARALYSIS", name: "Heroic Fighting" }, { spell: "PASSIVE_ARMORCHANCE_SWORD", icon: "PASSIVEEFFECT_GUARD", name: "Passive Armorchance Sword" }] }
@@ -235,7 +232,7 @@ const SPELL_MAP = {
       { key: "passive", label: "Passive", spells: [{ spell: "PASSIVE_BLEEDCHANCE", icon: "PASSIVE_FURY_1", name: "Deep Cuts" }, { spell: "PASSIVE_HEALTHCHANCE_DAGGER", icon: "PASSIVE_VITALITY_1", name: "Passive Healthchance Dagger" }, { spell: "PASSIVE_AASPEEDCHANCE_DAGGER", icon: "PASSIVE_AGILITY_1", name: "Passive Aaspeedchance Dagger" }, { spell: "PASSIVE_SPELLPOWER_CHANCE_DAGGER", icon: "PASSIVE_PARALYSIS", name: "Passive Spellpower Chance Dagger" }] }
   ] },
   "Claymore": { itemId: "T8_2H_CLAYMORE", slot: "weapon", category: "sword", groups: [
-      { key: "active1", label: "Active slot 1", spells: [{ spell: "HEROICSTRIKE2", icon: "DECAPITATE", name: "Heroic Strike" }, { spell: "CLEAVE", icon: "CLEAVE_SWORD", name: "Heroic Cleave" }] },
+      { key: "active1", label: "Active slot 1", spells: [{ spell: "HEROICSTRIKE2", icon: "DECAPITATE", name: "Heroic Strike" }, { spell: "CLEAVE", icon: "CLEAVE_SWORD", name: "Heroic Cleave", confirmed: "CLEAVE" }] },
       { key: "active2", label: "Active slot 2", spells: [{ spell: "SWORD_SPIN", icon: "SWORD_SPIN", name: "Blade Cyclone" }, { spell: "INTERRUPT2", icon: "INTERRUPT_BLUNT", name: "Interrupt" }, { spell: "SPLITTINGSLASH", icon: "SPLITTING_SMASH", name: "Splitting Slash" }, { spell: "HAMSTRINGSWORD", icon: "HAMSTRING", name: "Hamstring" }, { spell: "PARRY", icon: "BLOCK", name: "Parry Strike" }, { spell: "DEFENSERUN", icon: "MELEE_BUFF", name: "Iron Will" }] },
       { key: "active3", label: "Active slot 3", spells: [{ spell: "CHARGE", icon: null, name: "Charge" }] },
       { key: "passive", label: "Passive", spells: [{ spell: "PASSIVE_BLEEDCHANCE", icon: "PASSIVE_FURY_1", name: "Deep Cuts" }, { spell: "PASSIVE_REDUCE_DMG_SWORD", icon: "PASSIVE_TACTICIAN", name: "Weakening" }, { spell: "PASSIVE_HEROICSTACK", icon: "PASSIVE_PARALYSIS", name: "Heroic Fighting" }, { spell: "PASSIVE_ARMORCHANCE_SWORD", icon: "PASSIVEEFFECT_GUARD", name: "Passive Armorchance Sword" }] }
@@ -350,7 +347,7 @@ const SPELL_MAP = {
   ] },
   // Head
   "Demon Helmet": { itemId: "T8_HEAD_PLATE_HELL", slot: "head", category: "plate_helmet", groups: [
-      { key: "active", label: "Active", spells: [{ spell: "ENERGY_BARRIER", icon: "MAGICBARRIER", name: "Energizing Shield" }, { spell: "STONESKIN", icon: "OVERLOAD", name: "Stone Skin" }, { spell: "WEAPON_SILENCE", icon: "SILENCE", name: "Hush", altName: "Hush (Active)" }] },
+      { key: "active", label: "Active", spells: [{ spell: "ENERGY_BARRIER", icon: "MAGICBARRIER", name: "Energizing Shield" }, { spell: "STONESKIN", icon: "OVERLOAD", name: "Stone Skin" }, { spell: "WEAPON_SILENCE", icon: "SILENCE", name: "Hush", confirmed: "WEAPON_SILENCE" }] },
       { key: "passive", label: "Passive", spells: [{ spell: "PASSIVE_MR_AR", icon: "PASSIVE_GUARD", name: "Toughness" }, { spell: "PASSIVE_CCDURATION", icon: "PASSIVE_SHARPSHOOTER", name: "Authority" }, { spell: "PASSIVE_INCREASED_CCR", icon: "PASSIVE_THORNS_1", name: "Tenacity" }] }
   ] },
   // Weapons
@@ -380,7 +377,7 @@ const SPELL_MAP = {
   ] },
   // Head
   "Dragonslayer Hood": { itemId: "T8_HEAD_LEATHER_DRAGON", slot: "head", category: "leather_helmet", groups: [
-      { key: "active", label: "Active", spells: [{ spell: "ENERGY_BARRIER", icon: "MAGICBARRIER", name: "Energizing Shield" }, { spell: "SELF_CLEANSE", icon: "MAGICCIRCLE_MOVEMENT", name: "Cleanse" }, { spell: "FLARE", icon: "FLARE", name: "Flare" }] },
+      { key: "active", label: "Active", spells: [{ spell: "ENERGY_BARRIER", icon: "MAGICBARRIER", name: "Energizing Shield" }, { spell: "SELF_CLEANSE", icon: "MAGICCIRCLE_MOVEMENT", name: "Cleanse" }, { spell: "FLARE", icon: "FLARE", name: "Flare", confirmed: "FLARE" }] },
       { key: "passive", label: "Passive", spells: [{ spell: "PASSIVE_BALANCE", icon: "PASSIVE_VITALITY_1", name: "Balanced Mind" }, { spell: "PASSIVE_INCREASED_AASPEED", icon: "PASSIVE_AGILITY_1", name: "Swiftness" }, { spell: "PASSIVE_CD_REDUCTION", icon: "PASSIVE_PARALYSIS", name: "Quick Thinker" }] }
   ] },
   // Chest
@@ -390,7 +387,7 @@ const SPELL_MAP = {
   ] },
   // Feet
   "Dragonslayer Shoes": { itemId: "T8_SHOES_LEATHER_DRAGON", slot: "feet", category: "leather_shoes", groups: [
-      { key: "active", label: "Active", spells: [{ spell: "DODGE", icon: "DODGE_ROLL", name: "Dodge" }, { spell: "SPRINT_CD_REDUCTION", icon: "SPRINT", name: "Refreshing Sprint" }, { spell: "WEAPON_SPRINT", icon: "WEAPON_SPRINT", name: "Burning Momentum" }] },
+      { key: "active", label: "Active", spells: [{ spell: "DODGE", icon: "DODGE_ROLL", name: "Dodge" }, { spell: "SPRINT_CD_REDUCTION", icon: "SPRINT", name: "Refreshing Sprint" }, { spell: "WEAPON_SPRINT", icon: "WEAPON_SPRINT", name: "Burning Momentum", flip: true }] },
       { key: "passive", label: "Passive", spells: [{ spell: "PASSIVE_MAXLOAD_SHOES", icon: "PASSIVE_MAXLOAD", name: "Courier" }, { spell: "PASSIVE_BALANCE", icon: "PASSIVE_VITALITY_1", name: "Balanced Mind" }, { spell: "PASSIVE_INCREASED_AASPEED", icon: "PASSIVE_AGILITY_1", name: "Swiftness" }, { spell: "PASSIVE_CD_REDUCTION", icon: "PASSIVE_PARALYSIS", name: "Quick Thinker" }] }
   ] },
   // Weapons
@@ -423,7 +420,7 @@ const SPELL_MAP = {
       { key: "passive", label: "Passive", spells: [{ spell: "PASSIVE_HEALPOWERCHANCE", icon: "PASSIVE_VITALITY_1", name: "Adrenaline Driven Charity" }, { spell: "PASSIVE_ENERGYCHANCE_NATURESTAFF", icon: "PASSIVE_TACTICIAN", name: "Passive Energychance Naturestaff" }, { spell: "PASSIVE_ARMOR_CASTER_NATURESTAFF", icon: "PASSIVEEFFECT_GUARD", name: "Passive Armor Caster Naturestaff" }, { spell: "PASSIVE_MOVESPEED_CHANCE_NATURESTAFF", icon: "PASSIVE_AGILITY_1", name: "Passive Movespeed Chance Naturestaff" }] }
   ] },
   "Dual Swords": { itemId: "T8_2H_DUALSWORD", slot: "weapon", category: "sword", groups: [
-      { key: "active1", label: "Active slot 1", spells: [{ spell: "HEROICSTRIKE2", icon: "DECAPITATE", name: "Heroic Strike" }, { spell: "CLEAVE", icon: "CLEAVE_SWORD", name: "Heroic Cleave" }] },
+      { key: "active1", label: "Active slot 1", spells: [{ spell: "HEROICSTRIKE2", icon: "DECAPITATE", name: "Heroic Strike" }, { spell: "CLEAVE", icon: "CLEAVE_SWORD", name: "Heroic Cleave", confirmed: "CLEAVE" }] },
       { key: "active2", label: "Active slot 2", spells: [{ spell: "SWORD_SPIN", icon: "SWORD_SPIN", name: "Blade Cyclone" }, { spell: "INTERRUPT2", icon: "INTERRUPT_BLUNT", name: "Interrupt" }, { spell: "SPLITTINGSLASH", icon: "SPLITTING_SMASH", name: "Splitting Slash" }, { spell: "HAMSTRINGSWORD", icon: "HAMSTRING", name: "Hamstring" }, { spell: "PARRY", icon: "BLOCK", name: "Parry Strike" }, { spell: "DEFENSERUN", icon: "MELEE_BUFF", name: "Iron Will" }] },
       { key: "active3", label: "Active slot 3", spells: [{ spell: "SPINATTACK", icon: "SPINNING_BLADES", name: "Spinning Blades" }] },
       { key: "passive", label: "Passive", spells: [{ spell: "PASSIVE_BLEEDCHANCE", icon: "PASSIVE_FURY_1", name: "Deep Cuts" }, { spell: "PASSIVE_REDUCE_DMG_SWORD", icon: "PASSIVE_TACTICIAN", name: "Weakening" }, { spell: "PASSIVE_HEROICSTACK", icon: "PASSIVE_PARALYSIS", name: "Heroic Fighting" }, { spell: "PASSIVE_ARMORCHANCE_SWORD", icon: "PASSIVEEFFECT_GUARD", name: "Passive Armorchance Sword" }] }
@@ -515,7 +512,7 @@ const SPELL_MAP = {
   "Fire Staff": { itemId: "T8_MAIN_FIRESTAFF", slot: "weapon", category: "firestaff", groups: [
       { key: "active1", label: "Active slot 1", spells: [{ spell: "FIRESTAFFBOLT2", icon: "MAGICPROJECTILE_FIRE", name: "Fire Bolt" }, { spell: "FIRESTAFFBOLT_AOE", icon: "AOE_FIRE", name: "Burning Field" }, { spell: "SEARING_FLAME", icon: "SEARING_FLAME", name: "Searing Flame" }] },
       { key: "active2", label: "Active slot 2", spells: [{ spell: "FIRESTAFFIGNITE2_SPREAD", icon: "IGNITE", name: "Flame Blast" }, { spell: "FIREWALL", icon: "INCINERATE", name: "Wall of Flames" }, { spell: "SKILLSHOT_FIREBALL", icon: "FIRE_WAVE", name: "Raging Flare" }, { spell: "FIRECONE", icon: "FLAMECONE", name: "Fire Wave" }, { spell: "FIREARTILLERY", icon: "FIRE_ARTILLERY", name: "Fire Artillery" }] },
-      { key: "active3", label: "Active slot 3", spells: [{ spell: "PYROBLAST2", icon: null, name: "Pyroblast" }] },
+      { key: "active3", label: "Active slot 3", spells: [{ spell: "PYROBLAST2", icon: null, name: "Pyroblast", confirmed: "PYROBLAST_SKILLSHOT" }] },
       { key: "passive", label: "Passive", spells: [{ spell: "PASSIVE_BURN", icon: "PASSIVE_FURY_1", name: "Burn" }, { spell: "PASSIVE_ENERGYCHANCE_FIRESTAFF", icon: "PASSIVE_TACTICIAN", name: "Passive Energychance Firestaff" }, { spell: "PASSIVE_CASTINGSPEED_CHANCE_FIRESTAFF", icon: "PASSIVE_SHARPSHOOTER", name: "Passive Castingspeed Chance Firestaff" }, { spell: "PASSIVE_SPELLPOWER_CASTER_FIRESTAFF", icon: "PASSIVE_PARALYSIS", name: "Passive Spellpower Caster Firestaff" }] }
   ] },
   "Fists of Avalon": { itemId: "T8_2H_KNUCKLES_AVALON", slot: "weapon", category: "knuckles", groups: [
@@ -555,7 +552,7 @@ const SPELL_MAP = {
       { key: "passive", label: "Passive", spells: [{ spell: "PASSIVE_FROST", icon: "PASSIVE_FURY_1", name: "Frost" }, { spell: "PASSIVE_ENERGYCHANCE_FROSTSTAFF", icon: "PASSIVE_TACTICIAN", name: "Passive Energychance Froststaff" }, { spell: "PASSIVE_CASTINGSPEED_CHANCE_FROSTSTAFF", icon: "PASSIVE_SHARPSHOOTER", name: "Passive Castingspeed Chance Froststaff" }, { spell: "PASSIVE_SPELLPOWER_CASTER_FROSTSTAFF", icon: "PASSIVE_PARALYSIS", name: "Passive Spellpower Caster Froststaff" }] }
   ] },
   "Galatine Pair": { itemId: "T8_2H_DUALSCIMITAR_UNDEAD", slot: "weapon", category: "sword", groups: [
-      { key: "active1", label: "Active slot 1", spells: [{ spell: "HEROICSTRIKE2", icon: "DECAPITATE", name: "Heroic Strike" }, { spell: "CLEAVE", icon: "CLEAVE_SWORD", name: "Heroic Cleave" }] },
+      { key: "active1", label: "Active slot 1", spells: [{ spell: "HEROICSTRIKE2", icon: "DECAPITATE", name: "Heroic Strike" }, { spell: "CLEAVE", icon: "CLEAVE_SWORD", name: "Heroic Cleave", confirmed: "CLEAVE" }] },
       { key: "active2", label: "Active slot 2", spells: [{ spell: "SWORD_SPIN", icon: "SWORD_SPIN", name: "Blade Cyclone" }, { spell: "INTERRUPT2", icon: "INTERRUPT_BLUNT", name: "Interrupt" }, { spell: "SPLITTINGSLASH", icon: "SPLITTING_SMASH", name: "Splitting Slash" }, { spell: "HAMSTRINGSWORD", icon: "HAMSTRING", name: "Hamstring" }, { spell: "PARRY", icon: "BLOCK", name: "Parry Strike" }, { spell: "DEFENSERUN", icon: "MELEE_BUFF", name: "Iron Will" }] },
       { key: "active3", label: "Active slot 3", spells: [{ spell: "BLADE_AREA", icon: "SOULLESS_STEAM", name: "Soulless Stream" }] },
       { key: "passive", label: "Passive", spells: [{ spell: "PASSIVE_BLEEDCHANCE", icon: "PASSIVE_FURY_1", name: "Deep Cuts" }, { spell: "PASSIVE_REDUCE_DMG_SWORD", icon: "PASSIVE_TACTICIAN", name: "Weakening" }, { spell: "PASSIVE_HEROICSTACK", icon: "PASSIVE_PARALYSIS", name: "Heroic Fighting" }, { spell: "PASSIVE_ARMORCHANCE_SWORD", icon: "PASSIVEEFFECT_GUARD", name: "Passive Armorchance Sword" }] }
@@ -770,7 +767,7 @@ const SPELL_MAP = {
   ] },
   // Feet
   "Hunter Shoes": { itemId: "T8_SHOES_LEATHER_SET2", slot: "feet", category: "leather_shoes", groups: [
-      { key: "active", label: "Active", spells: [{ spell: "DODGE", icon: "DODGE_ROLL", name: "Dodge" }, { spell: "SPRINT_CD_REDUCTION", icon: "SPRINT", name: "Refreshing Sprint" }, { spell: "OVERSPRINT", icon: "SPRINT_CC", name: "Rush", altName: "Rush (Hunter Shoes)" }] },
+      { key: "active", label: "Active", spells: [{ spell: "DODGE", icon: "DODGE_ROLL", name: "Dodge" }, { spell: "SPRINT_CD_REDUCTION", icon: "SPRINT", name: "Refreshing Sprint" }, { spell: "OVERSPRINT", icon: "SPRINT_CC", name: "Rush", confirmed: "OVERSPRINT" }] },
       { key: "passive", label: "Passive", spells: [{ spell: "PASSIVE_MAXLOAD_SHOES", icon: "PASSIVE_MAXLOAD", name: "Courier" }, { spell: "PASSIVE_BALANCE", icon: "PASSIVE_VITALITY_1", name: "Balanced Mind" }, { spell: "PASSIVE_INCREASED_AASPEED", icon: "PASSIVE_AGILITY_1", name: "Swiftness" }, { spell: "PASSIVE_CD_REDUCTION", icon: "PASSIVE_PARALYSIS", name: "Quick Thinker" }] }
   ] },
   // Weapons
@@ -799,9 +796,9 @@ const SPELL_MAP = {
       { key: "passive", label: "Passive", spells: [{ spell: "PASSIVE_BURN", icon: "PASSIVE_FURY_1", name: "Burn" }, { spell: "PASSIVE_ENERGYCHANCE_FIRESTAFF", icon: "PASSIVE_TACTICIAN", name: "Passive Energychance Firestaff" }, { spell: "PASSIVE_CASTINGSPEED_CHANCE_FIRESTAFF", icon: "PASSIVE_SHARPSHOOTER", name: "Passive Castingspeed Chance Firestaff" }, { spell: "PASSIVE_SPELLPOWER_CASTER_FIRESTAFF", icon: "PASSIVE_PARALYSIS", name: "Passive Spellpower Caster Firestaff" }] }
   ] },
   "Infinity Blade": { itemId: "T8_MAIN_SWORD_CRYSTAL", slot: "weapon", category: "sword", groups: [
-      { key: "active1", label: "Active slot 1", spells: [{ spell: "HEROICSTRIKE2", icon: "DECAPITATE", name: "Heroic Strike" }, { spell: "CLEAVE", icon: "CLEAVE_SWORD", name: "Heroic Cleave" }] },
+      { key: "active1", label: "Active slot 1", spells: [{ spell: "HEROICSTRIKE2", icon: "DECAPITATE", name: "Heroic Strike" }, { spell: "CLEAVE", icon: "CLEAVE_SWORD", name: "Heroic Cleave", confirmed: "CLEAVE" }] },
       { key: "active2", label: "Active slot 2", spells: [{ spell: "SWORD_SPIN", icon: "SWORD_SPIN", name: "Blade Cyclone" }, { spell: "INTERRUPT2", icon: "INTERRUPT_BLUNT", name: "Interrupt" }, { spell: "SPLITTINGSLASH", icon: "SPLITTING_SMASH", name: "Splitting Slash" }, { spell: "HAMSTRINGSWORD", icon: "HAMSTRING", name: "Hamstring" }, { spell: "PARRY", icon: "BLOCK", name: "Parry Strike" }, { spell: "DEFENSERUN", icon: "MELEE_BUFF", name: "Iron Will" }] },
-      { key: "active3", label: "Active slot 3", spells: [{ spell: "SWORD_BERSERK_RUN", icon: null, name: "Limitbreaker" }] },
+      { key: "active3", label: "Active slot 3", spells: [{ spell: "SWORD_BERSERK_RUN", icon: null, name: "Limitbreaker", confirmed: "SWORD_BERSERK_RUN_RE" }] },
       { key: "passive", label: "Passive", spells: [{ spell: "PASSIVE_BLEEDCHANCE", icon: "PASSIVE_FURY_1", name: "Deep Cuts" }, { spell: "PASSIVE_REDUCE_DMG_SWORD", icon: "PASSIVE_TACTICIAN", name: "Weakening" }, { spell: "PASSIVE_HEROICSTACK", icon: "PASSIVE_PARALYSIS", name: "Heroic Fighting" }, { spell: "PASSIVE_ARMORCHANCE_SWORD", icon: "PASSIVEEFFECT_GUARD", name: "Passive Armorchance Sword" }] }
   ] },
   "Ironclad Staff": { itemId: "T8_2H_IRONCLADEDSTAFF", slot: "weapon", category: "quarterstaff", groups: [
@@ -838,7 +835,7 @@ const SPELL_MAP = {
   ] },
   // Weapons
   "Kingmaker": { itemId: "T8_2H_CLAYMORE_AVALON", slot: "weapon", category: "sword", groups: [
-      { key: "active1", label: "Active slot 1", spells: [{ spell: "HEROICSTRIKE2", icon: "DECAPITATE", name: "Heroic Strike" }, { spell: "CLEAVE", icon: "CLEAVE_SWORD", name: "Heroic Cleave" }] },
+      { key: "active1", label: "Active slot 1", spells: [{ spell: "HEROICSTRIKE2", icon: "DECAPITATE", name: "Heroic Strike" }, { spell: "CLEAVE", icon: "CLEAVE_SWORD", name: "Heroic Cleave", confirmed: "CLEAVE" }] },
       { key: "active2", label: "Active slot 2", spells: [{ spell: "SWORD_SPIN", icon: "SWORD_SPIN", name: "Blade Cyclone" }, { spell: "INTERRUPT2", icon: "INTERRUPT_BLUNT", name: "Interrupt" }, { spell: "SPLITTINGSLASH", icon: "SPLITTING_SMASH", name: "Splitting Slash" }, { spell: "HAMSTRINGSWORD", icon: "HAMSTRING", name: "Hamstring" }, { spell: "PARRY", icon: "BLOCK", name: "Parry Strike" }, { spell: "DEFENSERUN", icon: "MELEE_BUFF", name: "Iron Will" }] },
       { key: "active3", label: "Active slot 3", spells: [{ spell: "MAJESTIC_SMASH", icon: "MAJESTIC_SMASH", name: "Majestic Smash" }] },
       { key: "passive", label: "Passive", spells: [{ spell: "PASSIVE_BLEEDCHANCE", icon: "PASSIVE_FURY_1", name: "Deep Cuts" }, { spell: "PASSIVE_REDUCE_DMG_SWORD", icon: "PASSIVE_TACTICIAN", name: "Weakening" }, { spell: "PASSIVE_HEROICSTACK", icon: "PASSIVE_PARALYSIS", name: "Heroic Fighting" }, { spell: "PASSIVE_ARMORCHANCE_SWORD", icon: "PASSIVEEFFECT_GUARD", name: "Passive Armorchance Sword" }] }
@@ -952,7 +949,7 @@ const SPELL_MAP = {
   ] },
   // Feet
   "Mistwalker Shoes": { itemId: "T8_SHOES_LEATHER_FEY", slot: "feet", category: "leather_shoes", groups: [
-      { key: "active", label: "Active", spells: [{ spell: "DODGE", icon: "DODGE_ROLL", name: "Dodge" }, { spell: "SPRINT_CD_REDUCTION", icon: "SPRINT", name: "Refreshing Sprint" }, { spell: "AFTER_IMAGE", icon: "AFTER_IMAGE", name: "After Image" }] },
+      { key: "active", label: "Active", spells: [{ spell: "DODGE", icon: "DODGE_ROLL", name: "Dodge" }, { spell: "SPRINT_CD_REDUCTION", icon: "SPRINT", name: "Refreshing Sprint" }, { spell: "AFTER_IMAGE", icon: "AFTER_IMAGE", name: "After Image", confirmed: "AFTER_IMAGE" }] },
       { key: "passive", label: "Passive", spells: [{ spell: "PASSIVE_MAXLOAD_SHOES", icon: "PASSIVE_MAXLOAD", name: "Courier" }, { spell: "PASSIVE_BALANCE", icon: "PASSIVE_VITALITY_1", name: "Balanced Mind" }, { spell: "PASSIVE_INCREASED_AASPEED", icon: "PASSIVE_AGILITY_1", name: "Swiftness" }, { spell: "PASSIVE_CD_REDUCTION", icon: "PASSIVE_PARALYSIS", name: "Quick Thinker" }] }
   ] },
   // Weapons
@@ -1025,7 +1022,7 @@ const SPELL_MAP = {
   "Rampant Staff": { itemId: "T8_2H_NATURESTAFF_KEEPER", slot: "weapon", category: "naturestaff", groups: [
       { key: "active1", label: "Active slot 1", spells: [{ spell: "REJUVENATION", icon: "HEAL_HOT", name: "Rejuvenation" }, { spell: "THORNSAREA", icon: "THORNSAREA", name: "Thorn Growth" }, { spell: "REJUVMUSHROOM_GRENADE", icon: "NATURE_HEALING_SPELL", name: "Rejuvmushroom Grenade" }] },
       { key: "active2", label: "Active slot 2", spells: [{ spell: "BRAMBLESEED", icon: "THORNS", name: "Brambleseed" }, { spell: "REANIMATE", icon: "REANIMATE", name: "Revitalize" }, { spell: "NATURERESILIENCE", icon: "REJUVMUSHROOM", name: "Protection of Nature" }, { spell: "CLEANSEHEAL", icon: "CLEANSEHEAL", name: "Cleanse Heal" }, { spell: "REJUVENATING_BREEZE", icon: "REJUVINATING_BREEZE", name: "Rejuvenating Breeze" }] },
-      { key: "active3", label: "Active slot 3", spells: [{ spell: "SPIRITANIMAL", icon: "SPIRIT_ANIMAL", name: "Spirit Animal" }] },
+      { key: "active3", label: "Active slot 3", spells: [{ spell: "SPIRITANIMAL", icon: "SPIRIT_ANIMAL", name: "Spirit Animal", confirmed: "SPIRITANIMAL" }] },
       { key: "passive", label: "Passive", spells: [{ spell: "PASSIVE_HEALPOWERCHANCE", icon: "PASSIVE_VITALITY_1", name: "Adrenaline Driven Charity" }, { spell: "PASSIVE_ENERGYCHANCE_NATURESTAFF", icon: "PASSIVE_TACTICIAN", name: "Passive Energychance Naturestaff" }, { spell: "PASSIVE_ARMOR_CASTER_NATURESTAFF", icon: "PASSIVEEFFECT_GUARD", name: "Passive Armor Caster Naturestaff" }, { spell: "PASSIVE_MOVESPEED_CHANCE_NATURESTAFF", icon: "PASSIVE_AGILITY_1", name: "Passive Movespeed Chance Naturestaff" }] }
   ] },
   "Ravenstrike Cestus": { itemId: "T8_2H_KNUCKLES_MORGANA", slot: "weapon", category: "knuckles", groups: [
@@ -1256,7 +1253,7 @@ const SPELL_MAP = {
   "Truebolt Hammer": { itemId: "T8_2H_HAMMER_CRYSTAL", slot: "weapon", category: "hammer", groups: [
       { key: "active1", label: "Active slot 1", spells: [{ spell: "HAMMER_SHOVE", icon: "SHOVE", name: "Powerful Swing" }, { spell: "THREATENINGSTRIKE_HAMMER", icon: "THREATENING_STRIKE", name: "Threatening Strike" }, { spell: "IRONBREAKER", icon: "SUNDER_ARMOR", name: "Iron Breaker" }] },
       { key: "active2", label: "Active slot 2", spells: [{ spell: "HAMMER_TREMOR", icon: "SEISMIC_TREMOR", name: "Seismic Tremor" }, { spell: "CHARGESLOWAE", icon: "POUNCE", name: "Slowing Charge" }, { spell: "GEYSER", icon: "EMPOWERMENT", name: "Power Geyser" }, { spell: "KNOCKOUT", icon: "MEZZ", name: "Knockout" }, { spell: "TAR_RING", icon: "MOUNTSPELL_BIGCLEAVE", name: "Inertia Ring" }] },
-      { key: "active3", label: "Active slot 3", spells: [{ spell: "CRYSTALWAVE", icon: null, name: "Hyperstatic" }] },
+      { key: "active3", label: "Active slot 3", spells: [{ spell: "CRYSTALWAVE", icon: null, name: "Hyperstatic", confirmed: "CRYSTALWAVE" }] },
       { key: "passive", label: "Passive", spells: [{ spell: "PASSIVE_STUNCHANCE", icon: "PASSIVE_DAZE", name: "Stunning Strike" }, { spell: "PASSIVE_ENERGYCHANCE_HAMMER", icon: "PASSIVE_TACTICIAN", name: "Passive Energychance Hammer" }, { spell: "PASSIVE_HEALTHCHANCE_HAMMER", icon: "PASSIVE_VITALITY_1", name: "Passive Healthchance Hammer" }, { spell: "PASSIVE_CCDURATION_CHANCE_HAMMER", icon: "PASSIVE_REINFORCE", name: "Passive Ccduration Chance Hammer" }] }
   ] },
   "Twin Slayers": { itemId: "T8_2H_DAGGERPAIR_CRYSTAL", slot: "weapon", category: "dagger", groups: [
@@ -1304,7 +1301,7 @@ const SPELL_MAP = {
   "Wildfire Staff": { itemId: "T8_MAIN_FIRESTAFF_KEEPER", slot: "weapon", category: "firestaff", groups: [
       { key: "active1", label: "Active slot 1", spells: [{ spell: "FIRESTAFFBOLT2", icon: "MAGICPROJECTILE_FIRE", name: "Fire Bolt" }, { spell: "FIRESTAFFBOLT_AOE", icon: "AOE_FIRE", name: "Burning Field" }, { spell: "SEARING_FLAME", icon: "SEARING_FLAME", name: "Searing Flame" }] },
       { key: "active2", label: "Active slot 2", spells: [{ spell: "FIRESTAFFIGNITE2_SPREAD", icon: "IGNITE", name: "Flame Blast" }, { spell: "FIREWALL", icon: "INCINERATE", name: "Wall of Flames" }, { spell: "SKILLSHOT_FIREBALL", icon: "FIRE_WAVE", name: "Raging Flare" }, { spell: "FIRECONE", icon: "FLAMECONE", name: "Fire Wave" }, { spell: "FIREARTILLERY", icon: "FIRE_ARTILLERY", name: "Fire Artillery" }] },
-      { key: "active3", label: "Active slot 3", spells: [{ spell: "MAGMASPHERE", icon: "MAGMA_SPHERE", name: "Magma Sphere" }] },
+      { key: "active3", label: "Active slot 3", spells: [{ spell: "MAGMASPHERE", icon: "MAGMA_SPHERE", name: "Magma Sphere", confirmed: "MAGMASPHERE" }] },
       { key: "passive", label: "Passive", spells: [{ spell: "PASSIVE_BURN", icon: "PASSIVE_FURY_1", name: "Burn" }, { spell: "PASSIVE_ENERGYCHANCE_FIRESTAFF", icon: "PASSIVE_TACTICIAN", name: "Passive Energychance Firestaff" }, { spell: "PASSIVE_CASTINGSPEED_CHANCE_FIRESTAFF", icon: "PASSIVE_SHARPSHOOTER", name: "Passive Castingspeed Chance Firestaff" }, { spell: "PASSIVE_SPELLPOWER_CASTER_FIRESTAFF", icon: "PASSIVE_PARALYSIS", name: "Passive Spellpower Caster Firestaff" }] }
   ] },
   "Witchwork Staff": { itemId: "T8_MAIN_ARCANESTAFF_UNDEAD", slot: "weapon", category: "arcanestaff", groups: [
