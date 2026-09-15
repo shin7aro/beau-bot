@@ -52,7 +52,15 @@
   margin: 16px 0 10px;
 }
 
-.sp-build-list { display: flex; flex-direction: column; gap: 10px; margin-bottom: 4px; }
+.sp-build-list {
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+  gap: 12px;
+  overflow-x: auto;
+  padding-bottom: 10px;
+  margin-bottom: 4px;
+}
 
 .sp-gear-block {
   display: flex;
@@ -62,23 +70,25 @@
   border-radius: 12px;
   background: var(--surface-2);
   padding: 14px;
+  flex: 0 0 240px;
+  width: 240px;
 }
 
 .sp-empty-note { font-size: 12px; color: var(--ink-dim); font-style: italic; }
 
-.spell-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.spell-row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .spell-row-label {
   font-size: 10px;
   text-transform: uppercase;
   letter-spacing: 0.06em;
   color: var(--ink-faint);
-  width: 92px;
-  flex-shrink: 0;
+  width: 100%;
+  margin-bottom: 2px;
 }
 
 .spell-option {
-  width: 36px;
-  height: 36px;
+  width: 32px;
+  height: 32px;
   border-radius: 7px;
   border: 1px solid var(--line-2);
   background: var(--bg);
@@ -104,6 +114,9 @@
 .spell-option.selected .spell-option-fallback { color: var(--accent); }
 .spell-option.saving { opacity: 0.5; pointer-events: none; }
 
+.sp-build-list::-webkit-scrollbar { height: 8px; }
+.sp-build-list::-webkit-scrollbar-thumb { background: var(--line-2); border-radius: 4px; }
+
 @media (max-width: 640px) {
-  .spell-row-label { width: 100%; }
+  .sp-gear-block { flex-basis: 200px; width: 200px; }
 }
