@@ -403,7 +403,13 @@ body.app-shell .site-header { flex-shrink: 0; }
     height: 232px;
     justify-content: flex-start;
     padding: 14px 12px 12px;
-    overflow: hidden; /* belt-and-braces: nothing can visually escape the card */
+    /* NOT overflow:hidden — .gear-spell-col below is deliberately
+       positioned partway outside this card's own right edge (negative
+       right offset, into the .slots-grid gap) so the badges sit beside
+       the gear icon rather than shrinking it. Clipping here would cut
+       them off, which is exactly what happened before this was removed:
+       at some zoom levels / the sub-480px breakpoint, the icons landed
+       fully outside the visible box and simply vanished. */
   }
   .slot-card.gear-card > .slot-name { flex-shrink: 0; font-size: 13px; }
   .slot-card.gear-card .slot-body-row {
@@ -423,6 +429,10 @@ body.app-shell .site-header { flex-shrink: 0; }
     position: absolute; top: 50%; right: -17px; transform: translateY(-50%);
     display: flex; flex-direction: column; align-items: center; justify-content: center;
     gap: 10px; /* fixed — the same distance between any two badges, whatever the count */
+    z-index: 1; /* now that the card no longer clips this, make sure it
+                   paints above the next .slot-card in the grid rather than
+                   underneath it — same DOM-order stacking issue overflow
+                   was papering over before. */
   }
   .slot-card.gear-card .gear-spell-btn {
     width: 34px; height: 34px; border-radius: 50%; padding: 2px;
