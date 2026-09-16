@@ -62,7 +62,7 @@ function imgTag(name, size) {
 const PENCIL_SVG = `<svg class="slot-edit-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.85 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>`;
 
 function spacerCard() {
-  return `<div class="slot-card empty spacer"></div>`;
+  return `<div class="slot-card gear-card empty spacer"></div>`;
 }
 
 // One compact icon per spell "row" this gear piece has (e.g. a weapon's
@@ -103,16 +103,16 @@ function wireGearSpellIcons(container) {
 function slotCard(name, slotKey, editable, buildKey) {
   const editableAttr = editable ? ` editable" data-slot="${slotKey}` : '';
   if (!name) return `
-    <div class="slot-card empty${editableAttr}">
+    <div class="slot-card gear-card empty${editableAttr}">
       <span class="slot-name">—</span>
       <div class="slot-empty-icon"></div>
       ${editable ? PENCIL_SVG : ''}
     </div>`;
   return `
-    <div class="slot-card${editableAttr}">
+    <div class="slot-card gear-card${editableAttr}">
       <span class="slot-name" title="${name}">${name}</span>
       <div class="slot-body-row">
-        ${imgTag(name, 56)}
+        ${imgTag(name, 92)}
         ${gearSpellRowHtml(name, slotKey, buildKey, editable)}
       </div>
       ${editable ? PENCIL_SVG : ''}

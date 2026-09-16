@@ -382,6 +382,41 @@ body.app-shell .site-header { flex-shrink: 0; }
     font-size: 10px; font-weight: 700; color: var(--ink-dim);
   }
 
+  /* ── GEAR CARD (build detail slots only) ──
+     .gear-card is the class builds.js's own slotCard() adds on top of the
+     shared .slot-card that comps/events/spell-picker also render — scoping
+     to it means the bigger image + fixed height below apply only to the
+     build editor's gear grid, not those other three simpler card layouts.
+
+     Every card in the grid gets the same fixed height and the same image
+     size (filled or empty, 1 spell row or 4), so the row of three never
+     jumps around depending on how many spells a given piece happens to
+     have — that unevenness was the main thing that read as "unharmonized"
+     before this. */
+  .slot-card.gear-card {
+    height: 216px;
+    justify-content: flex-start;
+    padding: 14px 12px 12px;
+  }
+  .slot-card.gear-card > .slot-name { flex-shrink: 0; font-size: 13px; }
+  .slot-card.gear-card .slot-body-row {
+    flex: 1; width: 100%; min-height: 0;
+    align-items: stretch; /* lets .gear-spell-col fill the same height as the image */
+    justify-content: center; gap: 12px;
+  }
+  .slot-card.gear-card img,
+  .slot-card.gear-card .slot-empty-icon {
+    width: 92px; height: 92px; border-radius: 10px;
+  }
+  /* Empty gear cards have no .slot-body-row (no spell column to size
+     against), so their placeholder icon needs the same fixed dimensions
+     called out on its own to actually match a filled card next to it. */
+  .slot-card.gear-card.empty .slot-empty-icon { margin: auto 0; }
+  .slot-card.gear-card .gear-spell-col {
+    justify-content: space-between; /* spreads the icons top-to-bottom instead of clustering them */
+    align-items: center; gap: 0; flex-shrink: 0;
+  }
+
   /* ── flashy interaction accents ── */
   @keyframes clickRipple {
     0%   { opacity: .9;  transform: translate(-50%,-50%) scale(.3); }
@@ -503,4 +538,8 @@ body.app-shell .site-header { flex-shrink: 0; }
     .slots-grid { grid-template-columns: repeat(3, 1fr); gap: 8px; }
     .slot-card { padding: 10px 6px; min-height: 120px; }
     .slot-card img, .slot-card .slot-empty-icon { width: 44px; height: 44px; }
+
+    .slot-card.gear-card { height: 168px; padding: 10px 6px; }
+    .slot-card.gear-card img, .slot-card.gear-card .slot-empty-icon { width: 60px; height: 60px; }
+    .slot-card.gear-card .gear-spell-btn { width: 26px; height: 26px; }
   }
