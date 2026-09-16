@@ -72,7 +72,7 @@
 
 /* ---------- COMP VIEWER (READ-ONLY) ---------- */
 .comp-viewer-layout {
-  display: grid; grid-template-columns: 260px minmax(0, 1fr) 280px; gap: 16px; align-items: start;
+  display: grid; grid-template-columns: 260px minmax(0, 1fr); gap: 16px; align-items: start;
 }
 @media (max-width: 1080px) {
   .comp-viewer-layout { grid-template-columns: 240px minmax(0, 1fr); }

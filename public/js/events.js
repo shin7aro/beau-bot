@@ -181,6 +181,7 @@ async function openEvent(id) {
 
 function closeDetail() {
   currentDetail = null;
+  forceCloseBuildHover();
   history.replaceState(null, '', location.pathname + location.search);
   document.getElementById('event-detail-view').style.display = 'none';
   document.getElementById('events-list-view').style.display = '';
@@ -202,6 +203,7 @@ function renderDetail() {
   const e = currentDetail;
   const canManage = isOfficerOrAdmin() || (window.SITE_AUTH.loggedIn && window.SITE_AUTH.id === e.organizerId);
 
+  forceCloseBuildHover();
   layout.innerHTML = `
     <aside class="event-info-col" id="event-info-col"></aside>
     <div class="event-roster-col" id="event-roster-col"></div>
@@ -350,7 +352,7 @@ function renderRosterRow(e, row) {
         ? `<img class="event-row-pill-icon" src="${escapeHtml(o.iconUrl)}" alt="" loading="lazy">`
         : `<span class="event-row-pill-icon-fallback">${emojiToHtml(o.emoji, { size: 15 })}</span>`;
       const label = `${optIcon}<span class="event-row-name-text">${escapeHtml(window.weaponDisplayName ? window.weaponDisplayName(o.name) : o.name)}</span>`;
-      return `<button type="button" class="event-row-option-pill event-row-build-trigger role-${row.category.toLowerCase()}" data-cat="${escapeHtml(row.category)}" data-item-index="${row.itemIndex}" data-option-index="${oi}" title="View linked build">${label}</button>`;
+      return `<button type="button" class="event-row-option-pill event-row-build-trigger role-${row.category.toLowerCase()}" data-cat="${escapeHtml(row.category)}" data-item-index="${row.itemIndex}" data-option-index="${oi}" title="Hover to preview build, click to pin">${label}</button>`;
     }).join('');
     namePill = `<div class="event-row-name-pill-group">${optionPills}</div>`;
   } else {
@@ -362,7 +364,7 @@ function renderRosterRow(e, row) {
       : `<span class="event-row-pill-icon-fallback">${emojiToHtml(row.emoji, { size: 15 })}</span>`;
     const nameLabel = `${icon}<span class="event-row-name-text">${escapeHtml((row.name && window.weaponDisplayName ? window.weaponDisplayName(row.name) : row.name) || 'Any')}</span>`;
     namePill = hasItemIndex
-      ? `<button type="button" class="event-row-name-pill event-row-build-trigger role-${row.category.toLowerCase()}" data-cat="${escapeHtml(row.category)}" data-item-index="${row.itemIndex}" title="View linked build">${nameLabel}</button>`
+      ? `<button type="button" class="event-row-name-pill event-row-build-trigger role-${row.category.toLowerCase()}" data-cat="${escapeHtml(row.category)}" data-item-index="${row.itemIndex}" title="Hover to preview build, click to pin">${nameLabel}</button>`
       : `<span class="event-row-name-pill role-${row.category.toLowerCase()}">${nameLabel}</span>`;
   }
   const assignBtn = canManageAssign
@@ -387,10 +389,10 @@ function renderRosterRow(e, row) {
     </div>`;
 }
 
-/* ---------- details panel (build view/link, player snippet) ---------- */
-// Replaces the old signups sidebar: clicking a role's name shows the build
-// linked to it (with an officer/admin-only option to link one), clicking a
-// signed-up player's name shows a small profile snippet.
+/* ---------- details panel (player snippet) + build hover-card ---------- */
+// Hovering a role's name shows the build linked to it in a floating card
+// (click pins it); clicking a signed-up player's name shows a small profile
+// snippet in the details column.
 // Same role tokens builds.js uses for the card's color bar + role pill,
 // plus battlemount (events-only category, styled in events.css) so every
 // event role has a matching color here too.
@@ -658,35 +660,138 @@ function renderDetailsPanelPlaceholder() {
   if (!col) return;
   col.innerHTML = `
     <div class="event-details-head">Details</div>
-    <p class="event-details-empty">Click a role to see its linked build, or a player's name to see their profile.</p>`;
+    <p class="event-details-empty">Hover a role to preview its linked build (click to pin it), or click a player's name to see their profile.</p>`;
 }
 
-async function showBuildPanel(cat, itemIndexStr, optionIndexStr) {
-  const col = document.getElementById('event-details-col');
+/* ---------- floating build hover-card ---------- */
+// Replaces the old right-side build column: hovering a role pill shows the
+// linked build in a floating card, moving the pointer away dismisses it,
+// and clicking pins it open (with an X to close). Fixed-positioned so it
+// never affects page layout.
+let buildHoverEl = null;
+let buildHoverPinned = false;
+let buildHoverKey = null;
+let buildHoverToken = 0;
+let buildHoverCloseTimer = null;
+let buildHoverAnchor = null;
+let buildHoverGlobalWired = false;
+
+function buildHoverCardKey(cat, itemIndexStr, optionIndexStr) {
+  return `${cat}|${itemIndexStr}|${optionIndexStr === undefined ? '' : optionIndexStr}`;
+}
+
+function closeBuildHover() {
+  clearTimeout(buildHoverCloseTimer);
+  if (buildHoverPinned) return;
+  if (buildHoverEl) { buildHoverEl.remove(); buildHoverEl = null; }
+  buildHoverKey = null;
+  buildHoverAnchor = null;
+}
+
+function forceCloseBuildHover() {
+  clearTimeout(buildHoverCloseTimer);
+  buildHoverPinned = false;
+  if (buildHoverEl) { buildHoverEl.remove(); buildHoverEl = null; }
+  buildHoverKey = null;
+  buildHoverAnchor = null;
+}
+
+function scheduleBuildHoverClose() {
+  clearTimeout(buildHoverCloseTimer);
+  buildHoverCloseTimer = setTimeout(closeBuildHover, 150);
+}
+
+function positionBuildHover() {
+  if (!buildHoverEl || !buildHoverAnchor) return;
+  const rect = buildHoverAnchor.getBoundingClientRect();
+  const card = buildHoverEl;
+  card.style.visibility = 'hidden';
+  card.style.left = '0px';
+  card.style.top = '0px';
+  const w = card.offsetWidth;
+  const h = card.offsetHeight;
+  const gap = 10;
+  let left = rect.right + gap;
+  if (left + w > window.innerWidth - 12) left = rect.left - w - gap;
+  if (left < 12) left = 12;
+  let top = Math.min(Math.max(12, rect.top - 20), window.innerHeight - h - 12);
+  card.style.left = `${left}px`;
+  card.style.top = `${Math.max(12, top)}px`;
+  card.style.visibility = '';
+}
+
+function wireBuildHoverGlobal() {
+  if (buildHoverGlobalWired) return;
+  buildHoverGlobalWired = true;
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') forceCloseBuildHover();
+  });
+  window.addEventListener('scroll', () => { if (buildHoverEl) positionBuildHover(); }, { passive: true });
+  window.addEventListener('resize', () => { if (buildHoverEl) positionBuildHover(); });
+}
+
+function ensureBuildHoverEl() {
+  wireBuildHoverGlobal();
+  if (buildHoverEl) return buildHoverEl;
+  const card = document.createElement('div');
+  card.id = 'build-hover-card';
+  card.className = 'build-hover-card';
+  card.addEventListener('mouseenter', () => clearTimeout(buildHoverCloseTimer));
+  card.addEventListener('mouseleave', scheduleBuildHoverClose);
+  document.body.appendChild(card);
+  buildHoverEl = card;
+  return card;
+}
+
+async function openBuildHover(anchorEl, cat, itemIndexStr, optionIndexStr, { pinned = false } = {}) {
+  const key = buildHoverCardKey(cat, itemIndexStr, optionIndexStr);
+  if (pinned) buildHoverPinned = true;
+  else if (buildHoverKey !== key) buildHoverPinned = false; // hovering elsewhere starts a fresh unpinned preview
+  // Same pill re-hovered — just (un)pin state, no refetch.
+  if (buildHoverEl && buildHoverKey === key) {
+    buildHoverEl.classList.toggle('is-pinned', buildHoverPinned);
+    buildHoverAnchor = anchorEl;
+    positionBuildHover();
+    return;
+  }
+  const token = ++buildHoverToken;
+  buildHoverKey = key;
+  buildHoverAnchor = anchorEl;
+
   const itemIndex = itemIndexStr === '' ? undefined : Number(itemIndexStr);
-  const row = currentDetail.rows.find(r => r.category === cat && r.itemIndex === itemIndex);
-  if (!row) return;
+  const row = (currentDetail.rows || []).find(r => r.category === cat && r.itemIndex === itemIndex);
+  if (!row) { if (!pinned) closeBuildHover(); else forceCloseBuildHover(); return; }
   // A multi-choice line has no build of its own — each option carries its
   // own buildTab/buildId, so every lookup/save below reads and writes
   // `target` (the option) instead of `row` whenever one was clicked.
   const optionIndex = (optionIndexStr === undefined || optionIndexStr === '') ? undefined : Number(optionIndexStr);
   const option = optionIndex !== undefined && row.options ? row.options[optionIndex] : null;
-  if (optionIndex !== undefined && !option) return;
+  if (optionIndex !== undefined && !option) { if (!pinned) closeBuildHover(); else forceCloseBuildHover(); return; }
   const target = option || row;
 
-  col.innerHTML = `<div class="event-details-head">Details</div><p class="event-details-empty">Loading build…</p>`;
+  const card = ensureBuildHoverEl();
+  card.classList.toggle('is-pinned', buildHoverPinned);
+  card.innerHTML = `<div class="build-hover-head">Build<button type="button" class="build-hover-close" aria-label="Close">×</button></div><p class="build-hover-empty">Loading build…</p>`;
+  card.querySelector('.build-hover-close').addEventListener('click', (e) => {
+    e.stopPropagation();
+    forceCloseBuildHover();
+  });
+  positionBuildHover();
 
   let build = null;
   let buildKey = null;
   if (target.buildTab && target.buildId != null) {
     try {
       const [all] = await Promise.all([ensureAllBuildsLoaded(), ensureBuildSpellsLoaded()]);
+      if (token !== buildHoverToken) return; // moved on to another pill
       build = (all[target.buildTab] || [])[target.buildId] || null;
       buildKey = `${target.buildTab}:${target.buildId}`;
     } catch (err) {
+      if (token !== buildHoverToken) return;
       showToast('Failed to load build: ' + err.message);
     }
   }
+  if (token !== buildHoverToken) return;
 
   const canManage = isOfficerOrAdmin();
   let linkerHtml = '';
@@ -697,6 +802,7 @@ async function showBuildPanel(cat, itemIndexStr, optionIndexStr) {
     } catch {
       options = [];
     }
+    if (token !== buildHoverToken) return;
     const roleOptions = options.filter(o => o.role && o.role.toLowerCase() === cat.toLowerCase());
     linkerHtml = `
       <div class="event-build-linker">
@@ -715,19 +821,14 @@ async function showBuildPanel(cat, itemIndexStr, optionIndexStr) {
 
   // Same card-header / slots-grid / card-note-block markup as the builds
   // tab's own detail card (see builds.js select()), just read-only and
-  // followed by the event-only build-linker for officers/admins.
-  col.innerHTML = `
-    <div class="event-details-head">Details</div>
+  // (for officers/admins) followed by the build-linker.
+  card.innerHTML = `
+    <div class="build-hover-head">Build<button type="button" class="build-hover-close" aria-label="Close">×</button></div>
     <div class="event-build-panel">
       ${build ? `
-        <div class="card-header">
-          <div class="card-role-bar" style="background:${color}"></div>
-          <div class="card-title-row">
-            <div class="card-title">${escapeHtml(build.weapon || 'Unnamed build')}</div>
-          </div>
-          <div class="card-meta">
-            <span class="role-pill role-${roleKey}"><span class="role-pill-dot" style="background:${color}"></span>${escapeHtml(roleLabel)}</span>
-          </div>
+        <div class="build-hover-title">
+          <span class="role-pill role-${roleKey}"><span class="role-pill-dot" style="background:${color}"></span>${escapeHtml(roleLabel)}</span>
+          ${escapeHtml(build.weapon || 'Unnamed build')}
         </div>
         <div>
           <div class="section-label">Build</div>
@@ -746,19 +847,24 @@ async function showBuildPanel(cat, itemIndexStr, optionIndexStr) {
         ${build.note ? `<div class="card-note-block">${EVENT_FLAG_SVG}<span class="card-note-text">${escapeHtml(build.note)}</span></div>` : ''}
       ` : `
         <div class="event-build-role"><span class="role-pill role-${roleKey}"><span class="role-pill-dot" style="background:${color}"></span>${escapeHtml(roleLabel)}</span> ${escapeHtml(displayName)}</div>
-        <p class="event-details-empty">No build linked yet.</p>`}
+        <p class="build-hover-empty">No build linked yet.</p>`}
       ${linkerHtml}
+      ${buildHoverPinned ? '' : `<div class="build-hover-hint">Click the role to pin this card.</div>`}
     </div>`;
+
+  card.querySelector('.build-hover-close').addEventListener('click', (e) => {
+    e.stopPropagation();
+    forceCloseBuildHover();
+  });
 
   // The slot-card entrance animation (see .slots-grid .slot-card / .revealed
   // in builds.css) starts every card at opacity:0 and only reveals them once
   // JS adds .revealed to the grid — normally done by the build page's own
-  // reveal step. This panel builds the same markup directly via
+  // reveal step. This card builds the same markup directly via
   // renderGearSlot() without going through that step, so without this the
   // cards would just stay invisible forever. Same double-rAF timing as
   // builds.js uses, so the staggered per-card pop-in still plays here too.
-  const grid = col.querySelector('.event-build-slots');
-  const header = col.querySelector('.card-header');
+  const grid = card.querySelector('.event-build-slots');
   if (grid) {
     wireGearSpellIcons(grid);
     requestAnimationFrame(() => {
@@ -767,12 +873,13 @@ async function showBuildPanel(cat, itemIndexStr, optionIndexStr) {
       });
     });
   }
-  if (header) setTimeout(() => header.classList.add('shimmer'), 750);
 
-  const saveBtn = document.getElementById('event-build-link-save');
+  positionBuildHover();
+
+  const saveBtn = card.querySelector('#event-build-link-save');
   if (saveBtn) {
     saveBtn.addEventListener('click', async () => {
-      const select = col.querySelector('.event-build-link-select');
+      const select = card.querySelector('.event-build-link-select');
       const value = select.value;
       const body = value ? { buildTab: value.split(':')[0], buildId: Number(value.split(':')[1]) } : {};
       if (optionIndex !== undefined) body.optionIndex = optionIndex;
@@ -783,7 +890,13 @@ async function showBuildPanel(cat, itemIndexStr, optionIndexStr) {
         );
         document.getElementById('event-roster-col').innerHTML = renderRosterCol(currentDetail);
         wireRosterActions();
-        showBuildPanel(cat, itemIndexStr, optionIndexStr);
+        buildHoverPinned = true; // keep the card open across the refresh
+        // The roster re-render detached the old pill, so re-resolve the
+        // anchor or the card would reposition to the viewport corner.
+        const sel = `.event-row-build-trigger[data-cat="${CSS.escape(cat)}"][data-item-index="${CSS.escape(String(itemIndexStr))}"]`;
+        const candidates = [...document.querySelectorAll(sel)];
+        const freshAnchor = candidates.find(b => (b.dataset.optionIndex ?? '') === (optionIndexStr ?? '')) || candidates[0] || anchorEl;
+        openBuildHover(freshAnchor, cat, itemIndexStr, optionIndexStr, { pinned: true });
         showToast(value ? 'Build linked.' : 'Build unlinked.');
       } catch (err) {
         showToast('Failed to update build link: ' + err.message);
@@ -959,9 +1072,14 @@ function wireRosterActions() {
   });
 
   document.querySelectorAll('.event-row-build-trigger[data-item-index]').forEach(btn => {
+    const open = (pinned) => openBuildHover(btn, btn.dataset.cat, btn.dataset.itemIndex, btn.dataset.optionIndex, { pinned });
+    btn.addEventListener('mouseenter', () => open(false));
+    btn.addEventListener('mouseleave', scheduleBuildHoverClose);
+    btn.addEventListener('focus', () => open(false));
+    btn.addEventListener('blur', scheduleBuildHoverClose);
     btn.addEventListener('click', (e) => {
       e.stopPropagation();
-      showBuildPanel(btn.dataset.cat, btn.dataset.itemIndex, btn.dataset.optionIndex);
+      open(true);
     });
   });
   document.querySelectorAll('.event-row-player-pill').forEach(btn => {

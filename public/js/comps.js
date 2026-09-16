@@ -214,6 +214,7 @@ function openViewer(key) {
 
 function closeViewer() {
   viewingKey = null;
+  forceCloseBuildHover();
   history.replaceState(null, '', location.pathname + location.search);
   document.getElementById('comps-viewer-view').style.display = 'none';
   document.getElementById('comps-editor-view').style.display = 'none';
@@ -222,6 +223,7 @@ function closeViewer() {
 }
 
 function renderViewer(comp) {
+  forceCloseBuildHover();
   const rows = getCompRows(comp);
   const totalSlots = rows.length;
   const roleCounts = getCompRoleCounts(comp);
@@ -286,24 +288,28 @@ function renderViewer(comp) {
     </div>
     <div class="event-roster-col">
       ${partiesHtml || '<p class="section-sub">No slots in this composition.</p>'}
-    </div>
-    <div class="event-build-col" id="comp-viewer-build-col" style="display:none;"></div>`;
+    </div>`;
 
   const editBtn = document.getElementById('comp-viewer-edit-btn');
   if (editBtn) {
     editBtn.addEventListener('click', () => openEditor(comp.key));
   }
 
-  // Wire build inspection clicks on weapon pills
+  // Wire build hover-cards on weapon pills (hover previews, click pins)
   layout.querySelectorAll('[data-build-tab][data-build-id]').forEach(el => {
-    el.addEventListener('click', () => {
+    const open = (pinned) => {
       const tab = el.dataset.buildTab;
       const id = el.dataset.buildId;
       const cat = el.dataset.category;
       if (tab && id !== undefined && id !== '' && cat) {
-        showBuildDetail(tab, parseInt(id, 10), el.dataset.weaponName || '', cat);
+        openBuildHover(el, tab, parseInt(id, 10), el.dataset.weaponName || '', cat, { pinned });
       }
-    });
+    };
+    el.addEventListener('mouseenter', () => open(false));
+    el.addEventListener('mouseleave', scheduleBuildHoverClose);
+    el.addEventListener('focus', () => open(false));
+    el.addEventListener('blur', scheduleBuildHoverClose);
+    el.addEventListener('click', () => open(true));
   });
 }
 
@@ -318,7 +324,7 @@ function renderViewerRow(row) {
         : emojiToHtml(o.emoji, { size: 16, fallback: '🔹' });
       const displayName = window.weaponDisplayName ? window.weaponDisplayName(o.name) : o.name;
       const buildAttr = (o.buildTab && o.buildId !== null)
-        ? `data-build-tab="${escapeHtml(o.buildTab)}" data-build-id="${o.buildId}" data-weapon-name="${escapeHtml(o.name)}" data-category="${escapeHtml(row.category)}" title="Click to view build"`
+        ? `data-build-tab="${escapeHtml(o.buildTab)}" data-build-id="${o.buildId}" data-weapon-name="${escapeHtml(o.name)}" data-category="${escapeHtml(row.category)}" title="Hover to preview build, click to pin"`
         : '';
       return `
         <button type="button" class="comp-viewer-option-pill ${roleClass}" ${buildAttr}>
@@ -338,7 +344,7 @@ function renderViewerRow(row) {
     : emojiToHtml(row.emoji, { size: 16, fallback: '🔹' });
   const displayName = window.weaponDisplayName ? window.weaponDisplayName(row.name) : row.name;
   const buildAttr = (row.buildTab && row.buildId !== null)
-    ? `data-build-tab="${escapeHtml(row.buildTab)}" data-build-id="${row.buildId}" data-weapon-name="${escapeHtml(row.name)}" data-category="${escapeHtml(row.category)}" title="Click to view build"`
+    ? `data-build-tab="${escapeHtml(row.buildTab)}" data-build-id="${row.buildId}" data-weapon-name="${escapeHtml(row.name)}" data-category="${escapeHtml(row.category)}" title="Hover to preview build, click to pin"`
     : '';
 
   return `
@@ -432,24 +438,130 @@ async function ensureBuildSpellsLoaded() {
   return buildSpellsCache;
 }
 
-async function showBuildDetail(tab, buildId, weaponName, cat) {
-  const col = document.getElementById('comp-viewer-build-col');
-  if (!col) return;
+/* ---------- floating build hover-card ---------- */
+// Same interaction as the event viewer's card (see events.js): hovering a
+// weapon pill shows the linked build in a floating card, moving the pointer
+// away dismisses it, and clicking pins it open (with an X to close).
+// Fixed-positioned so it never affects page layout.
+let buildHoverEl = null;
+let buildHoverPinned = false;
+let buildHoverKey = null;
+let buildHoverToken = 0;
+let buildHoverCloseTimer = null;
+let buildHoverAnchor = null;
+let buildHoverGlobalWired = false;
+
+function closeBuildHover() {
+  clearTimeout(buildHoverCloseTimer);
+  if (buildHoverPinned) return;
+  if (buildHoverEl) { buildHoverEl.remove(); buildHoverEl = null; }
+  buildHoverKey = null;
+  buildHoverAnchor = null;
+}
+
+function forceCloseBuildHover() {
+  clearTimeout(buildHoverCloseTimer);
+  buildHoverPinned = false;
+  if (buildHoverEl) { buildHoverEl.remove(); buildHoverEl = null; }
+  buildHoverKey = null;
+  buildHoverAnchor = null;
+}
+
+function scheduleBuildHoverClose() {
+  clearTimeout(buildHoverCloseTimer);
+  buildHoverCloseTimer = setTimeout(closeBuildHover, 150);
+}
+
+function positionBuildHover() {
+  if (!buildHoverEl || !buildHoverAnchor) return;
+  const rect = buildHoverAnchor.getBoundingClientRect();
+  const card = buildHoverEl;
+  card.style.visibility = 'hidden';
+  card.style.left = '0px';
+  card.style.top = '0px';
+  const w = card.offsetWidth;
+  const h = card.offsetHeight;
+  const gap = 10;
+  let left = rect.right + gap;
+  if (left + w > window.innerWidth - 12) left = rect.left - w - gap;
+  if (left < 12) left = 12;
+  let top = Math.min(Math.max(12, rect.top - 20), window.innerHeight - h - 12);
+  card.style.left = `${left}px`;
+  card.style.top = `${Math.max(12, top)}px`;
+  card.style.visibility = '';
+}
+
+function wireBuildHoverGlobal() {
+  if (buildHoverGlobalWired) return;
+  buildHoverGlobalWired = true;
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') forceCloseBuildHover();
+  });
+  window.addEventListener('scroll', () => { if (buildHoverEl) positionBuildHover(); }, { passive: true });
+  window.addEventListener('resize', () => { if (buildHoverEl) positionBuildHover(); });
+}
+
+function ensureBuildHoverEl() {
+  wireBuildHoverGlobal();
+  if (buildHoverEl) return buildHoverEl;
+  const card = document.createElement('div');
+  card.id = 'build-hover-card';
+  card.className = 'build-hover-card';
+  card.addEventListener('mouseenter', () => clearTimeout(buildHoverCloseTimer));
+  card.addEventListener('mouseleave', scheduleBuildHoverClose);
+  document.body.appendChild(card);
+  buildHoverEl = card;
+  return card;
+}
+
+async function openBuildHover(anchorEl, tab, buildId, weaponName, cat, { pinned = false } = {}) {
+  const key = `${tab}|${buildId}|${cat}`;
+  if (pinned) buildHoverPinned = true;
+  else if (buildHoverKey !== key) buildHoverPinned = false; // hovering elsewhere starts a fresh unpinned preview
+  // Same pill re-hovered — just (un)pin state, no refetch.
+  if (buildHoverEl && buildHoverKey === key) {
+    buildHoverEl.classList.toggle('is-pinned', buildHoverPinned);
+    buildHoverAnchor = anchorEl;
+    positionBuildHover();
+    return;
+  }
+  const token = ++buildHoverToken;
+  buildHoverKey = key;
+  buildHoverAnchor = anchorEl;
+
+  const card = ensureBuildHoverEl();
+  card.classList.toggle('is-pinned', buildHoverPinned);
+  card.innerHTML = `<div class="build-hover-head">War Ledger Build<button type="button" class="build-hover-close" aria-label="Close">×</button></div><p class="build-hover-empty">Loading build…</p>`;
+  card.querySelector('.build-hover-close').addEventListener('click', (e) => {
+    e.stopPropagation();
+    forceCloseBuildHover();
+  });
+  positionBuildHover();
 
   let builds;
   try {
     [builds] = await Promise.all([ensureAllBuildsLoaded(), ensureBuildSpellsLoaded()]);
   } catch (err) {
-    col.style.display = '';
-    col.innerHTML = `<div class="event-info-card"><p style="color:var(--ink-faint)">Failed to load builds: ${escapeHtml(err.message)}</p></div>`;
+    if (token !== buildHoverToken) return;
+    card.innerHTML = `<div class="build-hover-head">War Ledger Build<button type="button" class="build-hover-close" aria-label="Close">×</button></div><div class="event-info-card"><p style="color:var(--ink-faint)">Failed to load builds: ${escapeHtml(err.message)}</p></div>`;
+    card.querySelector('.build-hover-close').addEventListener('click', (e) => {
+      e.stopPropagation();
+      forceCloseBuildHover();
+    });
+    positionBuildHover();
     return;
   }
+  if (token !== buildHoverToken) return;
 
   const tabBuilds = builds[tab] || [];
   const build = tabBuilds[buildId];
   if (!build) {
-    col.style.display = '';
-    col.innerHTML = `<div class="event-info-card"><p style="color:var(--ink-faint)">Build not found.</p></div>`;
+    card.innerHTML = `<div class="build-hover-head">War Ledger Build<button type="button" class="build-hover-close" aria-label="Close">×</button></div><div class="event-info-card"><p style="color:var(--ink-faint)">Build not found.</p></div>`;
+    card.querySelector('.build-hover-close').addEventListener('click', (e) => {
+      e.stopPropagation();
+      forceCloseBuildHover();
+    });
+    positionBuildHover();
     return;
   }
   const buildKey = `${tab}:${buildId}`;
@@ -458,18 +570,12 @@ async function showBuildDetail(tab, buildId, weaponName, cat) {
   const color = EVENT_ROLE_COLORS[roleKey] || 'var(--line-2)';
   const roleLabel = EVENT_ROLE_LABELS[roleKey] || cat;
 
-  col.style.display = '';
-  col.innerHTML = `
-    <div class="event-details-head">War Ledger Build</div>
+  card.innerHTML = `
+    <div class="build-hover-head">War Ledger Build<button type="button" class="build-hover-close" aria-label="Close">×</button></div>
     <div class="event-build-panel">
-      <div class="card-header">
-        <div class="card-role-bar" style="background:${color}"></div>
-        <div class="card-title-row">
-          <div class="card-title">${escapeHtml(build.weapon || 'Unnamed build')}</div>
-        </div>
-        <div class="card-meta">
-          <span class="role-pill role-${roleKey}"><span class="role-pill-dot" style="background:${color}"></span>${escapeHtml(roleLabel)}</span>
-        </div>
+      <div class="build-hover-title">
+        <span class="role-pill role-${roleKey}"><span class="role-pill-dot" style="background:${color}"></span>${escapeHtml(roleLabel)}</span>
+        ${escapeHtml(build.weapon || 'Unnamed build')}
       </div>
       <div>
         <div class="section-label">Build</div>
@@ -491,10 +597,15 @@ async function showBuildDetail(tab, buildId, weaponName, cat) {
           Open in War Ledger →
         </a>
       </div>
+      ${buildHoverPinned ? '' : `<div class="build-hover-hint">Click the role to pin this card.</div>`}
     </div>`;
 
-  const grid = col.querySelector('.event-build-slots');
-  const header = col.querySelector('.card-header');
+  card.querySelector('.build-hover-close').addEventListener('click', (e) => {
+    e.stopPropagation();
+    forceCloseBuildHover();
+  });
+
+  const grid = card.querySelector('.event-build-slots');
   if (grid) {
     wireGearSpellIcons(grid);
     requestAnimationFrame(() => {
@@ -503,7 +614,7 @@ async function showBuildDetail(tab, buildId, weaponName, cat) {
       });
     });
   }
-  if (header) setTimeout(() => header.classList.add('shimmer'), 750);
+  positionBuildHover();
 }
 
 /* ─────────────────────────────────────────
