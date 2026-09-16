@@ -115,7 +115,7 @@ function slotCard(name, slotKey, editable, buildKey) {
       <span class="slot-name" title="${name}">${name}</span>
       <div class="slot-body-row">
         <div class="gear-visual">
-          ${imgTag(name, 108)}
+          ${imgTag(name, 150)}
           ${gearSpellRowHtml(name, slotKey, buildKey, editable)}
         </div>
       </div>

@@ -392,12 +392,13 @@ body.app-shell .site-header { flex-shrink: 0; }
      or empty, 1 spell or 4), so the grid never looks uneven depending on
      how many spells a given piece has.
 
-     The spell badges live inside .gear-visual, the same fixed-size box as
-     the image, absolutely positioned against its right edge. That's the
-     key fix over the first pass: the badge stack's height is capped to
-     the image's own height, not stretched to fill whatever space happens
-     to be left in the card — so with 4 spells packed in, it can never
-     grow taller than its box and spill out past the card border. */
+     The spell badges live inside .gear-visual, the same box as the image,
+     absolutely positioned against its right edge. They're centered as a
+     group (top:50% + translateY(-50%) on their own auto-sized stack)
+     rather than spread to fill a fixed span — so the gap between any two
+     badges is always the same fixed value, and the whole stack just grows
+     or shrinks around the image's vertical center as the spell count
+     changes, instead of the spacing itself changing. */
   .slot-card.gear-card {
     height: 232px;
     justify-content: flex-start;
@@ -409,23 +410,22 @@ body.app-shell .site-header { flex-shrink: 0; }
     flex: 1; width: 100%; min-height: 0;
     display: flex; align-items: center; justify-content: center;
   }
+  /* Bigger image, same outer card — .gear-visual only grew because the
+     card already had slack below the name before hitting its fixed
+     height; the card's own size is untouched. */
   .slot-card.gear-card .gear-visual {
-    position: relative; width: 108px; height: 108px; flex-shrink: 0;
+    position: relative; width: 150px; height: 150px; flex-shrink: 0;
   }
   .slot-card.gear-card .gear-visual .slot-empty-icon {
-    width: 108px; height: 108px; border-radius: 10px;
+    width: 150px; height: 150px; border-radius: 7px;
   }
   .slot-card.gear-card .gear-spell-col {
-    position: absolute; top: 50%; right: -11px; transform: translateY(-50%);
-    height: 88px; /* capped to (less than) the image's own height — cannot overflow it */
-    display: flex; flex-direction: column; justify-content: space-between; align-items: center;
-    gap: 0;
+    position: absolute; top: 50%; right: -17px; transform: translateY(-50%);
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 10px; /* fixed — the same distance between any two badges, whatever the count */
   }
-  /* A single badge has nothing to space-between against, so it would sit
-     pinned to the top of the 88px span — auto margins re-center it. */
-  .slot-card.gear-card .gear-spell-col > .gear-spell-btn:only-child { margin: auto 0; }
   .slot-card.gear-card .gear-spell-btn {
-    width: 26px; height: 26px; border-radius: 50%; padding: 2px;
+    width: 34px; height: 34px; border-radius: 50%; padding: 2px;
     border: 2px solid var(--bg); background: var(--surface-2);
   }
   .slot-card.gear-card .gear-spell-btn img { border-radius: 50%; }
@@ -553,11 +553,11 @@ body.app-shell .site-header { flex-shrink: 0; }
     .slot-card img, .slot-card .slot-empty-icon { width: 44px; height: 44px; }
 
     .slot-card.gear-card { height: 172px; padding: 10px 6px; }
-    .slot-card.gear-card .gear-visual { width: 68px; height: 68px; }
-    .slot-card.gear-card .gear-visual .slot-empty-icon { width: 68px; height: 68px; }
-    /* imgTag() sets width/height as an inline style (108px) — needs !important
+    .slot-card.gear-card .gear-visual { width: 92px; height: 92px; }
+    .slot-card.gear-card .gear-visual .slot-empty-icon { width: 92px; height: 92px; }
+    /* imgTag() sets width/height as an inline style (150px) — needs !important
        here to actually shrink on narrow screens instead of overflowing the box. */
-    .slot-card.gear-card .gear-visual > img { width: 68px !important; height: 68px !important; }
-    .slot-card.gear-card .gear-spell-col { height: 54px; right: -8px; }
-    .slot-card.gear-card .gear-spell-btn { width: 20px; height: 20px; }
+    .slot-card.gear-card .gear-visual > img { width: 92px !important; height: 92px !important; }
+    .slot-card.gear-card .gear-spell-col { right: -11px; gap: 6px; }
+    .slot-card.gear-card .gear-spell-btn { width: 24px; height: 24px; }
   }
