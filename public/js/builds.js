@@ -105,15 +105,19 @@ function slotCard(name, slotKey, editable, buildKey) {
   if (!name) return `
     <div class="slot-card gear-card empty${editableAttr}">
       <span class="slot-name">—</span>
-      <div class="slot-empty-icon"></div>
+      <div class="slot-body-row">
+        <div class="gear-visual"><div class="slot-empty-icon"></div></div>
+      </div>
       ${editable ? PENCIL_SVG : ''}
     </div>`;
   return `
     <div class="slot-card gear-card${editableAttr}">
       <span class="slot-name" title="${name}">${name}</span>
       <div class="slot-body-row">
-        ${imgTag(name, 92)}
-        ${gearSpellRowHtml(name, slotKey, buildKey, editable)}
+        <div class="gear-visual">
+          ${imgTag(name, 108)}
+          ${gearSpellRowHtml(name, slotKey, buildKey, editable)}
+        </div>
       </div>
       ${editable ? PENCIL_SVG : ''}
     </div>`;
