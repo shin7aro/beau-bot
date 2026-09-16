@@ -343,68 +343,38 @@ span.event-row-name-pill { cursor: default; }
 }
 .event-player-weapon-chip.is-current .event-player-weapon-count { background: var(--accent); border-color: var(--accent); color: var(--surface); }
 
-/* Gear grid — reuses builds.css's .slots-grid/.slot-card item-card look
-   (icon + label + name), just scaled down a notch for this narrower
-   sidebar column instead of the full build-page detail pane. */
-.event-build-slots.slots-grid { grid-template-columns: repeat(3, 1fr); gap: 8px; }
-/* Grid items default to an automatic min-width based on their content's
-   min-content size — here that's .slot-name's un-wrapped text (e.g.
-   "Avalonian Omelette"), which is wider than this sidebar's 1fr columns
-   can offer. The build page's own .slots-grid never hits this because its
-   container is much wider; this narrower sidebar needs the explicit
-   min-width:0 override so cards actually shrink to their column instead of
-   blowing out the grid (and with it the whole details column) sideways. */
-.event-build-slots .slot-card { min-height: 92px; padding: 10px 6px; gap: 6px; min-width: 0; }
+/* (The hover card reuses builds.css's .slots-grid/.slot-card gear styles
+   untouched, so the build renders at full builds-page proportions.) */
 .event-build-note { font-size: 12px; color: var(--ink-dim); font-style: italic; padding-top: 4px; }
 
 /* ---------- floating build hover-card (event + comp viewers) ----------
    Replaces the old right-side build column: hovering a role pill shows the
-   linked build in this floating card, moving the pointer away dismisses it,
+   linked build in a floating card, moving the pointer away dismisses it,
    and clicking pins it open (with an X to close). Fixed-positioned so it
-   never affects page layout — the old sidebar column blew out because the
-   150px inline gear images were wider than its ~80px grid columns. */
+   never affects page layout. Sized to host the real builds-page card at
+   full proportions (150px gear images, 232px slot cards) — builds.css is
+   loaded on both pages, so the shared .card-header/.slots-grid/.slot-card
+   styles apply here untouched. */
 .build-hover-card {
-  position: fixed; z-index: 200; width: 360px; max-width: calc(100vw - 24px);
-  max-height: calc(100vh - 24px); overflow-y: auto;
+  position: fixed; z-index: 200; width: 600px; max-width: calc(100vw - 24px);
+  max-height: calc(100vh - 24px); overflow-y: auto; overflow-x: hidden;
   background: var(--surface); border: 1px solid var(--line-2); border-radius: 12px;
-  box-shadow: 0 16px 48px rgba(0,0,0,0.5); padding: 14px;
+  box-shadow: 0 16px 48px rgba(0,0,0,0.5); padding: 16px;
   display: flex; flex-direction: column; gap: 10px;
 }
-.build-hover-head {
-  display: flex; align-items: center; gap: 8px;
-  font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em;
-  color: var(--ink-faint);
-}
-.build-hover-title {
-  font-size: 15px; font-weight: 700; color: var(--ink); line-height: 1.3;
-  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
-}
+/* Clear the pinned X, which floats over the card's own header. */
+.build-hover-card .card-header { padding-right: 36px; }
 .build-hover-close {
-  margin-left: auto; flex-shrink: 0; width: 26px; height: 26px; border-radius: 50%;
+  position: absolute; top: 10px; right: 10px; z-index: 2;
+  width: 26px; height: 26px; border-radius: 50%;
   display: none; align-items: center; justify-content: center;
   background: var(--surface-2); border: 1px solid var(--line-2);
   color: var(--ink-dim); font-size: 14px; font-weight: 700; line-height: 1; cursor: pointer;
 }
 .build-hover-close:hover { color: var(--dps); border-color: var(--dps); }
 .build-hover-card.is-pinned .build-hover-close { display: inline-flex; }
-/* Compact gear grid — the shared renderGearSlot() markup carries inline
-   150px image sizes meant for the wide build page; force them down here
-   with !important so cards fit the 360px popover (the bug the sidebar had). */
-.build-hover-card .event-build-slots.slots-grid { grid-template-columns: repeat(3, 1fr); gap: 8px; }
-.build-hover-card .event-build-slots .slot-card { min-height: 0; padding: 8px 6px; gap: 6px; min-width: 0; }
-.build-hover-card .event-build-slots .gear-visual { width: 100%; display: flex; justify-content: center; }
-.build-hover-card .event-build-slots .gear-visual > img,
-.build-hover-card .event-build-slots .gear-visual > div {
-  width: 64px !important; height: 64px !important;
-}
-.build-hover-card .event-build-slots .slot-name {
-  font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%;
-}
 .build-hover-empty { color: var(--ink-faint); font-size: 12.5px; line-height: 1.5; }
 .build-hover-hint { color: var(--ink-faint); font-size: 11px; }
-@media (max-width: 640px) {
-  .build-hover-card { width: calc(100vw - 24px); }
-}
 
 .event-build-linker { display: flex; flex-direction: column; gap: 8px; padding-top: 8px; border-top: 1px solid var(--line); }
 .event-build-link-select {

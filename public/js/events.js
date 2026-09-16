@@ -771,7 +771,7 @@ async function openBuildHover(anchorEl, cat, itemIndexStr, optionIndexStr, { pin
 
   const card = ensureBuildHoverEl();
   card.classList.toggle('is-pinned', buildHoverPinned);
-  card.innerHTML = `<div class="build-hover-head">Build<button type="button" class="build-hover-close" aria-label="Close">×</button></div><p class="build-hover-empty">Loading build…</p>`;
+  card.innerHTML = `<button type="button" class="build-hover-close" aria-label="Close">×</button><p class="build-hover-empty">Loading build…</p>`;
   card.querySelector('.build-hover-close').addEventListener('click', (e) => {
     e.stopPropagation();
     forceCloseBuildHover();
@@ -819,20 +819,25 @@ async function openBuildHover(anchorEl, cat, itemIndexStr, optionIndexStr, { pin
   const roleLabel = EVENT_ROLE_LABELS[roleKey] || cat;
   const displayName = option ? option.name : (row.name || 'Any');
 
-  // Same card-header / slots-grid / card-note-block markup as the builds
-  // tab's own detail card (see builds.js select()), just read-only and
-  // (for officers/admins) followed by the build-linker.
+  // Exact builds-page detail markup (see builds.js select()) — same
+  // card-header / slots-grid / card-note-block, just read-only and (for
+  // officers/admins) followed by the event-only build-linker.
   card.innerHTML = `
-    <div class="build-hover-head">Build<button type="button" class="build-hover-close" aria-label="Close">×</button></div>
+    <button type="button" class="build-hover-close" aria-label="Close">×</button>
     <div class="event-build-panel">
       ${build ? `
-        <div class="build-hover-title">
-          <span class="role-pill role-${roleKey}"><span class="role-pill-dot" style="background:${color}"></span>${escapeHtml(roleLabel)}</span>
-          ${escapeHtml(build.weapon || 'Unnamed build')}
+        <div class="card-header">
+          <div class="card-role-bar" style="background:${color}"></div>
+          <div class="card-title-row">
+            <div class="card-title">${escapeHtml(build.weapon || 'Unnamed build')}</div>
+          </div>
+          <div class="card-meta">
+            <span class="role-pill role-${roleKey}"><span class="role-pill-dot" style="background:${color}"></span>${escapeHtml(roleLabel)}</span>
+          </div>
         </div>
         <div>
           <div class="section-label">Build</div>
-          <div class="slots-grid event-build-slots">
+          <div class="slots-grid">
             ${spacerCard()}
             ${renderGearSlot(build.head, 'head', buildKey)}
             ${renderGearSlot(build.cape, 'cape', buildKey)}
@@ -864,7 +869,8 @@ async function openBuildHover(anchorEl, cat, itemIndexStr, optionIndexStr, { pin
   // renderGearSlot() without going through that step, so without this the
   // cards would just stay invisible forever. Same double-rAF timing as
   // builds.js uses, so the staggered per-card pop-in still plays here too.
-  const grid = card.querySelector('.event-build-slots');
+  const grid = card.querySelector('.slots-grid');
+  const header = card.querySelector('.card-header');
   if (grid) {
     wireGearSpellIcons(grid);
     requestAnimationFrame(() => {
@@ -873,6 +879,7 @@ async function openBuildHover(anchorEl, cat, itemIndexStr, optionIndexStr, { pin
       });
     });
   }
+  if (header) setTimeout(() => header.classList.add('shimmer'), 750);
 
   positionBuildHover();
 

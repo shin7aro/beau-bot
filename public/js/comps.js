@@ -531,7 +531,7 @@ async function openBuildHover(anchorEl, tab, buildId, weaponName, cat, { pinned 
 
   const card = ensureBuildHoverEl();
   card.classList.toggle('is-pinned', buildHoverPinned);
-  card.innerHTML = `<div class="build-hover-head">War Ledger Build<button type="button" class="build-hover-close" aria-label="Close">×</button></div><p class="build-hover-empty">Loading build…</p>`;
+  card.innerHTML = `<button type="button" class="build-hover-close" aria-label="Close">×</button><p class="build-hover-empty">Loading build…</p>`;
   card.querySelector('.build-hover-close').addEventListener('click', (e) => {
     e.stopPropagation();
     forceCloseBuildHover();
@@ -543,7 +543,7 @@ async function openBuildHover(anchorEl, tab, buildId, weaponName, cat, { pinned 
     [builds] = await Promise.all([ensureAllBuildsLoaded(), ensureBuildSpellsLoaded()]);
   } catch (err) {
     if (token !== buildHoverToken) return;
-    card.innerHTML = `<div class="build-hover-head">War Ledger Build<button type="button" class="build-hover-close" aria-label="Close">×</button></div><div class="event-info-card"><p style="color:var(--ink-faint)">Failed to load builds: ${escapeHtml(err.message)}</p></div>`;
+    card.innerHTML = `<button type="button" class="build-hover-close" aria-label="Close">×</button><div class="event-info-card"><p style="color:var(--ink-faint)">Failed to load builds: ${escapeHtml(err.message)}</p></div>`;
     card.querySelector('.build-hover-close').addEventListener('click', (e) => {
       e.stopPropagation();
       forceCloseBuildHover();
@@ -556,7 +556,7 @@ async function openBuildHover(anchorEl, tab, buildId, weaponName, cat, { pinned 
   const tabBuilds = builds[tab] || [];
   const build = tabBuilds[buildId];
   if (!build) {
-    card.innerHTML = `<div class="build-hover-head">War Ledger Build<button type="button" class="build-hover-close" aria-label="Close">×</button></div><div class="event-info-card"><p style="color:var(--ink-faint)">Build not found.</p></div>`;
+    card.innerHTML = `<button type="button" class="build-hover-close" aria-label="Close">×</button><div class="event-info-card"><p style="color:var(--ink-faint)">Build not found.</p></div>`;
     card.querySelector('.build-hover-close').addEventListener('click', (e) => {
       e.stopPropagation();
       forceCloseBuildHover();
@@ -571,15 +571,20 @@ async function openBuildHover(anchorEl, tab, buildId, weaponName, cat, { pinned 
   const roleLabel = EVENT_ROLE_LABELS[roleKey] || cat;
 
   card.innerHTML = `
-    <div class="build-hover-head">War Ledger Build<button type="button" class="build-hover-close" aria-label="Close">×</button></div>
+    <button type="button" class="build-hover-close" aria-label="Close">×</button>
     <div class="event-build-panel">
-      <div class="build-hover-title">
-        <span class="role-pill role-${roleKey}"><span class="role-pill-dot" style="background:${color}"></span>${escapeHtml(roleLabel)}</span>
-        ${escapeHtml(build.weapon || 'Unnamed build')}
+      <div class="card-header">
+        <div class="card-role-bar" style="background:${color}"></div>
+        <div class="card-title-row">
+          <div class="card-title">${escapeHtml(build.weapon || 'Unnamed build')}</div>
+        </div>
+        <div class="card-meta">
+          <span class="role-pill role-${roleKey}"><span class="role-pill-dot" style="background:${color}"></span>${escapeHtml(roleLabel)}</span>
+        </div>
       </div>
       <div>
         <div class="section-label">Build</div>
-        <div class="slots-grid event-build-slots">
+        <div class="slots-grid">
           ${spacerCard()}
           ${renderGearSlot(build.head, 'head', buildKey)}
           ${renderGearSlot(build.cape, 'cape', buildKey)}
@@ -605,7 +610,8 @@ async function openBuildHover(anchorEl, tab, buildId, weaponName, cat, { pinned 
     forceCloseBuildHover();
   });
 
-  const grid = card.querySelector('.event-build-slots');
+  const grid = card.querySelector('.slots-grid');
+  const header = card.querySelector('.card-header');
   if (grid) {
     wireGearSpellIcons(grid);
     requestAnimationFrame(() => {
@@ -614,6 +620,7 @@ async function openBuildHover(anchorEl, tab, buildId, weaponName, cat, { pinned 
       });
     });
   }
+  if (header) setTimeout(() => header.classList.add('shimmer'), 750);
   positionBuildHover();
 }
 
