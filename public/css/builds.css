@@ -356,29 +356,30 @@ body.app-shell .site-header { flex-shrink: 0; }
   .item-picker-empty { grid-column: 1 / -1; text-align: center; padding: 30px 0; color: var(--ink-faint); font-size: 13px; }
   .spell-pick-icon { width: 44px; height: 44px; border-radius: 8px; border: 1px solid var(--line-2); background: var(--bg); object-fit: contain; flex-shrink: 0; }
 
-  /* ── PER-BUILD SPELL ROW (under a gear slot's image) ──
-     One small icon per spell "row" this gear piece has (a weapon's
-     Q/W/E/passive, or an armor piece's active/passive) — see
-     gearSpellRowHtml() in builds.js. Reuses the fallback-badge class
-     from spell-map.js's shared wireSpellIcon() and the flip transform
-     from the same, so both need a definition here too, not just in
-     spell-picker.css. */
-  .gear-spell-row { display: flex; gap: 4px; flex-wrap: wrap; justify-content: center; margin-top: 2px; }
+  /* ── PER-BUILD SPELL ICONS (beside a gear slot's image) ──
+     One icon per spell "row" this gear piece has (a weapon's
+     Q/W/E/passive, or an armor piece's active/passive), stacked
+     top-to-bottom to the right of the image — see gearSpellRowHtml()
+     in builds.js. Reuses the fallback-badge class from spell-map.js's
+     shared wireSpellIcon() and the flip transform from the same, so
+     both need a definition here too, not just in spell-picker.css. */
+  .slot-body-row { display: flex; flex-direction: row; align-items: center; justify-content: center; gap: 8px; }
+  .gear-spell-col { display: flex; flex-direction: column; gap: 5px; }
   .gear-spell-btn {
-    width: 22px; height: 22px; border-radius: 5px; padding: 1px;
+    width: 32px; height: 32px; border-radius: 6px; padding: 2px;
     border: 1px solid var(--line-2); background: var(--bg); flex-shrink: 0;
     display: flex; align-items: center; justify-content: center;
   }
   .gear-spell-btn.editable { cursor: pointer; }
   .gear-spell-btn.editable:hover { border-color: var(--accent); }
-  .gear-spell-btn img { width: 100%; height: 100%; object-fit: contain; border-radius: 3px; }
+  .gear-spell-btn img { width: 100%; height: 100%; object-fit: contain; border-radius: 4px; }
   .gear-spell-btn img.spell-icon-flip { transform: scaleY(-1); }
   .gear-spell-btn.unset { border-style: dashed; opacity: 0.5; }
-  .gear-spell-unset { font-size: 12px; color: var(--ink-faint); line-height: 1; }
+  .gear-spell-unset { font-size: 15px; color: var(--ink-faint); line-height: 1; }
   .spell-option-fallback {
-    width: 100%; height: 100%; border-radius: 3px;
+    width: 100%; height: 100%; border-radius: 4px;
     background: var(--surface-3); display: flex; align-items: center; justify-content: center;
-    font-size: 8px; font-weight: 700; color: var(--ink-dim);
+    font-size: 10px; font-weight: 700; color: var(--ink-dim);
   }
 
   /* ── flashy interaction accents ── */

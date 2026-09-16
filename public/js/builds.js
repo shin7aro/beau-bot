@@ -89,7 +89,7 @@ function gearSpellRowHtml(name, slotKey, buildKey, editable) {
       </button>`;
   }).join('');
 
-  return buttons ? `<div class="gear-spell-row">${buttons}</div>` : '';
+  return buttons ? `<div class="gear-spell-col">${buttons}</div>` : '';
 }
 
 function wireGearSpellIcons(container) {
@@ -111,8 +111,10 @@ function slotCard(name, slotKey, editable, buildKey) {
   return `
     <div class="slot-card${editableAttr}">
       <span class="slot-name" title="${name}">${name}</span>
-      ${imgTag(name, 56)}
-      ${gearSpellRowHtml(name, slotKey, buildKey, editable)}
+      <div class="slot-body-row">
+        ${imgTag(name, 56)}
+        ${gearSpellRowHtml(name, slotKey, buildKey, editable)}
+      </div>
       ${editable ? PENCIL_SVG : ''}
     </div>`;
 }
