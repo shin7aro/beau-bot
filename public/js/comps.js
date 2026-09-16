@@ -10,6 +10,7 @@ let allComps = [];       // [{ key, label, categories, eventType, updatedAt, ...
 let buildOptions = [];   // [{ tab, index, role, weapon, offhand, head, chest, feet, cape }]
 let weaponEmojiMap = {}; // { "Broadsword": "<:tag:id>", ... } from /api/weapon-emojis
 let allBuildsCache = null; // lazy-loaded full builds list
+let buildSpellsCache = null; // lazy-loaded { "<tab>:<index>": { <slotKey>: { <groupKey>: spellUniquename } } }, see builds.js
 let buildCategoriesCache = null; // lazy-loaded categories list
 let viewingKey = null;   // currently selected comp key in read-only viewer
 let editingKey = null;   // null = creating new, otherwise key of comp being edited
@@ -353,22 +354,69 @@ const EVENT_ROLE_COLORS = { healer: 'var(--healer)', support: 'var(--support)', 
 const EVENT_ROLE_LABELS = { healer: 'Healer', support: 'Support', dps: 'DPS', tank: 'Tank', battlemount: 'Battlemount' };
 const EVENT_FLAG_SVG = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 22V4a1 1 0 0 1 1.45-.9L19 9.5 5.45 16.4A1 1 0 0 1 4 15.5"/></svg>`;
 
+// Item-card cell for the build gear grid — same .gear-card markup builds.js's
+// own slotCard() renders (icon + per-slot spell-row icons via js/spell-map.js),
+// just without the editable/pencil bits since this panel is read-only.
 const imgUrl = window.imgUrl;
-function renderGearSlot(label, name) {
-  if (!name && !label) return `<div class="slot-card empty spacer"></div>`;
-  if (!name) return `
-    <div class="slot-card empty">
-      <div class="slot-empty-icon"></div>
-      <div class="slot-info"><span class="slot-label">${escapeHtml(label)}</span><span class="slot-name">—</span></div>
-    </div>`;
+
+function imgTag(name, size) {
   const url = typeof imgUrl === 'function' ? imgUrl(name) : null;
-  const icon = url
-    ? `<img src="${escapeHtml(url)}" alt="" loading="lazy" onerror="this.style.opacity='0.15'">`
-    : `<div class="slot-empty-icon"></div>`;
+  const r = size > 36 ? 7 : 5;
+  const base = `width:${size}px;height:${size}px;border-radius:${r}px;border:1px solid var(--line-2);background:var(--surface-2);object-fit:contain;flex-shrink:0`;
+  if (!url) return `<div style="${base}"></div>`;
+  return `<img src="${escapeHtml(url)}" width="${size}" height="${size}" style="${base}" alt="${escapeHtml(name)}" loading="lazy" onerror="this.style.opacity='0.15'">`;
+}
+
+function spacerCard() {
+  return `<div class="slot-card gear-card empty spacer"></div>`;
+}
+
+// Read-only per-spell-row icon strip — mirrors builds.js's gearSpellRowHtml(),
+// minus the "editable" placeholder-button branch: a row only shows up here
+// when this build actually has a spell chosen for it.
+function gearSpellRowHtml(name, slotKey, buildKey) {
+  const entry = window.SPELL_MAP && window.SPELL_MAP[name];
+  if (!entry) return '';
+  const choices = ((buildSpellsCache || {})[buildKey] || {})[slotKey] || {};
+
+  const buttons = entry.groups.map(g => {
+    const chosenId = choices[g.key];
+    const chosen = chosenId ? g.spells.find(s => s.spell === chosenId) : null;
+    if (!chosen) return '';
+    return `
+      <button type="button" class="gear-spell-btn" data-group="${g.key}" data-candidate="${escapeHtml(JSON.stringify(chosen))}" title="${escapeHtml(chosen.name)}">
+        <img data-spell-icon alt="">
+      </button>`;
+  }).join('');
+
+  return buttons ? `<div class="gear-spell-col">${buttons}</div>` : '';
+}
+
+function wireGearSpellIcons(container) {
+  container.querySelectorAll('.gear-spell-btn img[data-spell-icon]').forEach(img => {
+    const candidateJson = img.closest('.gear-spell-btn').dataset.candidate;
+    if (!candidateJson) return;
+    window.wireSpellIcon(img, JSON.parse(candidateJson));
+  });
+}
+
+function renderGearSlot(name, slotKey, buildKey) {
+  if (!name) return `
+    <div class="slot-card gear-card empty">
+      <span class="slot-name">—</span>
+      <div class="slot-body-row">
+        <div class="gear-visual"><div class="slot-empty-icon"></div></div>
+      </div>
+    </div>`;
   return `
-    <div class="slot-card">
-      ${icon}
-      <div class="slot-info"><span class="slot-label">${escapeHtml(label)}</span><span class="slot-name" title="${escapeHtml(name)}">${escapeHtml(name)}</span></div>
+    <div class="slot-card gear-card">
+      <span class="slot-name" title="${escapeHtml(name)}">${escapeHtml(name)}</span>
+      <div class="slot-body-row">
+        <div class="gear-visual">
+          ${imgTag(name, 150)}
+          ${gearSpellRowHtml(name, slotKey, buildKey)}
+        </div>
+      </div>
     </div>`;
 }
 
@@ -378,13 +426,19 @@ async function ensureAllBuildsLoaded() {
   return allBuildsCache;
 }
 
+async function ensureBuildSpellsLoaded() {
+  if (buildSpellsCache) return buildSpellsCache;
+  buildSpellsCache = await api('/api/build-spells').catch(() => ({}));
+  return buildSpellsCache;
+}
+
 async function showBuildDetail(tab, buildId, weaponName, cat) {
   const col = document.getElementById('comp-viewer-build-col');
   if (!col) return;
 
   let builds;
   try {
-    builds = await ensureAllBuildsLoaded();
+    [builds] = await Promise.all([ensureAllBuildsLoaded(), ensureBuildSpellsLoaded()]);
   } catch (err) {
     col.style.display = '';
     col.innerHTML = `<div class="event-info-card"><p style="color:var(--ink-faint)">Failed to load builds: ${escapeHtml(err.message)}</p></div>`;
@@ -398,6 +452,7 @@ async function showBuildDetail(tab, buildId, weaponName, cat) {
     col.innerHTML = `<div class="event-info-card"><p style="color:var(--ink-faint)">Build not found.</p></div>`;
     return;
   }
+  const buildKey = `${tab}:${buildId}`;
 
   const roleKey = cat.toLowerCase();
   const color = EVENT_ROLE_COLORS[roleKey] || 'var(--line-2)';
@@ -419,15 +474,15 @@ async function showBuildDetail(tab, buildId, weaponName, cat) {
       <div>
         <div class="section-label">Build</div>
         <div class="slots-grid event-build-slots">
-          ${renderGearSlot('', '')}
-          ${renderGearSlot('Head', build.head)}
-          ${renderGearSlot('Cape', build.cape)}
-          ${renderGearSlot('Weapon', build.weapon)}
-          ${renderGearSlot('Chest', build.chest)}
-          ${renderGearSlot('Offhand', build.offhand)}
-          ${renderGearSlot('Potion', build.potion)}
-          ${renderGearSlot('Feet', build.feet)}
-          ${renderGearSlot('Food', build.food)}
+          ${spacerCard()}
+          ${renderGearSlot(build.head, 'head', buildKey)}
+          ${renderGearSlot(build.cape, 'cape', buildKey)}
+          ${renderGearSlot(build.weapon, 'weapon', buildKey)}
+          ${renderGearSlot(build.chest, 'chest', buildKey)}
+          ${renderGearSlot(build.offhand, 'offhand', buildKey)}
+          ${renderGearSlot(build.potion, 'potion', buildKey)}
+          ${renderGearSlot(build.feet, 'feet', buildKey)}
+          ${renderGearSlot(build.food, 'food', buildKey)}
         </div>
       </div>
       ${build.note ? `<div class="card-note-block">${EVENT_FLAG_SVG}<span class="card-note-text">${escapeHtml(build.note)}</span></div>` : ''}
@@ -441,6 +496,7 @@ async function showBuildDetail(tab, buildId, weaponName, cat) {
   const grid = col.querySelector('.event-build-slots');
   const header = col.querySelector('.card-header');
   if (grid) {
+    wireGearSpellIcons(grid);
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
         grid.classList.add('revealed');

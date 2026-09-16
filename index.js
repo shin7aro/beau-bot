@@ -46,6 +46,8 @@ const storage = require('./storage');
 const activityStore = require('./activity-store');
 const buildsStore = require('./builds-store');
 const itemMap = require('./item-map');
+const spellMap = require('./spell-map');
+const buildSpellStore = require('./build-spell-store');
 const weaponAliasStore = require('./weapon-alias-store');
 const { weaponEmoji } = require('./live-comps');
 const { renderBuildCard } = require('./build-card-image');
@@ -90,14 +92,37 @@ const ROLE_EMBED_COLORS = { tank: 0x5d8fc9, healer: 0x6bab7a, support: 0xcf9d3f,
 
 // Builds the "Ask a build" reply payload — mirrors the detail card shown on
 // the right side of builds.html when you click a build there. Text fields
-// (Role/Head/Cape/etc.) are always included; the composited slot-icon image
-// (see build-card-image.js) is added on top when rendering succeeds, since a
-// Discord embed can only carry one setImage()/setThumbnail(), not a
-// per-field icon. If the image render fails for any reason (network hiccup
-// to render.albiononline.com, sharp error, etc.), the reply still goes out
-// with just the weapon thumbnail and text fields — never blocks on this.
-async function buildAskBuildEmbed(build) {
-  const slot = (name) => name || '—';
+// (Role/Head/Cape/etc.) are always included, now with each gear piece's
+// chosen spells (see build-spell-store.js) appended inline so the info is
+// there even if the image render below fails or doesn't load. The
+// composited slot-icon image (see build-card-image.js) is added on top when
+// rendering succeeds, since a Discord embed can only carry one
+// setImage()/setThumbnail(), not a per-field icon. If the image render
+// fails for any reason (network hiccup to render.albiononline.com, sharp
+// error, etc.), the reply still goes out with just the weapon thumbnail and
+// text fields — never blocks on this.
+//
+// `buildKey` is this build's "<tab>:<index>" identity (same convention as
+// everywhere else its spell choices are read/written) — optional, since a
+// couple of older call sites may not have it handy; spell info is simply
+// left out when it's missing.
+function spellSummaryForSlot(itemName, slotKey, buildSpells) {
+  const entry = itemName && spellMap.SPELL_MAP[itemName];
+  if (!entry) return '';
+  const choices = (buildSpells && buildSpells[slotKey]) || {};
+  const parts = [];
+  for (const g of entry.groups) {
+    const spellId = choices[g.key];
+    if (!spellId) continue;
+    const chosen = g.spells.find((s) => s.spell === spellId);
+    if (chosen) parts.push(`${g.label}: ${chosen.name}`);
+  }
+  return parts.length ? `\n${parts.join(', ')}` : '';
+}
+
+async function buildAskBuildEmbed(build, buildKey) {
+  const buildSpells = buildKey ? await buildSpellStore.loadBuildSpells(buildKey) : {};
+  const slot = (name, slotKey) => (name ? `${name}${spellSummaryForSlot(name, slotKey, buildSpells)}` : '—');
   const emoji = weaponEmoji(build.weapon, itemMap.ITEM_MAP);
   const embed = new EmbedBuilder()
     .setTitle(`${emoji} ${build.weapon || 'Unnamed build'}`)
@@ -108,13 +133,13 @@ async function buildAskBuildEmbed(build) {
 
   embed.addFields(
     { name: 'Role', value: build.role ? build.role[0].toUpperCase() + build.role.slice(1) : '—', inline: true },
-    { name: 'Head', value: slot(build.head), inline: true },
-    { name: 'Cape', value: slot(build.cape), inline: true },
-    { name: 'Chest', value: slot(build.chest), inline: true },
-    { name: 'Offhand', value: slot(build.offhand), inline: true },
-    { name: 'Feet', value: slot(build.feet), inline: true },
-    { name: 'Potion', value: slot(build.potion), inline: true },
-    { name: 'Food', value: slot(build.food), inline: true }
+    { name: 'Head', value: slot(build.head, 'head'), inline: true },
+    { name: 'Cape', value: slot(build.cape, 'cape'), inline: true },
+    { name: 'Chest', value: slot(build.chest, 'chest'), inline: true },
+    { name: 'Offhand', value: slot(build.offhand, 'offhand'), inline: true },
+    { name: 'Feet', value: slot(build.feet, 'feet'), inline: true },
+    { name: 'Potion', value: slot(build.potion, 'potion'), inline: true },
+    { name: 'Food', value: slot(build.food, 'food'), inline: true }
   );
 
   if (build.note) {
@@ -123,7 +148,7 @@ async function buildAskBuildEmbed(build) {
 
   const files = [];
   try {
-    const cardBuffer = await renderBuildCard(build);
+    const cardBuffer = await renderBuildCard(build, buildKey);
     const attachment = new AttachmentBuilder(cardBuffer, { name: 'build-card.png' });
     embed.setImage('attachment://build-card.png');
     files.push(attachment);
@@ -1950,7 +1975,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
           await interaction.editReply({ content: 'That build could not be found — it may have been removed from the war ledger.' });
           return;
         }
-        const payload = await buildAskBuildEmbed(build);
+        const payload = await buildAskBuildEmbed(build, `${row.buildTab}:${row.buildId}`);
         await interaction.editReply(payload);
         return;
       }
@@ -1989,7 +2014,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
         return;
       }
 
-      const payload = await buildAskBuildEmbed(build);
+      const payload = await buildAskBuildEmbed(build, `${buildTab}:${buildId}`);
       await interaction.editReply({ content: null, components: [], ...payload });
       return;
     }
