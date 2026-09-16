@@ -29,8 +29,14 @@ function renderTabNav() {
     ? '<button class="btn manage-categories-btn officer-only visible" id="manage-categories-btn"><span class="btn-label">+ Manage Categories</span></button>'
     : '';
   
+  // 'brawl' is no longer guaranteed to exist — it can be deleted like any
+  // other category — so fall back to whatever the first category is.
+  const activeId = allCategories.some(c => c.id === window.currentTab)
+    ? window.currentTab
+    : (allCategories[0] && allCategories[0].id);
+
   tabNav.innerHTML = allCategories.map(cat => 
-    `<button class="tab-btn ${cat.id === (window.currentTab || 'brawl') ? 'active' : ''}" data-tab="${cat.id}">${escapeHtml(cat.label)}</button>`
+    `<button class="tab-btn ${cat.id === activeId ? 'active' : ''}" data-tab="${cat.id}">${escapeHtml(cat.label)}</button>`
   ).join('') + manageBtnHtml;
   
   // Re-attach tab click handlers
@@ -101,31 +107,112 @@ function createCategoryModal() {
   });
 }
 
+// Every category — built-in or user-created — can be renamed and deleted.
+// The only category that can't be deleted is the last remaining one (the
+// server re-seeds the built-in defaults whenever the list goes empty).
 function renderCategoryList() {
   const list = document.getElementById('category-list');
   if (!list) return;
-  
-  const defaultIds = ['brawl', 'gank', 'kite', 'brawlclap', 'tracking', 'groupdungeon', 'avadungeon'];
-  
-  list.innerHTML = allCategories.map(cat => {
-    const isDefault = defaultIds.includes(cat.id);
-    const deleteBtn = !isDefault 
-      ? `<button type="button" class="category-item-btn danger" data-delete="${cat.id}">Delete</button>`
-      : '';
-    
-    return `
-      <div class="category-item ${isDefault ? 'is-default' : ''}">
+
+  const onlyOne = allCategories.length <= 1;
+
+  list.innerHTML = allCategories.map(cat => `
+      <div class="category-item" data-cat="${cat.id}">
         <span class="category-item-label">${escapeHtml(cat.label)}</span>
         <div class="category-item-actions">
-          ${deleteBtn}
+          <button type="button" class="category-item-btn" data-rename="${cat.id}">Rename</button>
+          <button type="button" class="category-item-btn danger" data-delete="${cat.id}"${onlyOne ? ' disabled title="You must keep at least one category"' : ''}>Delete</button>
         </div>
-      </div>`;
-  }).join('');
-  
-  // Attach delete handlers
+      </div>`).join('');
+
   list.querySelectorAll('[data-delete]').forEach(btn => {
     btn.addEventListener('click', () => deleteCategory(btn.dataset.delete));
   });
+  list.querySelectorAll('[data-rename]').forEach(btn => {
+    btn.addEventListener('click', () => startRename(btn.dataset.rename));
+  });
+}
+
+// Swap a row into an inline edit field. Escape / Cancel restores the row.
+function startRename(id) {
+  const row = document.querySelector(`.category-item[data-cat="${id}"]`);
+  const cat = allCategories.find(c => c.id === id);
+  if (!row || !cat) return;
+
+  row.innerHTML = `
+    <input type="text" class="category-input category-rename-input" value="${escapeHtml(cat.label)}" maxlength="50">
+    <div class="category-item-actions">
+      <button type="button" class="category-item-btn" data-save-rename>Save</button>
+      <button type="button" class="category-item-btn" data-cancel-rename>Cancel</button>
+    </div>`;
+
+  const input = row.querySelector('.category-rename-input');
+  input.focus();
+  input.select();
+
+  const save = () => renameCategory(id, input.value);
+  row.querySelector('[data-save-rename]').addEventListener('click', save);
+  row.querySelector('[data-cancel-rename]').addEventListener('click', renderCategoryList);
+  input.addEventListener('keydown', e => {
+    if (e.key === 'Enter') { e.preventDefault(); save(); }
+    if (e.key === 'Escape') { e.preventDefault(); renderCategoryList(); }
+  });
+}
+
+async function renameCategory(id, rawLabel) {
+  const label = (rawLabel || '').trim();
+  if (!label) return;
+
+  const cat = allCategories.find(c => c.id === id);
+  if (cat && cat.label === label) return renderCategoryList(); // no-op
+
+  let res;
+  try {
+    res = await fetch(`/api/builds/categories/${encodeURIComponent(id)}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'same-origin',
+      body: JSON.stringify({ label }),
+    });
+  } catch (err) {
+    console.error('Failed to rename category:', err);
+    alert('Failed to rename category — is the server reachable?');
+    return;
+  }
+
+  if (!res.ok) {
+    // Same pattern as create/delete: the write may have landed even though
+    // the response looks like a failure, so check the authoritative list
+    // before showing an error.
+    let renamed = false;
+    try {
+      const verify = await fetch('/api/builds/categories');
+      if (verify.ok) {
+        const cats = await verify.json();
+        renamed = cats.some(c => c.id === id && c.label === label);
+      }
+    } catch (verifyErr) {
+      console.error('Could not verify category rename:', verifyErr);
+    }
+
+    if (!renamed) {
+      const data = await res.json().catch(() => ({}));
+      alert(data.error || 'Failed to rename category');
+      renderCategoryList();
+      return;
+    }
+  }
+
+  // The id (and therefore the builds stored under it) never changes on a
+  // rename — only the display label — so nothing else needs re-syncing.
+  try {
+    await loadCategories(); // re-sync + re-render the tab bar
+    renderCategoryList();
+  } catch (err) {
+    console.error('Error updating UI after renaming category:', err);
+  }
+
+  showToast(`Category renamed to "${label}"`);
 }
 
 async function createCategory() {
@@ -260,9 +347,11 @@ async function deleteCategory(id) {
     renderCategoryList();
     renderTabNav();
     
-    // Switch to first category if we deleted the current one
-    const currentTab = window.currentTab || 'brawl';
-    if (currentTab === id && allCategories.length > 0 && window.switchTab) {
+    // Switch to the first remaining category if we deleted the current one,
+    // or if nothing is selected because the old default tab is gone.
+    const currentTab = window.currentTab;
+    const stale = currentTab === id || !allCategories.some(c => c.id === currentTab);
+    if (stale && allCategories.length > 0 && window.switchTab) {
       window.switchTab(allCategories[0].id);
     }
   } catch (err) {

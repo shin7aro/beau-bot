@@ -636,16 +636,33 @@ async function initTabs() {
   ALL_BUILD_SPELLS = await fetchAllBuildSpells();
   window.ALL_BUILDS = ALL_BUILDS; // Expose globally for builds-categories.js
 
-  createTab({ tabKey: 'brawl',    searchId: 'search',          filterId: 'filter-group',          countId: 'count-label',          tbodyId: 'tbody',          emptyId: 'empty',          placeholderId: 'detail-placeholder',          cardId: 'detail-card',          paneId: 'brawl-detail-pane',    addBtnId: 'add-build-btn',          resetBtnId: 'reset-build-btn',          roles: ['dps','healer','support','tank'] });
-  createTab({ tabKey: 'kite',     searchId: 'kite-search',     filterId: 'kite-filter-group',     countId: 'kite-count-label',     tbodyId: 'kite-tbody',     emptyId: 'kite-empty',     placeholderId: 'kite-detail-placeholder',     cardId: 'kite-detail-card',     paneId: 'kite-detail-pane',     addBtnId: 'kite-add-build-btn',     resetBtnId: 'kite-reset-build-btn',     roles: ['dps','healer','support','tank'] });
-  createTab({ tabKey: 'tracking', searchId: 'tracking-search', filterId: 'tracking-filter-group', countId: 'tracking-count-label', tbodyId: 'tracking-tbody', emptyId: 'tracking-empty', placeholderId: 'tracking-detail-placeholder', cardId: 'tracking-detail-card', paneId: 'tracking-detail-pane', addBtnId: 'tracking-add-build-btn', resetBtnId: 'tracking-reset-build-btn', roles: ['dps','healer','tank'] });
+  // Built-in categories can now be deleted from "Manage Categories". Their
+  // tab panels are still hardcoded in builds.html, so drop any panel whose
+  // category no longer exists before wiring the editors up — otherwise a
+  // deleted tab's panel stays in the DOM (and #tab-brawl is even marked
+  // `active`, so it would render with no tab button to switch away from).
+  const liveCategoryIds = new Set((window.__buildCategories || []).map(c => c.id));
+  for (const id of ['brawl', 'kite', 'tracking', 'gank', 'brawlclap', 'groupdungeon', 'avadungeon']) {
+    if (liveCategoryIds.has(id)) continue;
+    const panel = document.getElementById('tab-' + id);
+    if (panel) panel.remove();
+  }
+
+  // Wrap createTab so a removed panel is simply skipped instead of throwing
+  // on the first missing element.
+  const createTabIfLive = (opts) =>
+    document.getElementById('tab-' + opts.tabKey) ? createTab(opts) : undefined;
+
+  createTabIfLive({ tabKey: 'brawl',    searchId: 'search',          filterId: 'filter-group',          countId: 'count-label',          tbodyId: 'tbody',          emptyId: 'empty',          placeholderId: 'detail-placeholder',          cardId: 'detail-card',          paneId: 'brawl-detail-pane',    addBtnId: 'add-build-btn',          resetBtnId: 'reset-build-btn',          roles: ['dps','healer','support','tank'] });
+  createTabIfLive({ tabKey: 'kite',     searchId: 'kite-search',     filterId: 'kite-filter-group',     countId: 'kite-count-label',     tbodyId: 'kite-tbody',     emptyId: 'kite-empty',     placeholderId: 'kite-detail-placeholder',     cardId: 'kite-detail-card',     paneId: 'kite-detail-pane',     addBtnId: 'kite-add-build-btn',     resetBtnId: 'kite-reset-build-btn',     roles: ['dps','healer','support','tank'] });
+  createTabIfLive({ tabKey: 'tracking', searchId: 'tracking-search', filterId: 'tracking-filter-group', countId: 'tracking-count-label', tbodyId: 'tracking-tbody', emptyId: 'tracking-empty', placeholderId: 'tracking-detail-placeholder', cardId: 'tracking-detail-card', paneId: 'tracking-detail-pane', addBtnId: 'tracking-add-build-btn', resetBtnId: 'tracking-reset-build-btn', roles: ['dps','healer','tank'] });
 
   // Optional tabs — "coming soon" for everyone until an officer/admin logs
   // in and starts building it out, or it already has builds in it.
-  createTab({ tabKey: 'gank',         searchId: 'gank-search',         filterId: 'gank-filter-group',         countId: 'gank-count-label',         tbodyId: 'gank-tbody',         emptyId: 'gank-empty',         placeholderId: 'gank-detail-placeholder',         cardId: 'gank-detail-card',         paneId: 'gank-detail-pane',         addBtnId: 'gank-add-build-btn',         resetBtnId: 'gank-reset-build-btn',         roles: ['gank','dps','healer','support','tank'], comingSoonId: 'gank-comingsoon',         builderId: 'gank-builder' });
-  createTab({ tabKey: 'brawlclap',    searchId: 'brawlclap-search',    filterId: 'brawlclap-filter-group',    countId: 'brawlclap-count-label',    tbodyId: 'brawlclap-tbody',    emptyId: 'brawlclap-empty',    placeholderId: 'brawlclap-detail-placeholder',    cardId: 'brawlclap-detail-card',    paneId: 'brawlclap-detail-pane',    addBtnId: 'brawlclap-add-build-btn',    resetBtnId: 'brawlclap-reset-build-btn',    roles: ['dps','healer','support','tank'],          comingSoonId: 'brawlclap-comingsoon',    builderId: 'brawlclap-builder' });
-  createTab({ tabKey: 'groupdungeon', searchId: 'groupdungeon-search', filterId: 'groupdungeon-filter-group', countId: 'groupdungeon-count-label', tbodyId: 'groupdungeon-tbody', emptyId: 'groupdungeon-empty', placeholderId: 'groupdungeon-detail-placeholder', cardId: 'groupdungeon-detail-card', paneId: 'groupdungeon-detail-pane', addBtnId: 'groupdungeon-add-build-btn', resetBtnId: 'groupdungeon-reset-build-btn', roles: ['dps','healer','support','tank'],          comingSoonId: 'groupdungeon-comingsoon', builderId: 'groupdungeon-builder' });
-  createTab({ tabKey: 'avadungeon',  searchId: 'avadungeon-search',  filterId: 'avadungeon-filter-group',  countId: 'avadungeon-count-label',  tbodyId: 'avadungeon-tbody',  emptyId: 'avadungeon-empty',  placeholderId: 'avadungeon-detail-placeholder',  cardId: 'avadungeon-detail-card',  paneId: 'avadungeon-detail-pane',  addBtnId: 'avadungeon-add-build-btn',  resetBtnId: 'avadungeon-reset-build-btn',  roles: ['dps','healer','support','tank'],          comingSoonId: 'avadungeon-comingsoon',  builderId: 'avadungeon-builder' });
+  createTabIfLive({ tabKey: 'gank',         searchId: 'gank-search',         filterId: 'gank-filter-group',         countId: 'gank-count-label',         tbodyId: 'gank-tbody',         emptyId: 'gank-empty',         placeholderId: 'gank-detail-placeholder',         cardId: 'gank-detail-card',         paneId: 'gank-detail-pane',         addBtnId: 'gank-add-build-btn',         resetBtnId: 'gank-reset-build-btn',         roles: ['gank','dps','healer','support','tank'], comingSoonId: 'gank-comingsoon',         builderId: 'gank-builder' });
+  createTabIfLive({ tabKey: 'brawlclap',    searchId: 'brawlclap-search',    filterId: 'brawlclap-filter-group',    countId: 'brawlclap-count-label',    tbodyId: 'brawlclap-tbody',    emptyId: 'brawlclap-empty',    placeholderId: 'brawlclap-detail-placeholder',    cardId: 'brawlclap-detail-card',    paneId: 'brawlclap-detail-pane',    addBtnId: 'brawlclap-add-build-btn',    resetBtnId: 'brawlclap-reset-build-btn',    roles: ['dps','healer','support','tank'],          comingSoonId: 'brawlclap-comingsoon',    builderId: 'brawlclap-builder' });
+  createTabIfLive({ tabKey: 'groupdungeon', searchId: 'groupdungeon-search', filterId: 'groupdungeon-filter-group', countId: 'groupdungeon-count-label', tbodyId: 'groupdungeon-tbody', emptyId: 'groupdungeon-empty', placeholderId: 'groupdungeon-detail-placeholder', cardId: 'groupdungeon-detail-card', paneId: 'groupdungeon-detail-pane', addBtnId: 'groupdungeon-add-build-btn', resetBtnId: 'groupdungeon-reset-build-btn', roles: ['dps','healer','support','tank'],          comingSoonId: 'groupdungeon-comingsoon', builderId: 'groupdungeon-builder' });
+  createTabIfLive({ tabKey: 'avadungeon',  searchId: 'avadungeon-search',  filterId: 'avadungeon-filter-group',  countId: 'avadungeon-count-label',  tbodyId: 'avadungeon-tbody',  emptyId: 'avadungeon-empty',  placeholderId: 'avadungeon-detail-placeholder',  cardId: 'avadungeon-detail-card',  paneId: 'avadungeon-detail-pane',  addBtnId: 'avadungeon-add-build-btn',  resetBtnId: 'avadungeon-reset-build-btn',  roles: ['dps','healer','support','tank'],          comingSoonId: 'avadungeon-comingsoon',  builderId: 'avadungeon-builder' });
 
   // Custom categories (created via "Manage Categories") get a freshly
   // generated tab panel + full build editor wired up, identical to the
@@ -655,6 +672,13 @@ async function initTabs() {
     if (hardcodedTabs.includes(cat.id)) continue;
     if (document.getElementById('tab-' + cat.id)) continue; // already created
     createDynamicTab(cat);
+  }
+
+  // builds.html hardcodes #tab-brawl as the active panel. If Brawl has been
+  // deleted (or renamed away), fall back to the first category that exists.
+  const cats = window.__buildCategories || [];
+  if (cats.length && !cats.some(c => c.id === currentTab)) {
+    switchTab(cats[0].id);
   }
 
   applyDeepLinkFromURL();

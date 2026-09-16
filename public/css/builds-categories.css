@@ -76,3 +76,14 @@
 .manage-categories-btn {
   margin-left: auto;
 }
+
+/* Rename / delete controls — available on every category, defaults included */
+.category-item-btn[disabled] {
+  opacity: 0.4; cursor: not-allowed;
+}
+.category-item-btn[disabled]:hover {
+  background: transparent; color: var(--ink-dim); border-color: var(--line-2);
+}
+.category-rename-input {
+  flex: 1; min-width: 0; padding: 6px 10px; font-size: 13px;
+}

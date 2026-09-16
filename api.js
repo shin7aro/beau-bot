@@ -246,9 +246,12 @@ router.delete('/api/builds/categories/:id', auth.requireOfficer, async (req, res
       return res.status(404).json({ error: 'Category not found.' });
     }
     
-    // Prevent deletion of default categories
-    if (buildsStore.DEFAULT_TABS.includes(req.params.id)) {
-      return res.status(400).json({ error: 'Cannot delete default categories.' });
+    // Default categories are deletable like any other. The only hard rule is
+    // that the list can never be emptied: loadCategories() re-seeds the
+    // built-in defaults whenever it finds an empty list, so deleting the last
+    // category would silently resurrect all seven of them.
+    if (categories.length <= 1) {
+      return res.status(400).json({ error: 'You must keep at least one category.' });
     }
     
     categories.splice(index, 1);
