@@ -133,6 +133,14 @@ function buildButtons(event, guild) {
   const roleRow = new ActionRowBuilder();
   const activeCats = CATEGORY_ORDER.filter((c) => event.categories[c]);
 
+  // NOTE: ButtonBuilder#setDisabled defaults its argument to `true` when
+  // called with `undefined` (i.e. `setDisabled(disabled = true)`), so a
+  // bare `event.closed || event.cancelled` must be coerced to a real
+  // boolean below — on a brand-new event both fields are `false`/unset,
+  // and `false || undefined` is `undefined`, which used to fall through to
+  // that default and gray out every button on freshly created events.
+  const isLocked = !!(event.closed || event.cancelled);
+
   for (const cat of activeCats) {
     roleRow.addComponents(
       new ButtonBuilder()
@@ -140,32 +148,27 @@ function buildButtons(event, guild) {
         .setLabel(cat)
         .setEmoji(roleEmojiForButton(guild, cat))
         .setStyle(CATEGORY_META[cat].style)
-        .setDisabled(event.closed || event.cancelled)
+        .setDisabled(isLocked)
     );
   }
 
-  // Row 2: Leave + Ask a build + Cancel. "Ask a build" stays enabled even
-  // once the event is closed — people should still be able to check gear
-  // afterward. Cancel stays enabled on closed events too, so an event that
-  // already got closed by mistake can still be canceled retroactively.
+  // Row 2: Leave + Ask a build. "Ask a build" stays enabled even once the
+  // event is closed — people should still be able to check gear
+  // afterward. Canceling is no longer a button here (too easy to click by
+  // mistake) — use the /event cancel <event_id> command instead, same as
+  // /event close.
   const actionRow = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
       .setCustomId(`event_leave:${event.id}`)
       .setLabel('Leave')
       .setEmoji('🚪')
       .setStyle(ButtonStyle.Danger)
-      .setDisabled(event.closed || event.cancelled),
+      .setDisabled(isLocked),
     new ButtonBuilder()
       .setCustomId(`event_askbuild:${event.id}`)
       .setLabel('Ask a build')
       .setEmoji('🧭')
-      .setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder()
-      .setCustomId(`event_cancel:${event.id}`)
-      .setLabel('Cancel')
-      .setEmoji('🚫')
       .setStyle(ButtonStyle.Secondary)
-      .setDisabled(!!event.cancelled)
   );
 
   return [roleRow, actionRow];

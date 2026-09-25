@@ -781,6 +781,40 @@ client.on(Events.InteractionCreate, async (interaction) => {
         return;
       }
 
+      if (sub === 'cancel') {
+        // Replaces the old "Cancel" button on the event post itself, which
+        // was too easy to click by mistake. Same shape as /event close:
+        // ephemeral, organizer/server-manager only. Works on open events
+        // and retroactively on already-closed ones.
+        await interaction.deferReply({ ephemeral: true });
+
+        const eventId = interaction.options.getString('event_id');
+        const event = events[eventId];
+        if (!event) {
+          await interaction.editReply({ content: 'No event found with that ID.' });
+          return;
+        }
+        const isOrganizer = event.organizerId === interaction.user.id;
+        const canManage = interaction.memberPermissions?.has(PermissionFlagsBits.ManageGuild);
+        if (!isOrganizer && !canManage) {
+          await interaction.editReply({
+            content: 'Only the organizer or a server manager can cancel this event.',
+          });
+          return;
+        }
+
+        if (event.cancelled) {
+          await interaction.editReply({ content: 'This event is already canceled.' });
+          return;
+        }
+
+        await finalizeEventCancel(client, event, interaction.user);
+        await interaction.editReply({
+          content: `Event **${event.title}** canceled — its sign-ups won't count toward attendance, roles, or weapon stats.`,
+        });
+        return;
+      }
+
       if (sub === 'refresh') {
         // Defer immediately — the comps.loadComps() read plus the Redis
         // write below can outlive Discord's 3-second window. Every reply
@@ -1996,75 +2030,6 @@ client.on(Events.InteractionCreate, async (interaction) => {
       removeUserFromEvent(event, interaction.user.id);
       await saveEvents(events);
       await interaction.editReply({ embeds: [buildEmbed(event, interaction.guild)], components: buildButtons(event, interaction.guild) });
-      return;
-    }
-
-    // ----- cancel flow: confirm + dismiss buttons on the ephemeral prompt -----
-    if (interaction.isButton() && (interaction.customId.startsWith('event_cancel_yes:') || interaction.customId.startsWith('event_cancel_no:'))) {
-      await interaction.deferUpdate();
-
-      const [, eventId] = interaction.customId.split(':');
-      const event = events[eventId];
-      if (!event) {
-        await interaction.editReply({ content: 'This event no longer exists.', components: [] });
-        return;
-      }
-      const isOrganizer = event.organizerId === interaction.user.id;
-      const canManage = interaction.memberPermissions?.has(PermissionFlagsBits.ManageGuild);
-      if (!isOrganizer && !canManage) {
-        await interaction.editReply({ content: 'Only the organizer or a server manager can cancel this event.', components: [] });
-        return;
-      }
-
-      if (interaction.customId.startsWith('event_cancel_no:')) {
-        await interaction.editReply({ content: 'Cancel dismissed — the event is unchanged.', components: [] });
-        return;
-      }
-
-      if (event.cancelled) {
-        await interaction.editReply({ content: 'This event is already canceled.', components: [] });
-        return;
-      }
-
-      await finalizeEventCancel(client, event, interaction.user);
-      await interaction.editReply({ content: `Event **${event.title}** canceled — its sign-ups won't count toward attendance, roles, or weapon stats.`, components: [] });
-      return;
-    }
-
-    // ----- cancel button (works on open and closed events) -----
-    if (interaction.isButton() && interaction.customId.startsWith('event_cancel:')) {
-      const [, eventId] = interaction.customId.split(':');
-      const event = events[eventId];
-      if (!event) {
-        await interaction.reply({ content: 'Event not found.', ephemeral: true });
-        return;
-      }
-      const isOrganizer = event.organizerId === interaction.user.id;
-      const canManage = interaction.memberPermissions?.has(PermissionFlagsBits.ManageGuild);
-      if (!isOrganizer && !canManage) {
-        await interaction.reply({ content: 'Only the organizer or a server manager can cancel this event.', ephemeral: true });
-        return;
-      }
-      if (event.cancelled) {
-        await interaction.reply({ content: 'This event is already canceled.', ephemeral: true });
-        return;
-      }
-
-      const row = new ActionRowBuilder().addComponents(
-        new ButtonBuilder()
-          .setCustomId(`event_cancel_yes:${eventId}`)
-          .setLabel('Yes, cancel it')
-          .setStyle(ButtonStyle.Danger),
-        new ButtonBuilder()
-          .setCustomId(`event_cancel_no:${eventId}`)
-          .setLabel('Keep it')
-          .setStyle(ButtonStyle.Secondary)
-      );
-      await interaction.reply({
-        content: `Cancel **${event.title}**? The roster stays visible, but sign-ups won't count toward attendance, roles, or weapon stats.${event.closed ? ' (This event is already closed — canceling now removes it from stats retroactively.)' : ''}`,
-        components: [row],
-        ephemeral: true,
-      });
       return;
     }
 
