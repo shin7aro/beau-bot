@@ -113,6 +113,7 @@ function buildEmbed(event, guild) {
   }
 
   const flags = [];
+  if (event.cancelled) flags.push('🚫 Canceled');
   if (event.closed) flags.push('❌ Closed');
 
   embed.setFooter({
@@ -139,24 +140,32 @@ function buildButtons(event, guild) {
         .setLabel(cat)
         .setEmoji(roleEmojiForButton(guild, cat))
         .setStyle(CATEGORY_META[cat].style)
-        .setDisabled(event.closed)
+        .setDisabled(event.closed || event.cancelled)
     );
   }
 
-  // Row 2: Leave + Ask a build. "Ask a build" stays enabled even once the
-  // event is closed — people should still be able to check gear afterward.
+  // Row 2: Leave + Ask a build + Cancel. "Ask a build" stays enabled even
+  // once the event is closed — people should still be able to check gear
+  // afterward. Cancel stays enabled on closed events too, so an event that
+  // already got closed by mistake can still be canceled retroactively.
   const actionRow = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
       .setCustomId(`event_leave:${event.id}`)
       .setLabel('Leave')
       .setEmoji('🚪')
       .setStyle(ButtonStyle.Danger)
-      .setDisabled(event.closed),
+      .setDisabled(event.closed || event.cancelled),
     new ButtonBuilder()
       .setCustomId(`event_askbuild:${event.id}`)
       .setLabel('Ask a build')
       .setEmoji('🧭')
+      .setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder()
+      .setCustomId(`event_cancel:${event.id}`)
+      .setLabel('Cancel')
+      .setEmoji('🚫')
       .setStyle(ButtonStyle.Secondary)
+      .setDisabled(!!event.cancelled)
   );
 
   return [roleRow, actionRow];
@@ -338,6 +347,27 @@ async function postEventCloseSummary(client, event, noShowIds) {
   }
 }
 
+async function postEventCancelSummary(client, event) {
+  const text = `🚫 Event **${event.title}** was canceled — its sign-ups won't count toward attendance, roles, or weapon stats.`;
+
+  try {
+    const thread = await client.channels.fetch(event.id);
+    if (thread && thread.isThread && thread.isThread()) {
+      await thread.send(text);
+      return;
+    }
+  } catch {
+    // Thread not found or inaccessible; fall back to the main event channel
+  }
+
+  try {
+    const channel = await client.channels.fetch(event.channelId);
+    await channel.send(text);
+  } catch (e) {
+    console.error('Failed to post cancel summary', event.id, e);
+  }
+}
+
 module.exports = {
   CATEGORY_META,
   ROLE_EMOJI_NAMES,
@@ -352,6 +382,7 @@ module.exports = {
   deletePreviousReminder,
   deleteEventReminder,
   postEventCloseSummary,
+  postEventCancelSummary,
   findDahaloRole,
   dahaloPingContent,
   findEventRemindersChannel,

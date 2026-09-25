@@ -261,6 +261,34 @@ async function finalizeEventClose(client, event, noShowIds, closedByUser) {
   await postEventCloseSummary(client, event, noShowIds);
 }
 
+// Marks an event canceled without deleting it — the roster stays visible
+// as a record, but the event is skipped by profiles, attendance, and
+// weapon stats (see computeProfileStats/computeAttendanceLeaderboard in
+// api.js). Works on open events and retroactively on closed ones.
+async function finalizeEventCancel(client, event, canceledByUser) {
+  event.cancelled = true;
+
+  await deleteEventReminder(client, event);
+
+  await saveEvents(events);
+
+  if (canceledByUser) {
+    activityStore.log(
+      logUser(canceledByUser),
+      'event.cancel',
+      `Canceled event "${event.title}" (${event.type})`
+    );
+  }
+
+  try {
+    await updateEventMessage(client, event);
+  } catch (e) {
+    console.error('Failed to update event message on cancel', e);
+  }
+
+  await eventRender.postEventCancelSummary(client, event);
+}
+
 // updateEventMessage now lives in event-render.js (see the requires block
 // at the top of this file).
 
@@ -310,7 +338,7 @@ client.once(Events.ClientReady, async (c) => {
   // fully-staffed event) and if #event-reminders exists in the guild.
   setInterval(async () => {
     for (const event of Object.values(events)) {
-      if (event.closed) continue;
+      if (event.closed || event.cancelled) continue;
 
       const missing = getMissingRolesSummary(event);
       if (missing.length === 0) continue;
@@ -435,7 +463,7 @@ client.on(Events.MessageCreate, async (message) => {
           return;
         }
 
-        if (event.closed) {
+        if (event.closed || event.cancelled) {
           await message.reply('This event is closed, so sign-ups can no longer be changed.');
           return;
         }
@@ -702,6 +730,11 @@ client.on(Events.InteractionCreate, async (interaction) => {
           await interaction.editReply({
             content: 'Only the organizer or a server manager can close this event.',
           });
+          return;
+        }
+
+        if (event.cancelled) {
+          await interaction.editReply({ content: 'This event was canceled and can no longer be closed.' });
           return;
         }
 
@@ -1080,7 +1113,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
         return;
       }
 
-      if (!event.closed) {
+      if (!event.closed || event.cancelled) {
         await interaction.reply({
           content:
             'Close this event first with `/event close` — that\'s when no-shows get marked, and the giveaway needs to know who actually attended.',
@@ -1517,7 +1550,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
     if (interaction.isButton() && interaction.customId.startsWith('event_role:')) {
       const [, category, eventId] = interaction.customId.split(':');
       const event = events[eventId];
-      if (!event || event.closed) {
+      if (!event || event.closed || event.cancelled) {
         await interaction.reply({ content: 'This event is no longer open.', ephemeral: true });
         return;
       }
@@ -1633,7 +1666,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
       const [, category, eventId] = interaction.customId.split(':');
       const event = events[eventId];
-      if (!event || event.closed) {
+      if (!event || event.closed || event.cancelled) {
         await interaction.editReply({ content: 'This event is no longer open.', components: [] });
         return;
       }
@@ -1705,7 +1738,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
       const [, category, eventId, itemIndexStr] = interaction.customId.split(':');
       const event = events[eventId];
-      if (!event || event.closed) {
+      if (!event || event.closed || event.cancelled) {
         await interaction.editReply({ content: 'This event is no longer open.', components: [] });
         return;
       }
@@ -1746,7 +1779,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
       const [, category, eventId, targetUserId] = interaction.customId.split(':');
       const event = events[eventId];
-      if (!event || event.closed) {
+      if (!event || event.closed || event.cancelled) {
         await interaction.editReply({ content: 'This event is no longer open.', components: [] });
         return;
       }
@@ -1834,7 +1867,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
       const [, category, eventId, itemIndexStr, targetUserId] = interaction.customId.split(':');
       const event = events[eventId];
-      if (!event || event.closed) {
+      if (!event || event.closed || event.cancelled) {
         await interaction.editReply({ content: 'This event is no longer open.', components: [] });
         return;
       }
@@ -1900,6 +1933,10 @@ client.on(Events.InteractionCreate, async (interaction) => {
         await interaction.editReply({ content: 'Only the organizer or a server manager can close this event.', components: [] });
         return;
       }
+      if (event.cancelled) {
+        await interaction.editReply({ content: 'This event was canceled and can no longer be closed.', components: [] });
+        return;
+      }
       if (event.closed) {
         await interaction.editReply({ content: 'This event is already closed.', components: [] });
         return;
@@ -1931,6 +1968,10 @@ client.on(Events.InteractionCreate, async (interaction) => {
         await interaction.editReply({ content: 'Only the organizer or a server manager can close this event.', components: [] });
         return;
       }
+      if (event.cancelled) {
+        await interaction.editReply({ content: 'This event was canceled and can no longer be closed.', components: [] });
+        return;
+      }
       if (event.closed) {
         await interaction.editReply({ content: 'This event is already closed.', components: [] });
         return;
@@ -1955,6 +1996,75 @@ client.on(Events.InteractionCreate, async (interaction) => {
       removeUserFromEvent(event, interaction.user.id);
       await saveEvents(events);
       await interaction.editReply({ embeds: [buildEmbed(event, interaction.guild)], components: buildButtons(event, interaction.guild) });
+      return;
+    }
+
+    // ----- cancel flow: confirm + dismiss buttons on the ephemeral prompt -----
+    if (interaction.isButton() && (interaction.customId.startsWith('event_cancel_yes:') || interaction.customId.startsWith('event_cancel_no:'))) {
+      await interaction.deferUpdate();
+
+      const [, eventId] = interaction.customId.split(':');
+      const event = events[eventId];
+      if (!event) {
+        await interaction.editReply({ content: 'This event no longer exists.', components: [] });
+        return;
+      }
+      const isOrganizer = event.organizerId === interaction.user.id;
+      const canManage = interaction.memberPermissions?.has(PermissionFlagsBits.ManageGuild);
+      if (!isOrganizer && !canManage) {
+        await interaction.editReply({ content: 'Only the organizer or a server manager can cancel this event.', components: [] });
+        return;
+      }
+
+      if (interaction.customId.startsWith('event_cancel_no:')) {
+        await interaction.editReply({ content: 'Cancel dismissed — the event is unchanged.', components: [] });
+        return;
+      }
+
+      if (event.cancelled) {
+        await interaction.editReply({ content: 'This event is already canceled.', components: [] });
+        return;
+      }
+
+      await finalizeEventCancel(client, event, interaction.user);
+      await interaction.editReply({ content: `Event **${event.title}** canceled — its sign-ups won't count toward attendance, roles, or weapon stats.`, components: [] });
+      return;
+    }
+
+    // ----- cancel button (works on open and closed events) -----
+    if (interaction.isButton() && interaction.customId.startsWith('event_cancel:')) {
+      const [, eventId] = interaction.customId.split(':');
+      const event = events[eventId];
+      if (!event) {
+        await interaction.reply({ content: 'Event not found.', ephemeral: true });
+        return;
+      }
+      const isOrganizer = event.organizerId === interaction.user.id;
+      const canManage = interaction.memberPermissions?.has(PermissionFlagsBits.ManageGuild);
+      if (!isOrganizer && !canManage) {
+        await interaction.reply({ content: 'Only the organizer or a server manager can cancel this event.', ephemeral: true });
+        return;
+      }
+      if (event.cancelled) {
+        await interaction.reply({ content: 'This event is already canceled.', ephemeral: true });
+        return;
+      }
+
+      const row = new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+          .setCustomId(`event_cancel_yes:${eventId}`)
+          .setLabel('Yes, cancel it')
+          .setStyle(ButtonStyle.Danger),
+        new ButtonBuilder()
+          .setCustomId(`event_cancel_no:${eventId}`)
+          .setLabel('Keep it')
+          .setStyle(ButtonStyle.Secondary)
+      );
+      await interaction.reply({
+        content: `Cancel **${event.title}**? The roster stays visible, but sign-ups won't count toward attendance, roles, or weapon stats.${event.closed ? ' (This event is already closed — canceling now removes it from stats retroactively.)' : ''}`,
+        components: [row],
+        ephemeral: true,
+      });
       return;
     }
 

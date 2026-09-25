@@ -589,6 +589,7 @@ function summarizeEvent(event) {
     mass: event.mass,
     sets: event.sets,
     closed: event.closed,
+    cancelled: event.cancelled || false,
     organizerTag: event.organizerTag,
     compLabel: event.compLabel,
     signedCount: rows.filter((r) => r.signedUserId).length,
@@ -1042,6 +1043,7 @@ async function computeProfileStats(userId) {
 
   for (const event of Object.values(events)) {
     if (!event.closed) continue;
+    if (event.cancelled) continue;
     if (!eventsStore.getSignedUpUserIds(event).includes(userId)) continue;
     const noShows = new Set(event.noShows || []);
     if (noShows.has(userId)) continue;
@@ -1151,6 +1153,7 @@ async function computeAttendanceLeaderboard() {
 
   for (const event of Object.values(events)) {
     if (!event.closed) continue;
+    if (event.cancelled) continue;
     const bucket = attendanceBucketFor(event.type);
     if (!bucket) continue;
     const noShows = new Set(event.noShows || []);
@@ -1618,7 +1621,7 @@ router.post('/api/events/:id/rows/:category/:itemIndex/assign', auth.requireOffi
     const events = await eventsStore.loadEvents();
     const event = events[req.params.id];
     if (!event) return res.status(404).json({ error: 'Event not found.' });
-    if (event.closed) return res.status(400).json({ error: 'This event is no longer open.' });
+    if (event.closed || event.cancelled) return res.status(400).json({ error: 'This event is no longer open.' });
 
     const catData = event.categories[req.params.category];
     if (!catData || catData.mode !== 'items') return res.status(400).json({ error: 'Invalid category.' });
@@ -1676,7 +1679,7 @@ router.delete('/api/events/:id/rows/:category/:itemIndex/assign', auth.requireOf
     const events = await eventsStore.loadEvents();
     const event = events[req.params.id];
     if (!event) return res.status(404).json({ error: 'Event not found.' });
-    if (event.closed) return res.status(400).json({ error: 'This event is no longer open.' });
+    if (event.closed || event.cancelled) return res.status(400).json({ error: 'This event is no longer open.' });
 
     const catData = event.categories[req.params.category];
     if (!catData || catData.mode !== 'items') return res.status(400).json({ error: 'Invalid category.' });
@@ -1743,6 +1746,7 @@ router.post('/api/events/:id/close', auth.requireOfficer, async (req, res) => {
     const events = await eventsStore.loadEvents();
     const event = events[req.params.id];
     if (!event) return res.status(404).json({ error: 'Event not found.' });
+    if (event.cancelled) return res.status(400).json({ error: 'This event was canceled and can no longer be closed.' });
     if (event.closed) return res.status(400).json({ error: 'This event is already closed.' });
 
     const noShowIds = Array.isArray(req.body && req.body.noShowIds) ? req.body.noShowIds : [];
@@ -1769,6 +1773,37 @@ router.post('/api/events/:id/close', auth.requireOfficer, async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Failed to close event.' });
+  }
+});
+
+// Cancels an event without deleting it — the roster stays visible as a
+// record, but the event is excluded from profiles, attendance, and weapon
+// stats. Works on open events and retroactively on already-closed ones.
+router.post('/api/events/:id/cancel', auth.requireOfficer, async (req, res) => {
+  try {
+    const events = await eventsStore.loadEvents();
+    const event = events[req.params.id];
+    if (!event) return res.status(404).json({ error: 'Event not found.' });
+    if (event.cancelled) return res.status(400).json({ error: 'This event is already canceled.' });
+
+    event.cancelled = true;
+    await eventsStore.saveEvents(events);
+    activityStore.log(req.user, 'event.cancel', `Canceled event "${event.title}" (${event.type}) from the site`);
+
+    if (discordClient) {
+      try {
+        await eventRender.deleteEventReminder(discordClient, event);
+        await eventRender.updateEventMessage(discordClient, event);
+        await eventRender.postEventCancelSummary(discordClient, event);
+      } catch (e) {
+        console.error('Failed to update Discord after site cancel', e);
+      }
+    }
+
+    res.json(await detailEvent(event));
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to cancel event.' });
   }
 });
 
@@ -1817,7 +1852,7 @@ router.post('/api/events/:id/ping', auth.requireOfficer, async (req, res) => {
     const events = await eventsStore.loadEvents();
     const event = events[req.params.id];
     if (!event) return res.status(404).json({ error: 'Event not found.' });
-    if (event.closed) return res.status(400).json({ error: 'This event is closed.' });
+    if (event.closed || event.cancelled) return res.status(400).json({ error: 'This event is closed.' });
 
     const missing = eventsStore.getMissingRolesSummary(event);
     if (missing.length === 0) return res.status(400).json({ error: 'Every slot is already filled.' });
@@ -1844,7 +1879,7 @@ router.post('/api/events/:id/signup', auth.requireMember, async (req, res) => {
     const events = await eventsStore.loadEvents();
     const event = events[req.params.id];
     if (!event) return res.status(404).json({ error: 'Event not found.' });
-    if (event.closed) return res.status(400).json({ error: 'This event is no longer open.' });
+    if (event.closed || event.cancelled) return res.status(400).json({ error: 'This event is no longer open.' });
 
     const { category, weapon, itemIndex, optionIndex } = req.body || {};
     if (!category) return res.status(400).json({ error: 'category is required.' });

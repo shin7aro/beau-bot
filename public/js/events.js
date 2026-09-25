@@ -146,7 +146,7 @@ function renderList() {
     <div class="event-card${e.closed ? ' is-closed' : ''}" data-id="${escapeHtml(e.id)}">
       <div class="event-card-top">
         <span class="event-type-badge type-${escapeHtml(e.type)}">${e.typeEmoji || '🔷'} ${escapeHtml(e.type)}</span>
-        ${e.closed ? '<span class="event-card-closed-flag">Closed</span>' : ''}
+        ${e.cancelled ? '<span class="event-card-closed-flag">Canceled</span>' : e.closed ? '<span class="event-card-closed-flag">Closed</span>' : ''}
       </div>
       <h3 class="event-card-title">${escapeHtml(e.title)}</h3>
       <div class="event-card-meta">
@@ -232,20 +232,21 @@ function renderInfoCol(e, canManage) {
       ${e.mass ? `<div class="event-info-row"><span class="event-info-label">Mass</span><span class="event-info-value">${escapeHtml(e.mass)}</span></div>` : ''}
       ${e.sets ? `<div class="event-info-row"><span class="event-info-label">Sets</span><span class="event-info-value">${escapeHtml(e.sets)}</span></div>` : ''}
       <div class="event-info-row"><span class="event-info-label">Organizer</span><span class="event-info-value">${escapeHtml(e.organizerTag)}</span></div>
-      <div class="event-info-row"><span class="event-info-label">Status</span><span class="event-info-value">${e.closed ? 'Closed' : `<strong>${e.signedCount}/${e.totalSlots}</strong> signed up`}</span></div>
+      <div class="event-info-row"><span class="event-info-label">Status</span><span class="event-info-value">${e.cancelled ? 'Canceled' : e.closed ? 'Closed' : `<strong>${e.signedCount}/${e.totalSlots}</strong> signed up`}</span></div>
       ${e.compLabel ? `<div class="event-info-row"><span class="event-info-label">Composition</span><span class="event-info-value">${escapeHtml(e.compLabel)}</span></div>` : ''}
     </div>
     ${mySignedRow ? `
       <div class="event-your-signup">
         <div>You're signed up as <strong>${escapeHtml(mySignedRow.category)}</strong> — ${emojiToHtml(mySignedChoice && mySignedChoice.emoji, { size: 14 })} ${escapeHtml((mySignedChoice && mySignedChoice.name && window.weaponDisplayName ? window.weaponDisplayName(mySignedChoice.name) : mySignedChoice && mySignedChoice.name) || 'Any')}</div>
-        ${!e.closed ? `<button class="event-action-btn danger" id="event-leave-btn">Leave slot</button>` : ''}
+        ${!e.closed && !e.cancelled ? `<button class="event-action-btn danger" id="event-leave-btn">Leave slot</button>` : ''}
       </div>` : ''}
     ${canManage ? `
       <div class="event-action-row">
         <button class="event-action-btn" id="event-edit-btn">✏️ Edit event</button>
         ${e.compKey ? `<button class="event-action-btn" id="event-refresh-btn">🔄 Refresh from comp</button>` : ''}
-        ${!e.closed ? `<button class="event-action-btn" id="event-ping-btn">⏰ Ping reminder</button>` : ''}
-        ${!e.closed ? `<button class="event-action-btn danger" id="event-close-btn">🔒 Close event</button>` : ''}
+        ${!e.closed && !e.cancelled ? `<button class="event-action-btn" id="event-ping-btn">⏰ Ping reminder</button>` : ''}
+        ${!e.closed && !e.cancelled ? `<button class="event-action-btn danger" id="event-close-btn">🔒 Close event</button>` : ''}
+        ${!e.cancelled ? `<button class="event-action-btn danger" id="event-cancel-btn">🚫 Cancel event</button>` : ''}
         ${isOfficerOrAdmin() ? `<button class="event-action-btn danger" id="event-delete-btn">🗑️ Delete event</button>` : ''}
       </div>` : ''}
   `;
@@ -287,7 +288,7 @@ function renderRosterCol(e) {
         <div class="event-quota-row" data-cat="${escapeHtml(cat)}">
           <span class="role-pill role-${cat.toLowerCase()}">${escapeHtml(cat)}</span>
           <span style="color:var(--ink-faint);font-size:12px">${c.signedCount}/${c.capacity} filled</span>
-          ${!e.closed && c.signedCount < c.capacity ? `
+            ${!e.closed && !e.cancelled && c.signedCount < c.capacity ? `
             <select class="event-quota-select">${c.weaponOptions.map(w => `<option value="${escapeHtml(w)}">${escapeHtml(window.weaponDisplayName ? window.weaponDisplayName(w) : w)}</option>`).join('')}</select>
             <button class="event-action-btn event-quota-signup-btn">Sign up</button>` : ''}
         </div>`).join('')}
@@ -332,12 +333,12 @@ function renderRosterRow(e, row) {
   const isOpen = !row.signedUserId;
   const hasItemIndex = row.itemIndex !== undefined;
   const isMultiChoice = !!row.options;
-  const canSignup = isOpen && !e.closed && window.SITE_AUTH.loggedIn && hasItemIndex;
+  const canSignup = isOpen && !e.closed && !e.cancelled && window.SITE_AUTH.loggedIn && hasItemIndex;
   // Officer/admin manual assign — button sits at the right end of the row.
   // Only makes sense for item-mode rows (a single named slot); quota-mode
   // categories keep using their own self-serve "pick a weapon, sign up"
   // section instead.
-  const canManageAssign = isOfficerOrAdmin() && !e.closed && hasItemIndex;
+  const canManageAssign = isOfficerOrAdmin() && !e.closed && !e.cancelled && hasItemIndex;
 
   let namePill;
   if (isMultiChoice) {
@@ -1126,6 +1127,8 @@ function wireInfoActions(canManage) {
   if (pingBtn) pingBtn.addEventListener('click', handlePing);
   const closeBtn = document.getElementById('event-close-btn');
   if (closeBtn) closeBtn.addEventListener('click', openCloseForm);
+  const cancelBtn = document.getElementById('event-cancel-btn');
+  if (cancelBtn) cancelBtn.addEventListener('click', handleCancel);
   const deleteBtn = document.getElementById('event-delete-btn');
   if (deleteBtn) deleteBtn.addEventListener('click', handleDelete);
 }
@@ -1215,6 +1218,18 @@ async function handleDelete() {
     closeDetail();
   } catch (err) {
     showToast('Failed to delete: ' + err.message);
+  }
+}
+
+async function handleCancel() {
+  const e = currentDetail;
+  if (!confirm(`Cancel "${e.title}"? The roster stays visible, but its sign-ups won't count toward attendance, roles, or weapon stats.`)) return;
+  try {
+    currentDetail = await api(`/api/events/${encodeURIComponent(e.id)}/cancel`, { method: 'POST' });
+    renderDetail();
+    showToast('Event canceled.');
+  } catch (err) {
+    showToast('Failed to cancel: ' + err.message);
   }
 }
 
