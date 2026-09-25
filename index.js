@@ -161,16 +161,29 @@ async function buildAskBuildEmbed(build, buildKey) {
 
 // Every role row in an event that has a build linked, deduped by
 // tab:id — used by both the "Ask a build" button and its follow-up select.
+// Multi-choice rows (e.g. "Carving / Spirithunter") store one build link per
+// option (see comps.normalizeStructuredCategories), never at row level — so
+// each linked option is flattened into its own entry carrying that option's
+// name/emoji/link. Single-choice rows keep their row-level link as before.
 function linkedBuildRowsFor(event) {
   const rows = comps.expandAllCategoryRows(event.categories, CATEGORY_ORDER);
   const seen = new Set();
   const out = [];
-  for (const row of rows) {
-    if (!row.buildTab || row.buildId == null) continue;
-    const key = `${row.buildTab}:${row.buildId}`;
-    if (seen.has(key)) continue;
+  const pushLinked = (row, name, emoji, buildTab, buildId) => {
+    if (!buildTab || buildId == null) return;
+    const key = `${buildTab}:${buildId}`;
+    if (seen.has(key)) return;
     seen.add(key);
-    out.push(row);
+    out.push({ ...row, name, emoji, buildTab, buildId });
+  };
+  for (const row of rows) {
+    if (Array.isArray(row.options) && row.options.length >= 2) {
+      for (const opt of row.options) {
+        pushLinked(row, opt.name, opt.emoji || null, opt.buildTab, opt.buildId);
+      }
+      continue;
+    }
+    pushLinked(row, row.name, row.emoji, row.buildTab, row.buildId);
   }
   return out;
 }
