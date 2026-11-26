@@ -97,6 +97,10 @@ function renderAuthControl() {
         <button class="auth-menu-item auth-menu-theme-btn" type="button" data-theme-option="new" onclick="setSiteTheme('new')">New theme</button>
         ` : ''}
         <div class="auth-menu-divider"></div>
+        <button class="auth-menu-item auth-menu-toggle" id="build-ping-toggle" type="button" role="switch" aria-checked="true" title="Beau pings you in the event thread with your role's build after you pick a role">
+          <span>Build pings</span><span class="auth-switch" aria-hidden="true"></span>
+        </button>
+        <div class="auth-menu-divider"></div>
         <a class="auth-menu-item auth-menu-danger" href="/auth/logout">Log out</a>
       </div>
     </div>`;
@@ -113,6 +117,35 @@ function renderAuthControl() {
     if (!mount.contains(e.target)) closeMenu();
   });
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeMenu(); });
+
+  // "Build pings" toggle — per-member, default on (see user-prefs-store.js).
+  const pingBtn = document.getElementById('build-ping-toggle');
+  const setPingUi = (on) => pingBtn.setAttribute('aria-checked', String(on));
+  fetch('/api/me/prefs', { credentials: 'same-origin' })
+    .then(r => r.json())
+    .then(p => { if (typeof p.buildPing === 'boolean') setPingUi(p.buildPing); })
+    .catch(() => {});
+  pingBtn.addEventListener('click', async () => {
+    const next = pingBtn.getAttribute('aria-checked') !== 'true';
+    setPingUi(next); // optimistic
+    try {
+      const res = await fetch('/api/me/prefs', {
+        method: 'PUT',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ buildPing: next }),
+      });
+      if (!res.ok) throw new Error();
+    } catch {
+      setPingUi(!next);
+      const toast = document.getElementById('toast');
+      if (toast) {
+        toast.textContent = "Couldn't save that setting — try again.";
+        toast.classList.add('show');
+        setTimeout(() => toast.classList.remove('show'), 2500);
+      }
+    }
+  });
 }
 
 function escapeAttr(s) {

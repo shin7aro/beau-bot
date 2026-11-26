@@ -25,6 +25,7 @@ const weaponAliasStore = require('./weapon-alias-store');
 const buildSpellStore = require('./build-spell-store');
 const spellMap = require('./spell-map');
 const themeStore = require('./theme-store');
+const userPrefs = require('./user-prefs-store');
 const vodStore = require('./vod-store');
 const vodWs = require('./vod-ws');
 
@@ -115,6 +116,35 @@ router.get('/auth/me', async (req, res) => {
       themeManager: await auth.isThemeManager(req.user),
     },
   });
+});
+
+// ── MY PREFERENCES (per member) ──────────────────────────────────────────
+// buildPing: whether Beau pings you with your role's build card in an event
+// thread after you pick a role. Defaults to on. Changing it re-syncs open
+// events right away (turning it off deletes your existing build messages;
+// turning it on posts them for events you're already signed up to).
+router.get('/api/me/prefs', auth.requireMember, async (req, res) => {
+  try {
+    res.json(await userPrefs.getPrefs(req.user.id));
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to load your preferences.' });
+  }
+});
+
+router.put('/api/me/prefs', auth.requireMember, async (req, res) => {
+  try {
+    const { buildPing } = req.body || {};
+    if (typeof buildPing !== 'boolean') {
+      return res.status(400).json({ error: 'buildPing must be true or false.' });
+    }
+    const prefs = await userPrefs.setPrefs(req.user.id, { buildPing });
+    eventsStore.requestSync();
+    res.json(prefs);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to save your preferences.' });
+  }
 });
 
 // ── SITE THEME (global — same for every visitor) ─────────────────────────

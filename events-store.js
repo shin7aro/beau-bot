@@ -62,9 +62,28 @@ async function loadEvents() {
   return loadingPromise;
 }
 
-async function saveEvents(events) {
+// Listeners run (un-awaited) after every normal save — build-ping.js uses
+// this to react to any sign-up change no matter where it came from (Discord
+// buttons, the thread command, the site). Internal bookkeeping saves pass
+// { silent: true } so they don't retrigger it.
+const saveListeners = [];
+function onSaved(fn) {
+  saveListeners.push(fn);
+}
+function requestSync() {
+  for (const fn of saveListeners) {
+    try {
+      Promise.resolve(fn()).catch((e) => console.error('events-store listener error:', e));
+    } catch (e) {
+      console.error('events-store listener error:', e);
+    }
+  }
+}
+
+async function saveEvents(events, opts = {}) {
   cachedEvents = events;
   await storage.saveJSON(REDIS_KEY, DB_PATH, events);
+  if (!opts.silent) requestSync();
 }
 
 // ---------- sign-up bookkeeping (unchanged behavior, just relocated) ----------
@@ -343,6 +362,8 @@ function leave(event, userId) {
 }
 
 module.exports = {
+  onSaved,
+  requestSync,
   DB_PATH,
   REDIS_KEY,
   CATEGORY_ORDER,

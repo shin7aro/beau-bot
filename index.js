@@ -2136,6 +2136,7 @@ process.on('unhandledRejection', (err) => {
 
 (async () => {
   events = await loadEvents();
+  await require('./build-ping').init({ client, renderBuild: buildAskBuildEmbed });
   try {
     await client.login(process.env.DISCORD_TOKEN);
   } catch (err) {
