@@ -225,7 +225,23 @@ body.hp {
 <script src="js/auth.js"></script>
 <script>
 (function () {
-  const ICON = (id) => `https://render.albiononline.com/v1/item/${id}.png?quality=1&size=360`;
+  // Same URL shape the rest of the site uses (item-map.js). The render service
+  // caps size at 217, so no size param here — asking for more returns an error.
+  const ICONS = (id) => [
+    `https://render.albiononline.com/v1/item/${id}.png?quality=1`,
+    `https://render.albiononline.com/v1/item/${id}.png`,
+  ];
+  // resolves with the first URL that actually loads, or null
+  const firstWorking = (urls) => new Promise((resolve) => {
+    const next = (i) => {
+      if (i >= urls.length) return resolve(null);
+      const im = new Image();
+      im.onload = () => resolve(urls[i]);
+      im.onerror = () => next(i + 1);
+      im.src = urls[i];
+    };
+    next(0);
+  });
 
   // x/y = position in the stage, s = size, z = depth, spin = seconds per turn
   // (negative-looking motion comes from dir). The centre weapon is the star;
@@ -240,7 +256,9 @@ body.hp {
   const LAYERS = 15, STEP = 2.6; // sprite slices stacked in depth = the weapon's "thickness"
 
   const scene = document.getElementById('hp-scene');
-  WEAPONS.forEach((w) => {
+  WEAPONS.forEach(async (w) => {
+    const url = await firstWorking(ICONS(w.id));
+    if (!url) return; // icon unavailable: skip this weapon rather than show a broken image
     const slot = document.createElement('div');
     slot.className = 'hp-slot';
     slot.style.cssText = `--x:${w.x};--y:${w.y};--s:${w.s}px;--z:${w.z}px;--spin:${w.spin}s;--dir:${w.dir};--bob:${w.bob}s;--bd:${w.bd}`;
@@ -248,7 +266,7 @@ body.hp {
     for (let i = 0; i < LAYERS; i++) {
       const z = (i - (LAYERS - 1) / 2) * STEP;
       const isFace = i === 0 || i === LAYERS - 1;
-      layers += `<img class="${isFace ? 'face' : 'edge'}" src="${ICON(w.id)}" alt="" loading="eager" style="transform:translateZ(${z.toFixed(1)}px)${i === 0 ? ' rotateY(180deg)' : ''}">`;
+      layers += `<img class="${isFace ? 'face' : 'edge'}" src="${url}" alt="" loading="eager" style="transform:translateZ(${z.toFixed(1)}px)${i === 0 ? ' rotateY(180deg)' : ''}">`;
     }
     slot.innerHTML = `<div class="hp-bob"><div class="hp-spin">${layers}</div><div class="hp-shadow"></div></div>`;
     scene.appendChild(slot);
