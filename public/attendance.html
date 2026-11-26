@@ -78,6 +78,12 @@
       <button class="filter-btn" type="button" data-range="week">Weekly</button>
       <button class="filter-btn" type="button" data-range="month">Monthly</button>
     </div>
+    <div class="filter-group attendance-sort-group" id="attendance-sort-toggle">
+      <button class="filter-btn" type="button" data-sort="PVP">PVP</button>
+      <button class="filter-btn" type="button" data-sort="PVE">PVE</button>
+      <button class="filter-btn" type="button" data-sort="Gank">Gank</button>
+      <button class="filter-btn active" type="button" data-sort="total">Total</button>
+    </div>
     <span class="count-label" id="attendance-count-label"></span>
   </div>
 
@@ -87,10 +93,10 @@
         <tr>
           <th>#</th>
           <th>Member</th>
-          <th class="num">PVP</th>
-          <th class="num">PVE</th>
-          <th class="num">Gank</th>
-          <th class="num">Total</th>
+          <th class="num sortable" data-sort="PVP" title="Sort by PVP">PVP<span class="sort-arrow"></span></th>
+          <th class="num sortable" data-sort="PVE" title="Sort by PVE">PVE<span class="sort-arrow"></span></th>
+          <th class="num sortable" data-sort="Gank" title="Sort by Gank">Gank<span class="sort-arrow"></span></th>
+          <th class="num sortable active" data-sort="total" title="Sort by Total">Total<span class="sort-arrow"></span></th>
         </tr>
       </thead>
       <tbody id="attendance-tbody"></tbody>

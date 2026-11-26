@@ -18,6 +18,16 @@
 .attendance-table td.num { font-family: 'JetBrains Mono', monospace; }
 .attendance-total { font-weight: 700; color: var(--accent); }
 
+.attendance-table th.sortable { cursor: pointer; user-select: none; white-space: nowrap; }
+.attendance-table th.sortable:hover { color: var(--ink); }
+.attendance-table th.sortable.active { color: var(--accent); }
+.attendance-table .sort-arrow { display: inline-block; width: 10px; margin-left: 4px; }
+.attendance-table th.sortable.active .sort-arrow::after { content: '▼'; font-size: 9px; }
+
+/* Header row is hidden on mobile, so offer the same sort as buttons there. */
+.attendance-sort-group { display: none; }
+@media (max-width: 700px) { .attendance-sort-group { display: inline-flex; } }
+
 .attendance-row-hidden { display: none; }
 
 @media (max-width: 700px) {
