@@ -11,7 +11,10 @@ const TIER_LABELS = { gm: 'Guild Master', right_hand: 'Right Hand', officer: 'Of
 
 let leaderboard = [];
 let currentRange = 'all';
-let currentSort = 'total'; // 'total' | 'PVP' | 'PVE' | 'Gank'
+// Column sort: null = default (all-time-style ranking by Total, highest first).
+// Clicking a column cycles: highest first -> lowest first -> back to default.
+let currentSort = null;   // null | 'total' | 'PVP' | 'PVE' | 'Gank'
+let currentDir = 'desc';  // 'desc' | 'asc'
 
 function escapeHtml(s) {
   return String(s || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -56,8 +59,10 @@ function applyFilter() {
   // Re-rank for whichever range is selected — the server only pre-sorts
   // by all-time total, since that's the default view.
   // Ties fall back to total, then name, so the order stays stable.
+  const key = currentSort || 'total';
+  const dir = currentSort && currentDir === 'asc' ? 1 : -1;
   filtered.sort((a, b) =>
-    b[currentRange][currentSort] - a[currentRange][currentSort] ||
+    dir * (a[currentRange][key] - b[currentRange][key]) ||
     b[currentRange].total - a[currentRange].total ||
     a.username.localeCompare(b.username));
   updateSortUi();
@@ -68,17 +73,28 @@ function applyFilter() {
 
 function updateSortUi() {
   document.querySelectorAll('.attendance-table th.sortable').forEach(th => {
-    th.classList.toggle('active', th.dataset.sort === currentSort);
+    const on = th.dataset.sort === currentSort;
+    th.classList.toggle('active', on);
+    th.classList.toggle('asc', on && currentDir === 'asc');
   });
   document.querySelectorAll('#attendance-sort-toggle .filter-btn').forEach(b => {
-    b.classList.toggle('active', b.dataset.sort === currentSort);
+    const on = b.dataset.sort === currentSort;
+    b.classList.toggle('active', on);
+    b.dataset.dir = on ? currentDir : '';
   });
 }
 
 function setSort(key) {
   if (!key) return;
-  // Clicking the active type column again goes back to the Total ranking.
-  currentSort = (key === currentSort && key !== 'total') ? 'total' : key;
+  if (key !== currentSort) {
+    currentSort = key;
+    currentDir = 'desc';
+  } else if (currentDir === 'desc') {
+    currentDir = 'asc';
+  } else {
+    currentSort = null;   // third click: back to default
+    currentDir = 'desc';
+  }
   applyFilter();
 }
 

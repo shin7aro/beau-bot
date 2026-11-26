@@ -23,6 +23,9 @@
 .attendance-table th.sortable.active { color: var(--accent); }
 .attendance-table .sort-arrow { display: inline-block; width: 10px; margin-left: 4px; }
 .attendance-table th.sortable.active .sort-arrow::after { content: '▼'; font-size: 9px; }
+.attendance-table th.sortable.active.asc .sort-arrow::after { content: '▲'; }
+.attendance-sort-group .filter-btn.active[data-dir="desc"]::after { content: ' ▼'; font-size: 9px; }
+.attendance-sort-group .filter-btn.active[data-dir="asc"]::after { content: ' ▲'; font-size: 9px; }
 
 /* Header row is hidden on mobile, so offer the same sort as buttons there. */
 .attendance-sort-group { display: none; }
