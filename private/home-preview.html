@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<script>(function(){try{if(localStorage.getItem('rod-theme')==='new')document.documentElement.setAttribute('data-theme','new');}catch(e){}})();</script>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Home Preview — Rise of Dahalo</title>
+<meta name="robots" content="noindex, nofollow">
+<link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="css/base.css">
+<style>
+/* ───────── HOME PREVIEW — 3D weapon hero (private mock-up) ─────────
+   Self-contained on purpose: this file is served by a gated route
+   (see api.js "home-preview"), so nothing here lives in /public. */
+body.hp {
+  background:
+    radial-gradient(900px 620px at 74% 18%, rgba(110, 96, 210, 0.34), transparent 62%),
+    radial-gradient(700px 520px at 8% 92%, rgba(74, 78, 143, 0.30), transparent 60%),
+    #0d0a16;
+  background-attachment: fixed;
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+.hp-wrap { max-width: 1240px; margin: 0 auto; padding: 0 28px; }
+
+/* private-preview badge */
+.hp-badge {
+  display: inline-flex; align-items: center; gap: 8px; margin: 18px 0 0;
+  padding: 6px 12px; border-radius: 999px; font-size: 12px; font-weight: 600; color: var(--ink-dim);
+  background: rgba(255,255,255,0.04); border: 1px solid var(--line-2);
+}
+.hp-badge i { width: 7px; height: 7px; border-radius: 50%; background: #8fae5c; box-shadow: 0 0 10px #8fae5c; }
+
+/* ───────── HERO ───────── */
+.hp-hero {
+  display: grid; grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.05fr);
+  gap: 24px; align-items: center; min-height: 640px; padding: 28px 0 40px;
+}
+.hp-copy h1 {
+  font-family: 'Big Shoulders Display', sans-serif; font-weight: 800;
+  font-size: clamp(54px, 8.2vw, 112px); line-height: 0.9; letter-spacing: 0.005em;
+  background: linear-gradient(180deg, #fff 18%, #c9bdf0 62%, #8d7fd0 100%);
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+  filter: drop-shadow(0 6px 28px rgba(120, 100, 220, 0.35));
+}
+.hp-tagline {
+  font-family: 'Big Shoulders Display', sans-serif; font-weight: 700;
+  font-size: clamp(20px, 2.2vw, 26px); color: var(--accent); margin-top: 18px;
+}
+.hp-sub { font-size: 15px; line-height: 1.75; color: var(--ink-dim); max-width: 46ch; margin-top: 14px; }
+.hp-ctas { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 30px; }
+.hp-btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  font: inherit; font-size: 14px; font-weight: 700; padding: 14px 24px; border-radius: 999px;
+  text-decoration: none; cursor: pointer; transition: transform .15s, box-shadow .15s, background .15s;
+}
+.hp-btn-primary {
+  color: #120e1c; border: 0;
+  background: linear-gradient(135deg, #d9cff7, #a490c2 55%, #7a74d6);
+  box-shadow: 0 10px 36px -8px rgba(140, 120, 240, 0.7), inset 0 1px 0 rgba(255,255,255,0.55);
+}
+.hp-btn-primary:hover { transform: translateY(-2px); box-shadow: 0 16px 44px -8px rgba(140, 120, 240, 0.85), inset 0 1px 0 rgba(255,255,255,0.55); }
+.hp-btn-ghost { color: var(--ink); background: rgba(255,255,255,0.05); border: 1px solid var(--line-2); backdrop-filter: blur(8px); }
+.hp-btn-ghost:hover { background: rgba(255,255,255,0.09); border-color: var(--accent); }
+.hp-btn:focus-visible { outline: 2px solid #fff; outline-offset: 3px; }
+
+/* ───────── 3D STAGE ───────── */
+.hp-stage { position: relative; height: 600px; perspective: 1300px; perspective-origin: 50% 42%; }
+.hp-glow {
+  position: absolute; left: 50%; top: 50%; width: 560px; height: 560px; transform: translate(-50%, -50%);
+  background: radial-gradient(closest-side, rgba(150, 128, 255, 0.55), rgba(98, 84, 210, 0.22) 55%, transparent 74%);
+  filter: blur(14px); animation: hpPulse 6s ease-in-out infinite;
+}
+@keyframes hpPulse { 50% { opacity: 0.72; transform: translate(-50%, -50%) scale(1.07); } }
+.hp-scene {
+  position: absolute; inset: 0; transform-style: preserve-3d;
+  transform: rotateX(var(--rx, 0deg)) rotateY(var(--ry, 0deg)); transition: transform .35s ease-out;
+}
+/* orbit rings lying flat under the weapons */
+.hp-ring {
+  position: absolute; left: 50%; top: 56%; border-radius: 50%;
+  border: 1px solid rgba(190, 172, 255, 0.28);
+  transform: translate(-50%, -50%) rotateX(74deg); transform-style: preserve-3d;
+  animation: hpRing 40s linear infinite;
+}
+.hp-ring::after { /* a bright bead travelling the ring */
+  content: ''; position: absolute; top: -4px; left: 50%; width: 8px; height: 8px; border-radius: 50%;
+  background: #fff; box-shadow: 0 0 16px 4px rgba(190, 172, 255, 0.9);
+}
+.hp-ring.r1 { width: 520px; height: 520px; }
+.hp-ring.r2 { width: 380px; height: 380px; border-color: rgba(190,172,255,0.18); animation-duration: 26s; animation-direction: reverse; }
+@keyframes hpRing { to { transform: translate(-50%, -50%) rotateX(74deg) rotateZ(360deg); } }
+
+.hp-slot { position: absolute; width: var(--s); height: var(--s); transform-style: preserve-3d; transform: translate3d(0, 0, var(--z, 0px)); left: var(--x); top: var(--y); margin: calc(var(--s) / -2) 0 0 calc(var(--s) / -2); }
+.hp-bob { position: absolute; inset: 0; transform-style: preserve-3d; animation: hpBob var(--bob, 7s) ease-in-out infinite; animation-delay: var(--bd, 0s); }
+@keyframes hpBob { 0%, 100% { transform: translateY(-9px) rotateZ(-2deg); } 50% { transform: translateY(11px) rotateZ(2deg); } }
+.hp-spin { position: absolute; inset: 0; transform-style: preserve-3d; animation: hpSpin var(--spin, 12s) linear infinite; animation-direction: var(--dir, normal); }
+@keyframes hpSpin { to { transform: rotateY(360deg); } }
+.hp-spin img {
+  position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; pointer-events: none;
+  user-select: none; -webkit-user-drag: none; backface-visibility: visible;
+}
+/* inner layers are darkened so the stack reads as a solid edge when it turns side-on */
+.hp-spin img.edge { filter: brightness(0.32) saturate(1.4) contrast(1.1); }
+.hp-spin img.face { filter: drop-shadow(0 0 22px rgba(150, 128, 255, 0.35)); }
+.hp-shadow {
+  position: absolute; left: 50%; top: calc(100% + 34px); width: 72%; height: 26px; margin-left: -36%;
+  border-radius: 50%; background: radial-gradient(closest-side, rgba(0,0,0,0.55), transparent);
+  transform: rotateX(90deg); animation: hpShadow var(--bob, 7s) ease-in-out infinite; animation-delay: var(--bd, 0s);
+}
+@keyframes hpShadow { 0%, 100% { opacity: 0.85; scale: 1; } 50% { opacity: 0.5; scale: 0.82; } }
+
+/* floating glass chips */
+.hp-chip {
+  position: absolute; z-index: 5; padding: 10px 14px; border-radius: 14px; font-size: 12.5px; color: var(--ink-dim);
+  background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.12);
+  backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+  box-shadow: 0 14px 40px -14px rgba(0,0,0,0.7), inset 0 1px 0 rgba(255,255,255,0.12);
+  animation: hpBob 8s ease-in-out infinite;
+}
+.hp-chip b { display: block; font-family: 'Big Shoulders Display', sans-serif; font-size: 24px; color: var(--ink); line-height: 1; }
+.hp-chip.c1 { left: 2%; top: 14%; }
+.hp-chip.c2 { left: 30%; bottom: 3%; animation-delay: -3s; }
+
+/* ───────── STATS + CARDS ───────── */
+.hp-glass {
+  background: linear-gradient(180deg, rgba(255,255,255,0.07), rgba(255,255,255,0.025));
+  border: 1px solid rgba(255,255,255,0.1); border-radius: 22px;
+  backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
+  box-shadow: 0 24px 60px -24px rgba(0,0,0,0.8), inset 0 1px 0 rgba(255,255,255,0.1);
+}
+.hp-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); padding: 26px 8px; margin-top: 8px; }
+.hp-stat { padding: 4px 22px; text-align: center; }
+.hp-stat + .hp-stat { border-left: 1px solid rgba(255,255,255,0.1); }
+.hp-stat-num { font-family: 'Big Shoulders Display', sans-serif; font-weight: 800; font-size: 44px; line-height: 1; color: var(--ink); }
+.hp-stat-label { font-size: 13px; color: var(--ink-faint); margin-top: 6px; }
+
+.hp-section { padding: 84px 0 20px; }
+.hp-section h2 { font-family: 'Big Shoulders Display', sans-serif; font-weight: 800; font-size: clamp(32px, 4vw, 46px); color: var(--ink); }
+.hp-section > p { color: var(--ink-dim); margin-top: 8px; max-width: 52ch; line-height: 1.7; }
+.hp-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 18px; margin-top: 28px; }
+.hp-card { display: block; padding: 24px; text-decoration: none; color: inherit; transition: transform .2s, border-color .2s; }
+.hp-card:hover { transform: translateY(-4px); border-color: var(--accent); }
+.hp-card h3 { font-family: 'Big Shoulders Display', sans-serif; font-size: 26px; font-weight: 700; color: var(--ink); }
+.hp-card p { font-size: 13.5px; line-height: 1.65; color: var(--ink-dim); margin-top: 8px; }
+.hp-card span { display: inline-block; margin-top: 16px; font-size: 13px; font-weight: 700; color: var(--accent); }
+.hp-foot { padding: 70px 0 50px; text-align: center; font-size: 12px; color: var(--ink-faint); }
+
+/* ───────── RESPONSIVE ───────── */
+@media (max-width: 900px) {
+  .hp-hero { grid-template-columns: 1fr; min-height: 0; }
+  .hp-stage { height: 440px; }
+  .hp-ring.r1 { width: 380px; height: 380px; } .hp-ring.r2 { width: 280px; height: 280px; }
+  .hp-glow { width: 380px; height: 380px; }
+  .hp-scene { zoom: 0.72; }
+  .hp-chip { display: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .hp-spin, .hp-bob, .hp-ring, .hp-glow, .hp-chip, .hp-shadow { animation: none !important; }
+  .hp-scene { transition: none; }
+}
+</style>
+</head>
+<body class="hp">
+
+<header class="site-header">
+  <a href="index.html" class="brand">
+    <div class="guild-mark">
+      <svg viewBox="0 0 24 24"><path d="M12 2L4 6v6c0 5.5 3.4 9.7 8 11 4.6-1.3 8-5.5 8-11V6l-8-4z"/><path d="M12 7v9M9 10l3-3 3 3" stroke="#0d0d0f" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>
+    </div>
+    <div class="header-text"><h1>RISE OF DAHALO</h1><span class="eyebrow">Home preview</span></div>
+  </a>
+  <nav class="site-nav">
+    <a href="index.html">Home</a>
+    <a href="builds.html">Builds</a>
+    <a href="roster.html">Roster</a>
+    <a href="events.html" class="logged-in-only">Events</a>
+  </nav>
+  <div class="header-actions"><div id="auth-control"></div></div>
+</header>
+
+<main class="hp-wrap">
+  <div class="hp-badge"><i></i>Private preview — only your account can open this page</div>
+
+  <section class="hp-hero">
+    <div class="hp-copy">
+      <h1>RISE OF<br>DAHALO</h1>
+      <div class="hp-tagline" id="hp-tagline">Five-man discipline. Twenty-man execution.</div>
+      <p class="hp-sub" id="hp-sub">We’re a black-zone PvP guild built around one idea: know your kit before the horn sounds. Every build in the War Ledger is fight-tested and rebuilt the morning after a loss.</p>
+      <div class="hp-ctas">
+        <a class="hp-btn hp-btn-primary" id="hp-discord" href="#" target="_blank" rel="noopener">Join us on Discord</a>
+        <a class="hp-btn hp-btn-ghost" href="builds.html">Open the War Ledger</a>
+      </div>
+    </div>
+
+    <div class="hp-stage" id="hp-stage" aria-hidden="true">
+      <div class="hp-glow"></div>
+      <div class="hp-chip c1"><b>T8</b>standard kit</div>
+      <div class="hp-chip c2"><b>5 → 20</b>party to zerg</div>
+      <div class="hp-scene" id="hp-scene">
+        <div class="hp-ring r1"></div>
+        <div class="hp-ring r2"></div>
+        <!-- weapons are filled in by the script below -->
+      </div>
+    </div>
+  </section>
+
+  <section class="hp-glass hp-stats" id="hp-stats"></section>
+
+  <section class="hp-section">
+    <h2>Where to go</h2>
+    <p>Everything the guild runs on, a click from here.</p>
+    <div class="hp-cards">
+      <a class="hp-card hp-glass" href="builds.html"><h3>War Ledger</h3><p>Priority-ranked gear for every fight, searchable and updated after every patch.</p><span>Open the ledger</span></a>
+      <a class="hp-card hp-glass" href="roster.html"><h3>Roster</h3><p>GM, right hand, officers, and who’s leading which party.</p><span>View the roster</span></a>
+      <a class="hp-card hp-glass" href="events.html"><h3>Event calendar</h3><p>ZvZ call times, practice sessions, and content windows.</p><span>Open events</span></a>
+    </div>
+  </section>
+
+  <footer class="hp-foot">© 2026 Rise of Dahalo. Albion Online is a trademark of Sandbox Interactive GmbH — this is an unofficial guild site.</footer>
+</main>
+
+<div id="toast"></div>
+<script src="js/theme.js"></script>
+<script src="js/auth.js"></script>
+<script>
+(function () {
+  const ICON = (id) => `https://render.albiononline.com/v1/item/${id}.png?quality=1&size=360`;
+
+  // x/y = position in the stage, s = size, z = depth, spin = seconds per turn
+  // (negative-looking motion comes from dir). The centre weapon is the star;
+  // the rest orbit it at different depths so the parallax reads as real 3D.
+  const WEAPONS = [
+    { id: 'T8_2H_CLAYMORE_AVALON',     x: '50%', y: '47%', s: 300, z: 60,   spin: 14, dir: 'normal',  bob: 7.5, bd: '0s'  },  // Kingmaker
+    { id: 'T8_2H_AXE_AVALON',          x: '17%', y: '66%', s: 170, z: 150,  spin: 10, dir: 'reverse', bob: 6.5, bd: '-2s' },  // Realmbreaker
+    { id: 'T8_MAIN_HOLYSTAFF_AVALON',  x: '84%', y: '30%', s: 160, z: -40,  spin: 11, dir: 'normal',  bob: 8,   bd: '-4s' },  // Hallowfall
+    { id: 'T8_2H_BOW',                 x: '82%', y: '78%', s: 150, z: 120,  spin: 9,  dir: 'reverse', bob: 7,   bd: '-1s' },  // Bow
+    { id: 'T8_2H_TWINSCYTHE_HELL',     x: '19%', y: '22%', s: 140, z: -120, spin: 13, dir: 'normal',  bob: 9,   bd: '-5s' },  // Soulscythe
+  ];
+  const LAYERS = 15, STEP = 2.6; // sprite slices stacked in depth = the weapon's "thickness"
+
+  const scene = document.getElementById('hp-scene');
+  WEAPONS.forEach((w) => {
+    const slot = document.createElement('div');
+    slot.className = 'hp-slot';
+    slot.style.cssText = `--x:${w.x};--y:${w.y};--s:${w.s}px;--z:${w.z}px;--spin:${w.spin}s;--dir:${w.dir};--bob:${w.bob}s;--bd:${w.bd}`;
+    let layers = '';
+    for (let i = 0; i < LAYERS; i++) {
+      const z = (i - (LAYERS - 1) / 2) * STEP;
+      const isFace = i === 0 || i === LAYERS - 1;
+      layers += `<img class="${isFace ? 'face' : 'edge'}" src="${ICON(w.id)}" alt="" loading="eager" style="transform:translateZ(${z.toFixed(1)}px)${i === 0 ? ' rotateY(180deg)' : ''}">`;
+    }
+    slot.innerHTML = `<div class="hp-bob"><div class="hp-spin">${layers}</div><div class="hp-shadow"></div></div>`;
+    scene.appendChild(slot);
+  });
+
+  // gentle pointer parallax — tilts the whole scene toward the cursor
+  const stage = document.getElementById('hp-stage');
+  const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  if (!reduce) {
+    window.addEventListener('pointermove', (e) => {
+      const r = stage.getBoundingClientRect();
+      const nx = ((e.clientX - r.left) / r.width - 0.5) * 2;
+      const ny = ((e.clientY - r.top) / r.height - 0.5) * 2;
+      const c = (v) => Math.max(-1, Math.min(1, v));
+      scene.style.setProperty('--ry', (c(nx) * 14).toFixed(1) + 'deg');
+      scene.style.setProperty('--rx', (c(ny) * -9).toFixed(1) + 'deg');
+    }, { passive: true });
+  }
+
+  // pull the live copy, stats and Discord link from the real homepage content
+  const esc = (s) => String(s || '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  fetch('/api/home').then((r) => r.json()).then((h) => {
+    if (h.heroTagline) document.getElementById('hp-tagline').textContent = h.heroTagline;
+    if (h.heroSub) document.getElementById('hp-sub').textContent = h.heroSub;
+    if (h.discordInviteUrl) document.getElementById('hp-discord').href = h.discordInviteUrl;
+    const stats = Array.isArray(h.stats) ? h.stats : [];
+    const box = document.getElementById('hp-stats');
+    if (stats.length) {
+      box.innerHTML = stats.map((s) => `<div class="hp-stat"><div class="hp-stat-num">${esc(s.num)}</div><div class="hp-stat-label">${esc(s.label)}</div></div>`).join('');
+    } else {
+      box.style.display = 'none';
+    }
+  }).catch(() => { document.getElementById('hp-stats').style.display = 'none'; });
+})();
+</script>
+</body>
+</html>
