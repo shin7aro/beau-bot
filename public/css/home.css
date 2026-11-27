@@ -139,7 +139,7 @@
 }
 
 /* ── STATS STRIP ── */
-.stats-strip { border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+.stats-strip { border-top: 1px solid var(--line); } /* sits right above the footer, which draws its own top line */
 .stats-grid { max-width: 1180px; margin: 0 auto; display: grid; grid-template-columns: repeat(4, 1fr); }
 .stat { padding: 30px 20px; text-align: center; border-left: 1px solid var(--line); }
 .stat:first-child { border-left: none; }
