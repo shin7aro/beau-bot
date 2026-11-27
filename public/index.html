@@ -17,6 +17,7 @@
 
 /* ───────── HERO ───────── */
 .hp-hero { padding-top: 12px; }
+.hp-copy { display: flex; flex-direction: column; align-items: center; text-align: center; } /* title, banner and button share one centre line */
 .hp-hero {
   display: grid; grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.05fr);
   gap: 24px; align-items: center; min-height: 640px; padding: 28px 0 40px;
@@ -33,7 +34,7 @@
   border-radius: 14px; box-shadow: 0 24px 50px -18px rgba(0,0,0,0.65);
   border: 1px solid var(--line-2);
 }
-.hp-ctas { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 30px; }
+.hp-ctas { display: flex; justify-content: center; gap: 12px; flex-wrap: wrap; margin-top: 30px; }
 .hp-btn {
   display: inline-flex; align-items: center; justify-content: center; gap: 8px;
   font: inherit; font-size: 14px; font-weight: 700; padding: 14px 24px; border-radius: 999px;
@@ -150,7 +151,6 @@
     <img class="hp-banner" src="assets/guild-banner.jpg" alt="Rise of Dahalo guild banner — a golden sun crest on a black shield">
     <div class="hp-ctas">
       <a class="hp-btn hp-btn-primary" id="discord-invite-link" href="#" target="_blank" rel="noopener">Join us on Discord</a>
-      <a class="hp-btn hp-btn-ghost" href="builds.html">Open the War Ledger</a>
     </div>
   </div>
 
