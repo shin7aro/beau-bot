@@ -308,9 +308,13 @@ const WEAPON_NAMES = Object.keys(ITEM_MAP).filter((name) =>
   /^T\d+_(MAIN|2H)_/.test(ITEM_MAP[name])
 );
 
+// Icon quality 4 for gear; food (MEAL_) and potions (POTION_) stay at the
+// default quality 1 since quality doesn't apply to consumables.
 function itemImageUrl(name) {
   const id = ITEM_MAP[name];
-  return id ? `https://render.albiononline.com/v1/item/${id}.png?quality=1` : null;
+  if (!id) return null;
+  const quality = /_(MEAL|POTION)_/.test(id) ? 1 : 4;
+  return `https://render.albiononline.com/v1/item/${id}.png?quality=${quality}`;
 }
 
 module.exports = { ITEM_MAP, WEAPON_NAMES, itemImageUrl };

@@ -328,7 +328,11 @@ window.weaponDisplayName = function weaponDisplayName(name) {
 // declaration) so it doesn't create its own global "imgUrl" binding — that
 // would collide with the `const imgUrl = window.imgUrl;` alias builds.js
 // and events.js each declare for their own local use.
+// Icon quality 4 for gear; food (MEAL_) and potions (POTION_) stay at the
+// default quality 1 since quality doesn't apply to consumables.
 window.imgUrl = function imgUrl(name) {
   const id = window.ITEM_MAP[name];
-  return id ? `https://render.albiononline.com/v1/item/${id}.png?quality=1` : null;
+  if (!id) return null;
+  const quality = /_(MEAL|POTION)_/.test(id) ? 1 : 4;
+  return `https://render.albiononline.com/v1/item/${id}.png?quality=${quality}`;
 };
