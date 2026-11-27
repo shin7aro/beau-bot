@@ -33,13 +33,13 @@
 }
 .hp-copy h1 {
   font-family: 'Big Shoulders Display', sans-serif; font-weight: 800;
-  font-size: clamp(54px, 8.2vw, 112px); line-height: 0.9; letter-spacing: 0.005em;
+  font-size: clamp(36px, 4.7vw, 70px); line-height: 1; letter-spacing: 0.005em; white-space: nowrap;
   background: linear-gradient(180deg, var(--ink) 12%, var(--accent) 64%, var(--cosmic) 100%);
   -webkit-background-clip: text; background-clip: text; color: transparent;
   filter: drop-shadow(0 6px 28px color-mix(in srgb, var(--accent) 30%, transparent));
 }
 .hp-banner {
-  display: block; width: auto; max-width: 100%; max-height: 270px; margin-top: 20px;
+  display: block; width: auto; max-width: 100%; max-height: min(460px, 56vh); margin-top: 22px;
   border-radius: 14px; box-shadow: 0 24px 50px -18px rgba(0,0,0,0.65);
   border: 1px solid var(--line-2);
 }
@@ -157,7 +157,7 @@
 <section class="wrap hp-hero">
   <div class="hp-copy">
     <div class="hp-badge"><i></i>Private preview — only your account can open this page</div>
-    <h1>RISE OF<br>DAHALO</h1>
+    <h1>RISE OF DAHALO</h1>
     <img class="hp-banner" src="assets/guild-banner.jpg" alt="Rise of Dahalo guild banner — a golden sun crest on a black shield">
     <div class="hp-ctas">
       <a class="hp-btn hp-btn-primary" id="discord-invite-link" href="#" target="_blank" rel="noopener">Join us on Discord</a>
