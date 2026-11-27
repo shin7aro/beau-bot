@@ -7,14 +7,15 @@
 <title>Home Preview — Rise of Dahalo</title>
 <meta name="robots" content="noindex, nofollow">
 <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+<link rel="icon" href="assets/favicon.ico" sizes="any">
+<link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
 <link rel="stylesheet" href="css/base.css">
+<link rel="stylesheet" href="css/home.css">
 <link rel="stylesheet" href="css/theme-gilded.css">
 <style>
 /* ───────── HOME PREVIEW — 3D weapon hero (private mock-up) ─────────
    Self-contained on purpose: this file is served by a gated route
    (see api.js "home-preview"), so nothing here lives in /public. */
-body.hp { min-height: 100vh; overflow-x: hidden; }
-.hp-wrap { max-width: 1240px; margin: 0 auto; padding: 0 28px; }
 
 /* private-preview badge */
 .hp-badge {
@@ -25,6 +26,7 @@ body.hp { min-height: 100vh; overflow-x: hidden; }
 .hp-badge i { width: 7px; height: 7px; border-radius: 50%; background: var(--moss); box-shadow: 0 0 10px var(--moss); }
 
 /* ───────── HERO ───────── */
+.hp-hero { padding-top: 12px; }
 .hp-hero {
   display: grid; grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.05fr);
   gap: 24px; align-items: center; min-height: 640px; padding: 28px 0 40px;
@@ -103,30 +105,6 @@ body.hp { min-height: 100vh; overflow-x: hidden; }
 }
 @keyframes hpShadow { 0%, 100% { opacity: 0.85; scale: 1; } 50% { opacity: 0.5; scale: 0.82; } }
 
-/* ───────── STATS + CARDS ───────── */
-.hp-glass {
-  background: linear-gradient(180deg, color-mix(in srgb, var(--accent) 9%, transparent), rgba(255,255,255,0.02));
-  border: 1px solid var(--line-2); border-radius: 22px;
-  backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
-  box-shadow: 0 24px 60px -24px rgba(0,0,0,0.8), inset 0 1px 0 rgba(255,255,255,0.1);
-}
-.hp-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); padding: 26px 8px; margin-top: 8px; }
-.hp-stat { padding: 4px 22px; text-align: center; }
-.hp-stat + .hp-stat { border-left: 1px solid var(--line); }
-.hp-stat-num { font-family: 'Big Shoulders Display', sans-serif; font-weight: 800; font-size: 44px; line-height: 1; color: var(--ink); }
-.hp-stat-label { font-size: 13px; color: var(--ink-faint); margin-top: 6px; }
-
-.hp-section { padding: 84px 0 20px; }
-.hp-section h2 { font-family: 'Big Shoulders Display', sans-serif; font-weight: 800; font-size: clamp(32px, 4vw, 46px); color: var(--ink); }
-.hp-section > p { color: var(--ink-dim); margin-top: 8px; max-width: 52ch; line-height: 1.7; }
-.hp-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 18px; margin-top: 28px; }
-.hp-card { display: block; padding: 24px; text-decoration: none; color: inherit; transition: transform .2s, border-color .2s; }
-.hp-card:hover { transform: translateY(-4px); border-color: var(--accent); }
-.hp-card h3 { font-family: 'Big Shoulders Display', sans-serif; font-size: 26px; font-weight: 700; color: var(--ink); }
-.hp-card p { font-size: 13.5px; line-height: 1.65; color: var(--ink-dim); margin-top: 8px; }
-.hp-card span { display: inline-block; margin-top: 16px; font-size: 13px; font-weight: 700; color: var(--accent); }
-.hp-foot { padding: 70px 0 50px; text-align: center; font-size: 12px; color: var(--ink-faint); }
-
 /* ───────── RESPONSIVE ───────── */
 @media (max-width: 900px) {
   .hp-hero { grid-template-columns: 1fr; min-height: 0; }
@@ -141,65 +119,188 @@ body.hp { min-height: 100vh; overflow-x: hidden; }
 }
 </style>
 </head>
-<body class="hp">
+<body class="home">
 
+<!-- HEADER -->
 <header class="site-header">
   <a href="index.html" class="brand">
     <div class="guild-mark">
       <svg viewBox="0 0 24 24"><path d="M12 2L4 6v6c0 5.5 3.4 9.7 8 11 4.6-1.3 8-5.5 8-11V6l-8-4z"/><path d="M12 7v9M9 10l3-3 3 3" stroke="#0d0d0f" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>
     </div>
-    <div class="header-text"><h1>RISE OF DAHALO</h1><span class="eyebrow">Home preview</span></div>
+    <div class="header-text">
+      <h1>RISE OF DAHALO</h1>
+      <span class="eyebrow">Guild dossier</span>
+    </div>
   </a>
   <nav class="site-nav">
-    <a href="index.html">Home</a>
+    <a href="index.html" class="active">Home</a>
     <a href="builds.html">Builds</a>
     <a href="roster.html">Roster</a>
-    <a href="events.html" class="logged-in-only">Events</a>
+    <a href="events.html" class="logged-in-only" id="events-nav-link">Events</a>
+    <a href="loot.html" class="logged-in-only" id="loot-nav-link">Loot Manager</a>
+    <a href="comps.html" class="officer-only" id="comps-nav-link">Compositions</a>
   </nav>
-  <div class="header-actions"><div id="auth-control"></div></div>
+  <div class="header-actions">
+    <button class="btn" id="copy-btn" aria-label="Copy page link">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="9" y="9" width="13" height="13" rx="2"/>
+        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+      </svg>
+      <span class="btn-label">Copy link</span>
+    </button>
+    <button class="btn admin-only" id="edit-home-btn"><span class="btn-label">Edit page</span></button>
+    <div id="auth-control"></div>
+  </div>
 </header>
 
-<main class="hp-wrap">
-  <div class="hp-badge"><i></i>Private preview — only your account can open this page</div>
+<!-- HERO (3D weapons) -->
+<section class="wrap hp-hero">
+  <div class="hp-copy">
+    <div class="hp-badge"><i></i>Private preview — only your account can open this page</div>
+    <h1>RISE OF<br>DAHALO</h1>
+    <img class="hp-banner" src="assets/guild-banner.jpg" alt="Rise of Dahalo guild banner — a golden sun crest on a black shield">
+    <div class="hp-ctas">
+      <a class="hp-btn hp-btn-primary" id="discord-invite-link" href="#" target="_blank" rel="noopener">Join us on Discord</a>
+      <a class="hp-btn hp-btn-ghost" href="builds.html">Open the War Ledger</a>
+    </div>
+  </div>
 
-  <section class="hp-hero">
-    <div class="hp-copy">
-      <h1>RISE OF<br>DAHALO</h1>
-      <img class="hp-banner" src="assets/guild-banner.jpg" alt="Rise of Dahalo guild banner — a golden sun crest on a black shield">
-      <div class="hp-ctas">
-        <a class="hp-btn hp-btn-primary" id="hp-discord" href="#" target="_blank" rel="noopener">Join us on Discord</a>
-        <a class="hp-btn hp-btn-ghost" href="builds.html">Open the War Ledger</a>
+  <div class="hp-stage" id="hp-stage" aria-hidden="true">
+    <div class="hp-glow"></div>
+    <div class="hp-scene" id="hp-scene">
+      <div class="hp-ring r1"></div>
+      <div class="hp-ring r2"></div>
+      <!-- weapons are filled in by the script at the bottom of the page -->
+    </div>
+  </div>
+</section>
+
+<!-- STATS STRIP -->
+<section class="stats-strip">
+  <div class="stats-grid" id="stats-grid"><!-- filled by js/home.js --></div>
+</section>
+
+<!-- QUICKLINKS -->
+<section class="wrap section">
+  <div class="section-head">
+    <div class="section-eyebrow" data-cms="quicklinksEyebrow">Inside the guild</div>
+    <h2 class="section-title" data-cms="quicklinksTitle">Where to go</h2>
+    <p class="section-sub" data-cms="quicklinksSub">The site's still being built out — the Ledger's live, the rest is on the way.</p>
+  </div>
+  <div class="cards-grid">
+    <a class="qcard live" href="builds.html">
+      <div class="qtag">War ledger <span>Live</span></div>
+      <div class="qtitle">War Ledger</div>
+      <div class="qdesc">Priority-ranked gear for every fight — searchable, filterable, updated after every patch.</div>
+      <div class="qarrow">Open the ledger →</div>
+    </a>
+    <a class="qcard live" href="roster.html">
+      <div class="qtag">Roster <span>Live</span></div>
+      <div class="qtitle">Roster</div>
+      <div class="qdesc">GM, right hand, officers, and who's leading which party.</div>
+      <div class="qarrow">View the roster →</div>
+    </a>
+    <a class="qcard live" href="events.html">
+      <div class="qtag">Events <span>Live</span></div>
+      <div class="qtitle">Event Calendar</div>
+      <div class="qdesc">ZvZ call times, practice sessions, and content windows.</div>
+      <div class="qarrow">Open events →</div>
+    </a>
+    <div class="qcard soon">
+      <div class="qtag">Conduct <span class="soon-pill">Soon</span></div>
+      <div class="qtitle">Code of Conduct</div>
+      <div class="qdesc">Loot rules, comms etiquette, and how we split spoils.</div>
+    </div>
+  </div>
+</section>
+
+<!-- QUOTE (moved out of the hero) -->
+<section class="wrap">
+  <div class="about-quote about-quote-centered">
+    <blockquote data-cms="aboutQuote">Know your kit. Trust the call. Win the fight.</blockquote>
+    <cite data-cms="aboutQuoteCite">— Dahalo Command</cite>
+  </div>
+</section>
+
+<!-- HIGHLIGHTS -->
+<section class="wrap section">
+  <div class="section-head">
+    <div class="section-eyebrow" data-cms="highlightsEyebrow">Watch the fights</div>
+    <h2 class="section-title" data-cms="highlightsTitle">Highlights</h2>
+    <p class="section-sub" data-cms="highlightsSub">Clips from recent content — ZvZs, ganks, and the odd disaster.</p>
+  </div>
+  <div class="highlights-grid" id="highlights-grid"><!-- filled by js/home.js --></div>
+  <div id="highlight-add-row" style="margin-top:14px; display:none; gap:8px; flex-wrap:wrap;">
+    <input type="text" id="highlight-title-input" placeholder="Video title" style="flex:1; min-width:160px; padding:9px 12px; border-radius:8px; border:1px solid var(--line-2); background:var(--surface-2); color:var(--ink); font:inherit;">
+    <input type="text" id="highlight-url-input" placeholder="YouTube URL" style="flex:2; min-width:220px; padding:9px 12px; border-radius:8px; border:1px solid var(--line-2); background:var(--surface-2); color:var(--ink); font:inherit;">
+    <button class="btn" id="highlight-add-btn"><span class="btn-label">+ Add video</span></button>
+  </div>
+</section>
+
+<!-- ABOUT -->
+<section class="wrap section about">
+  <div class="about-copy">
+    <div class="section-eyebrow">Who we are</div>
+    <h2 class="section-title" style="margin-bottom:18px" data-cms="aboutTitle">Built for the fights that matter</h2>
+    <div id="about-paragraphs">
+      <p data-cms="aboutParagraphs.0">Rise of Dahalo formed around a simple frustration: showing up to a fight without knowing what your five teammates were wearing. We fixed that by writing it down — every comp, every swap — so the only thing left to figure out in voice chat is the call, not the kit.</p>
+      <p data-cms="aboutParagraphs.1">We run black-zone PvP at every scale: five-man brawls, gank squads, kiting comps for sieges, and the slow grind of tracking parties between fights. The Ledger covers what's live today and keeps growing as we document the rest.</p>
+    </div>
+  </div>
+  <div class="about-quote-moved">
+    <div class="hero-visual">
+      <div class="stamp">
+        <svg viewBox="0 0 200 200">
+          <circle class="stamp-ring stamp-ring-outer" cx="100" cy="100" r="92"/>
+          <circle class="stamp-ring stamp-ring-inner" cx="100" cy="100" r="80"/>
+          <path id="stampCirclePath" d="M 14,100 A 86,86 0 0 1 186,100" fill="none" stroke="none"/>
+          <text class="stamp-text" text-anchor="middle">
+            <textPath href="#stampCirclePath" startOffset="50%">RISE OF DAHALO &#183; WAR LEDGER</textPath>
+          </text>
+          <g class="stamp-crest" transform="translate(100,77) scale(1.3)">
+            <path d="M0,-14 L-10,-9 V0 C-10,8 -4,13 0,16 C4,13 10,8 10,0 V-9 Z"/>
+          </g>
+          <text class="stamp-num" x="100" y="126" text-anchor="middle">T8</text>
+          <text class="stamp-label" x="100" y="140" text-anchor="middle">STANDARD KIT</text>
+          <text class="stamp-text" x="100" y="183" text-anchor="middle" style="letter-spacing:4px">&#8226; &#8226; &#8226;</text>
+        </svg>
       </div>
     </div>
+  </div>
+</section>
 
-    <div class="hp-stage" id="hp-stage" aria-hidden="true">
-      <div class="hp-glow"></div>
-      <div class="hp-scene" id="hp-scene">
-        <div class="hp-ring r1"></div>
-        <div class="hp-ring r2"></div>
-        <!-- weapons are filled in by the script below -->
+<!-- ADMIN EDIT BAR (hidden unless in edit mode) -->
+<div class="edit-bar" id="edit-bar" style="display:none">
+  <span>Editing home page — click any highlighted text to change it.</span>
+  <input type="text" id="discord-url-input" placeholder="Discord invite URL (https://discord.gg/…)" style="flex:1; min-width:200px; max-width:320px; padding:9px 12px; border-radius:8px; border:1px solid var(--line-2); background:var(--surface-2); color:var(--ink); font:inherit;">
+  <button class="btn" id="save-home-btn"><span class="btn-label">Save changes</span></button>
+  <button class="btn" id="cancel-edit-btn"><span class="btn-label">Cancel</span></button>
+</div>
+
+<!-- FOOTER -->
+<footer class="site-footer">
+  <div class="footer-inner">
+    <div class="footer-brand">
+      <div class="guild-mark">
+        <svg viewBox="0 0 24 24"><path d="M12 2L4 6v6c0 5.5 3.4 9.7 8 11 4.6-1.3 8-5.5 8-11V6l-8-4z"/><path d="M12 7v9M9 10l3-3 3 3" stroke="#0d0d0f" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>
       </div>
+      <span>RISE OF DAHALO</span>
     </div>
-  </section>
-
-  <section class="hp-glass hp-stats" id="hp-stats"></section>
-
-  <section class="hp-section">
-    <h2>Where to go</h2>
-    <p>Everything the guild runs on, a click from here.</p>
-    <div class="hp-cards">
-      <a class="hp-card hp-glass" href="builds.html"><h3>War Ledger</h3><p>Priority-ranked gear for every fight, searchable and updated after every patch.</p><span>Open the ledger</span></a>
-      <a class="hp-card hp-glass" href="roster.html"><h3>Roster</h3><p>GM, right hand, officers, and who’s leading which party.</p><span>View the roster</span></a>
-      <a class="hp-card hp-glass" href="events.html"><h3>Event calendar</h3><p>ZvZ call times, practice sessions, and content windows.</p><span>Open events</span></a>
+    <div class="footer-links">
+      <a href="index.html">Home</a>
+      <a href="builds.html">Builds</a>
+      <a href="roster.html">Roster</a>
+      <a href="#" target="_blank" rel="noopener" id="footer-discord-link">Discord</a>
     </div>
-  </section>
-
-  <footer class="hp-foot">© 2026 Rise of Dahalo. Albion Online is a trademark of Sandbox Interactive GmbH — this is an unofficial guild site.</footer>
-</main>
+    <div class="footer-copy">© 2026 Rise of Dahalo. Albion Online is a trademark of Sandbox Interactive GmbH — this is an unofficial guild site.</div>
+  </div>
+</footer>
 
 <div id="toast"></div>
 <script src="js/theme.js"></script>
 <script src="js/auth.js"></script>
+<script src="js/home.js"></script>
+<script src="js/site.js"></script>
 <script>
 (function () {
   // Same URL shape the rest of the site uses (item-map.js). The render service
@@ -265,18 +366,6 @@ body.hp { min-height: 100vh; overflow-x: hidden; }
     }, { passive: true });
   }
 
-  // pull the live copy, stats and Discord link from the real homepage content
-  const esc = (s) => String(s || '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-  fetch('/api/home').then((r) => r.json()).then((h) => {
-    if (h.discordInviteUrl) document.getElementById('hp-discord').href = h.discordInviteUrl;
-    const stats = Array.isArray(h.stats) ? h.stats : [];
-    const box = document.getElementById('hp-stats');
-    if (stats.length) {
-      box.innerHTML = stats.map((s) => `<div class="hp-stat"><div class="hp-stat-num">${esc(s.num)}</div><div class="hp-stat-label">${esc(s.label)}</div></div>`).join('');
-    } else {
-      box.style.display = 'none';
-    }
-  }).catch(() => { document.getElementById('hp-stats').style.display = 'none'; });
 })();
 </script>
 </body>
