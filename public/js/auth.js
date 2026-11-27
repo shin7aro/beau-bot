@@ -90,7 +90,6 @@ function renderAuthControl() {
         ${role === 'admin' ? '<a class="auth-menu-item" href="history.html">History</a>' : ''}
         ${window.SITE_AUTH.emojiAdmin ? '<a class="auth-menu-item" href="emoji-linking.html">Emoji Linking</a>' : ''}
         ${window.SITE_AUTH.emojiAdmin ? '<a class="auth-menu-item" href="spell-picker.html">Spell Picker</a>' : ''}
-        ${window.SITE_AUTH.emojiAdmin ? '<a class="auth-menu-item" href="home-preview.html">Home Preview</a>' : ''}
         ${window.SITE_AUTH.themeManager ? `
         <div class="auth-menu-divider"></div>
         <div class="auth-menu-section-label">Site theme</div>

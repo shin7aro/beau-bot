@@ -6,7 +6,6 @@
 // on the site and vice versa.
 
 const express = require('express');
-const path = require('path');
 const cookieParser = require('cookie-parser');
 const crypto = require('crypto');
 
@@ -117,22 +116,6 @@ router.get('/auth/me', async (req, res) => {
       themeManager: await auth.isThemeManager(req.user),
     },
   });
-});
-
-// ── HOME PREVIEW (Shin7aro only) ─────────────────────────────────────────
-// A private mock-up of a redesigned homepage. The file lives in /private —
-// NOT /public — so express.static can't hand it to anyone; only this route
-// serves it, and only to the emoji-admin account (same gate as the Emoji
-// Linking page). Everyone else gets a plain 403 page.
-router.get(['/home-preview', '/home-preview.html'], (req, res) => {
-  res.set('Cache-Control', 'no-store');
-  if (!auth.isEmojiAdmin(req.user)) {
-    return res
-      .status(403)
-      .type('html')
-      .send('<!doctype html><meta charset="utf-8"><meta name="robots" content="noindex"><title>Not your page</title><body style="font:16px system-ui;background:#120e1c;color:#e6e6fa;display:grid;place-items:center;height:100vh;margin:0"><p>Not your page.</p>');
-  }
-  res.sendFile(path.join(__dirname, 'private', 'home-preview.html'));
 });
 
 // ── MY PREFERENCES (per member) ──────────────────────────────────────────

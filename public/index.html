@@ -12,6 +12,102 @@
 <link rel="stylesheet" href="css/base.css">
 <link rel="stylesheet" href="css/home.css">
 <link rel="stylesheet" href="css/theme-gilded.css">
+<style>
+/* ───────── 3D WEAPON HERO ───────── */
+
+/* ───────── HERO ───────── */
+.hp-hero { padding-top: 12px; }
+.hp-hero {
+  display: grid; grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.05fr);
+  gap: 24px; align-items: center; min-height: 640px; padding: 28px 0 40px;
+}
+.hp-copy h1 {
+  font-family: 'Big Shoulders Display', sans-serif; font-weight: 800;
+  font-size: clamp(36px, 4.7vw, 70px); line-height: 1; letter-spacing: 0.005em; white-space: nowrap;
+  background: linear-gradient(180deg, var(--ink) 12%, var(--accent) 64%, var(--cosmic) 100%);
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+  filter: drop-shadow(0 6px 28px color-mix(in srgb, var(--accent) 30%, transparent));
+}
+.hp-banner {
+  display: block; width: auto; max-width: 100%; max-height: min(460px, 56vh); margin-top: 22px;
+  border-radius: 14px; box-shadow: 0 24px 50px -18px rgba(0,0,0,0.65);
+  border: 1px solid var(--line-2);
+}
+.hp-ctas { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 30px; }
+.hp-btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  font: inherit; font-size: 14px; font-weight: 700; padding: 14px 24px; border-radius: 999px;
+  text-decoration: none; cursor: pointer; transition: transform .15s, box-shadow .15s, background .15s;
+}
+.hp-btn-primary {
+  color: var(--accent-ink); border: 0;
+  background: linear-gradient(155deg, var(--accent), var(--cosmic));
+  box-shadow: 0 10px 36px -8px color-mix(in srgb, var(--accent) 60%, transparent), inset 0 1px 0 rgba(255,255,255,0.35);
+}
+.hp-btn-primary:hover { transform: translateY(-2px); box-shadow: 0 16px 44px -8px color-mix(in srgb, var(--accent) 75%, transparent), inset 0 1px 0 rgba(255,255,255,0.35); }
+.hp-btn-ghost { color: var(--ink); background: rgba(255,255,255,0.05); border: 1px solid var(--line-2); backdrop-filter: blur(8px); }
+.hp-btn-ghost:hover { background: rgba(255,255,255,0.09); border-color: var(--accent); }
+.hp-btn:focus-visible { outline: 2px solid #fff; outline-offset: 3px; }
+
+/* ───────── 3D STAGE ───────── */
+.hp-stage { position: relative; height: 600px; perspective: 1300px; perspective-origin: 50% 42%; }
+.hp-glow {
+  position: absolute; left: 50%; top: 50%; width: 560px; height: 560px; transform: translate(-50%, -50%);
+  background: radial-gradient(closest-side, color-mix(in srgb, var(--accent) 42%, transparent), color-mix(in srgb, var(--accent) 14%, transparent) 55%, transparent 74%);
+  filter: blur(14px); animation: hpPulse 6s ease-in-out infinite;
+}
+@keyframes hpPulse { 50% { opacity: 0.72; transform: translate(-50%, -50%) scale(1.07); } }
+.hp-scene {
+  position: absolute; inset: 0; transform-style: preserve-3d;
+  transform: rotateX(var(--rx, 0deg)) rotateY(var(--ry, 0deg)); transition: transform .35s ease-out;
+}
+/* orbit rings lying flat under the weapons */
+.hp-ring {
+  position: absolute; left: 50%; top: 56%; border-radius: 50%;
+  border: 1px solid color-mix(in srgb, var(--accent) 36%, transparent);
+  transform: translate(-50%, -50%) rotateX(74deg); transform-style: preserve-3d;
+  animation: hpRing 40s linear infinite;
+}
+.hp-ring::after { /* a bright bead travelling the ring */
+  content: ''; position: absolute; top: -4px; left: 50%; width: 8px; height: 8px; border-radius: 50%;
+  background: #fff; box-shadow: 0 0 16px 4px color-mix(in srgb, var(--accent) 90%, transparent);
+}
+.hp-ring.r1 { width: 520px; height: 520px; }
+.hp-ring.r2 { width: 380px; height: 380px; border-color: color-mix(in srgb, var(--accent) 20%, transparent); animation-duration: 26s; animation-direction: reverse; }
+@keyframes hpRing { to { transform: translate(-50%, -50%) rotateX(74deg) rotateZ(360deg); } }
+
+.hp-slot { position: absolute; width: var(--s); height: var(--s); transform-style: preserve-3d; transform: translate3d(0, 0, var(--z, 0px)); left: var(--x); top: var(--y); margin: calc(var(--s) / -2) 0 0 calc(var(--s) / -2); }
+.hp-bob { position: absolute; inset: 0; transform-style: preserve-3d; animation: hpBob var(--bob, 7s) ease-in-out infinite; animation-delay: var(--bd, 0s); }
+@keyframes hpBob { 0%, 100% { transform: translateY(-9px) rotateZ(-2deg); } 50% { transform: translateY(11px) rotateZ(2deg); } }
+.hp-spin { position: absolute; inset: 0; transform-style: preserve-3d; animation: hpSpin var(--spin, 12s) linear infinite; animation-direction: var(--dir, normal); }
+@keyframes hpSpin { to { transform: rotateY(360deg); } }
+.hp-spin img {
+  position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; pointer-events: none;
+  user-select: none; -webkit-user-drag: none; backface-visibility: visible;
+}
+/* inner layers are darkened so the stack reads as a solid edge when it turns side-on */
+.hp-spin img.edge { filter: brightness(0.5) sepia(1) saturate(2.2); }
+.hp-spin img.face { filter: drop-shadow(0 0 22px color-mix(in srgb, var(--accent) 40%, transparent)); }
+.hp-shadow {
+  position: absolute; left: 50%; top: calc(100% + 34px); width: 72%; height: 26px; margin-left: -36%;
+  border-radius: 50%; background: radial-gradient(closest-side, rgba(0,0,0,0.55), transparent);
+  transform: rotateX(90deg); animation: hpShadow var(--bob, 7s) ease-in-out infinite; animation-delay: var(--bd, 0s);
+}
+@keyframes hpShadow { 0%, 100% { opacity: 0.85; scale: 1; } 50% { opacity: 0.5; scale: 0.82; } }
+
+/* ───────── RESPONSIVE ───────── */
+@media (max-width: 900px) {
+  .hp-hero { grid-template-columns: 1fr; min-height: 0; }
+  .hp-stage { height: 440px; }
+  .hp-ring.r1 { width: 380px; height: 380px; } .hp-ring.r2 { width: 280px; height: 280px; }
+  .hp-glow { width: 380px; height: 380px; }
+  .hp-scene { zoom: 0.72; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .hp-spin, .hp-bob, .hp-ring, .hp-glow, .hp-shadow { animation: none !important; }
+  .hp-scene { transition: none; }
+}
+</style>
 </head>
 <body class="home">
 
@@ -47,23 +143,24 @@
   </div>
 </header>
 
-<!-- HERO -->
-<section class="wrap hero">
-  <div class="hero-copy">
-    <div class="hero-eyebrow" data-cms="heroEyebrow">Guild dossier · Black zone operations</div>
-    <h1>RISE OF<br>DAHALO</h1>
-    <div class="hero-tagline" data-cms="heroTagline">Five-man discipline. Twenty-man execution.</div>
-    <p class="hero-sub" data-cms="heroSub">We're a black-zone PvP guild built around one idea: know your kit before the horn sounds. Every build in the War Ledger is fight-tested and rebuilt the morning after a loss — so nobody's asking what to wear when it matters.</p>
-    <div class="hero-ctas">
-      <a class="cta-primary" id="discord-invite-link" href="#" target="_blank" rel="noopener">
-        Join us on Discord
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17L17 7M7 7h10v10"/></svg>
-      </a>
+<!-- HERO (3D weapons) -->
+<section class="wrap hp-hero">
+  <div class="hp-copy">
+    <h1>RISE OF DAHALO</h1>
+    <img class="hp-banner" src="assets/guild-banner.jpg" alt="Rise of Dahalo guild banner — a golden sun crest on a black shield">
+    <div class="hp-ctas">
+      <a class="hp-btn hp-btn-primary" id="discord-invite-link" href="#" target="_blank" rel="noopener">Join us on Discord</a>
+      <a class="hp-btn hp-btn-ghost" href="builds.html">Open the War Ledger</a>
     </div>
   </div>
 
-  <div class="hero-banner">
-    <img src="assets/guild-banner.jpg" alt="Rise of Dahalo guild banner — a golden sun crest on a black shield" class="hero-banner-img">
+  <div class="hp-stage" id="hp-stage" aria-hidden="true">
+    <div class="hp-glow"></div>
+    <div class="hp-scene" id="hp-scene">
+      <div class="hp-ring r1"></div>
+      <div class="hp-ring r2"></div>
+      <!-- weapons are filled in by the script at the bottom of the page -->
+    </div>
   </div>
 </section>
 
@@ -193,5 +290,73 @@
 <script src="js/auth.js"></script>
 <script src="js/home.js"></script>
 <script src="js/site.js"></script>
+<script>
+(function () {
+  // Same URL shape the rest of the site uses (item-map.js). The render service
+  // caps size at 217, so no size param here — asking for more returns an error.
+  const ICONS = (id) => [
+    `https://render.albiononline.com/v1/item/${id}@4.png?quality=5`,   // .4 enchant, masterpiece quality
+    `https://render.albiononline.com/v1/item/${id}@4.png`,             // fallbacks so a weapon never disappears
+    `https://render.albiononline.com/v1/item/${id}.png?quality=1`,
+  ];
+  // resolves with the first URL that actually loads, or null
+  const firstWorking = (urls) => new Promise((resolve) => {
+    const next = (i) => {
+      if (i >= urls.length) return resolve(null);
+      const im = new Image();
+      im.onload = () => resolve(urls[i]);
+      im.onerror = () => next(i + 1);
+      im.src = urls[i];
+    };
+    next(0);
+  });
+
+  // x/y = position in the stage, s = size, z = depth, spin = seconds per turn
+  // (negative-looking motion comes from dir). The centre weapon is the star;
+  // the rest orbit it at different depths so the parallax reads as real 3D.
+  const WEAPONS = [
+    { id: 'T8_2H_ICECRYSTAL_UNDEAD',      x: '50%', y: '51%', s: 270, z: 60,   spin: 14, dir: 'normal',  bob: 7.5, bd: '0s'  },  // Permafrost Prism (centre)
+    { id: 'T8_2H_KNUCKLES_SET3',          x: '24%', y: '21%', s: 140, z: -90,  spin: 11, dir: 'reverse', bob: 8,   bd: '-1s' },  // Spiked Gauntlets
+    { id: 'T8_2H_HARPOON_HELL',           x: '78%', y: '19%', s: 140, z: -60,  spin: 12, dir: 'normal',  bob: 7,   bd: '-3s' },  // Spirithunter
+    { id: 'T8_2H_AXE_AVALON',             x: '90%', y: '52%', s: 130, z: 40,   spin: 10, dir: 'reverse', bob: 9,   bd: '-5s' },  // Realmbreaker
+    { id: 'T8_MAIN_ARCANESTAFF_UNDEAD',   x: '76%', y: '84%', s: 145, z: 130,  spin: 13, dir: 'normal',  bob: 6.5, bd: '-2s' },  // Witchwork Staff
+    { id: 'T8_2H_FIRE_RINGPAIR_AVALON',   x: '24%', y: '83%', s: 140, z: 110,  spin: 9,  dir: 'reverse', bob: 7.5, bd: '-4s' },  // Dawnsong
+    { id: 'T8_MAIN_CURSEDSTAFF_CRYSTAL',  x: '10%', y: '52%', s: 130, z: 30,   spin: 12, dir: 'normal',  bob: 8.5, bd: '-6s' },  // Rotcaller Staff
+  ];
+  const LAYERS = 9, STEP = 1; // sprite slices stacked in depth = the weapon's "thickness"
+
+  const scene = document.getElementById('hp-scene');
+  WEAPONS.forEach(async (w) => {
+    const url = await firstWorking(ICONS(w.id));
+    if (!url) return; // icon unavailable: skip this weapon rather than show a broken image
+    const slot = document.createElement('div');
+    slot.className = 'hp-slot';
+    slot.style.cssText = `--x:${w.x};--y:${w.y};--s:${w.s}px;--z:${w.z}px;--spin:${w.spin}s;--dir:${w.dir};--bob:${w.bob}s;--bd:${w.bd}`;
+    let layers = '';
+    for (let i = 0; i < LAYERS; i++) {
+      const z = (i - (LAYERS - 1) / 2) * STEP;
+      const isFace = i === 0 || i === LAYERS - 1;
+      layers += `<img class="${isFace ? 'face' : 'edge'}" src="${url}" alt="" loading="eager" style="transform:translateZ(${z.toFixed(1)}px)${i === 0 ? ' rotateY(180deg)' : ''}">`;
+    }
+    slot.innerHTML = `<div class="hp-bob"><div class="hp-spin">${layers}</div><div class="hp-shadow"></div></div>`;
+    scene.appendChild(slot);
+  });
+
+  // gentle pointer parallax — tilts the whole scene toward the cursor
+  const stage = document.getElementById('hp-stage');
+  const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  if (!reduce) {
+    window.addEventListener('pointermove', (e) => {
+      const r = stage.getBoundingClientRect();
+      const nx = ((e.clientX - r.left) / r.width - 0.5) * 2;
+      const ny = ((e.clientY - r.top) / r.height - 0.5) * 2;
+      const c = (v) => Math.max(-1, Math.min(1, v));
+      scene.style.setProperty('--ry', (c(nx) * 14).toFixed(1) + 'deg');
+      scene.style.setProperty('--rx', (c(ny) * -9).toFixed(1) + 'deg');
+    }, { passive: true });
+  }
+
+})();
+</script>
 </body>
 </html>
