@@ -306,8 +306,9 @@
   // Same URL shape the rest of the site uses (item-map.js). The render service
   // caps size at 217, so no size param here — asking for more returns an error.
   const ICONS = (id) => [
+    `https://render.albiononline.com/v1/item/${id}@4.png?quality=5`,   // .4 enchant, masterpiece quality
+    `https://render.albiononline.com/v1/item/${id}@4.png`,             // fallbacks so a weapon never disappears
     `https://render.albiononline.com/v1/item/${id}.png?quality=1`,
-    `https://render.albiononline.com/v1/item/${id}.png`,
   ];
   // resolves with the first URL that actually loads, or null
   const firstWorking = (urls) => new Promise((resolve) => {
